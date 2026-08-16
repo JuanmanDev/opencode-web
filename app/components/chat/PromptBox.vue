@@ -212,6 +212,7 @@ function onKeydown(e: KeyboardEvent) {
       />
 
       <!-- collapsible options: model / think level / agent / mcp -->
+      <Transition name="oc-collapse">
       <div v-if="optionsOpen" class="space-y-2">
         <div class="flex flex-col sm:flex-row gap-1.5">
           <UFormField label="Model" size="xs" class="flex-1">
@@ -306,21 +307,24 @@ function onKeydown(e: KeyboardEvent) {
               icon="i-lucide-server"
             />
           </UFormField>
-          <div v-if="mcpMode === 'custom'" class="flex flex-wrap gap-1 pb-0.5">
-            <UButton
-              v-for="name in mcpServers"
-              :key="name"
-              size="xs"
-              :color="mcpSelected.includes(name) ? 'primary' : 'neutral'"
-              :variant="mcpSelected.includes(name) ? 'soft' : 'ghost'"
-              :icon="mcpSelected.includes(name) ? 'i-lucide-check' : 'i-lucide-x'"
-              :label="name"
-              class="font-mono"
-              @click="toggleMcp(name)"
-            />
-          </div>
+          <Transition name="oc-slide">
+            <div v-if="mcpMode === 'custom'" class="flex flex-wrap gap-1 pb-0.5">
+              <UButton
+                v-for="name in mcpServers"
+                :key="name"
+                size="xs"
+                :color="mcpSelected.includes(name) ? 'primary' : 'neutral'"
+                :variant="mcpSelected.includes(name) ? 'soft' : 'ghost'"
+                :icon="mcpSelected.includes(name) ? 'i-lucide-check' : 'i-lucide-x'"
+                :label="name"
+                class="font-mono transition-all duration-150"
+                @click="toggleMcp(name)"
+              />
+            </div>
+          </Transition>
         </div>
       </div>
+      </Transition>
 
       <div class="flex items-center gap-1.5 min-w-0">
         <UButton

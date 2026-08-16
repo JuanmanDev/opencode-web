@@ -13,7 +13,7 @@ const emit = defineEmits<{
     color="warning"
     variant="subtle"
     icon="i-lucide-shield-question"
-    class="mx-3 sm:mx-4 my-2"
+    class="mx-3 sm:mx-4 my-2 oc-appear"
   >
     <template #title>Permission required</template>
     <template #description>

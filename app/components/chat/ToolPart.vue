@@ -89,11 +89,13 @@ const htmlResources = computed<HtmlResource[]>(() => {
       <span class="font-mono text-xs text-muted shrink-0">{{ part.tool }}</span>
       <span class="truncate text-xs text-dimmed">{{ title !== part.tool ? title : '' }}</span>
       <UIcon
-        :name="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-        class="size-3.5 ml-auto shrink-0 text-dimmed"
+        name="i-lucide-chevron-down"
+        class="size-3.5 ml-auto shrink-0 text-dimmed transition-transform duration-200"
+        :class="open ? 'rotate-180' : ''"
       />
     </button>
 
+    <Transition name="oc-collapse">
     <div v-if="open" class="px-2.5 py-2 space-y-2">
       <div v-if="input">
         <div class="text-[10px] uppercase tracking-wide text-dimmed mb-1">Input</div>
@@ -109,6 +111,7 @@ const htmlResources = computed<HtmlResource[]>(() => {
         >{{ output.length > 20000 ? output.slice(0, 20000) + '\n… (truncated)' : output }}</pre>
       </div>
     </div>
+    </Transition>
 
     <div v-if="htmlResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
       <ChatMcpHtmlFrame

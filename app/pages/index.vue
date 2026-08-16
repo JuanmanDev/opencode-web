@@ -91,7 +91,7 @@ const knownDirs = computed(() => {
         <div
           v-for="item in knownDirs"
           :key="item.directory"
-          class="group flex items-center gap-3 px-3 py-2.5 hover:bg-elevated cursor-pointer"
+          class="oc-row group flex items-center gap-3 px-3 py-2.5 hover:bg-elevated cursor-pointer"
           @click="openProject(item.directory)"
         >
           <UIcon name="i-lucide-folder-git-2" class="size-4 text-primary/70 shrink-0" />

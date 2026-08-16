@@ -22,7 +22,7 @@ const elapsedLabel = computed(() => {
 </script>
 
 <template>
-  <div class="px-3 sm:px-4 py-2 space-y-1.5">
+  <div class="px-3 sm:px-4 py-2 space-y-1.5 oc-appear">
     <div class="flex items-center gap-2 text-xs font-mono">
       <UIcon name="i-lucide-sparkles" class="size-3.5 text-muted" />
       <span class="oc-shimmer-text">{{ activity || 'thinking…' }}</span>

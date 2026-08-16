@@ -76,7 +76,7 @@ function fmtTime(ts?: number) {
       >
         <NuxtLink
           :to="`/p/${dirParam}/session/${s.id}`"
-          class="flex items-start gap-2 rounded-sm px-2.5 py-2 text-sm hover:bg-elevated"
+          class="oc-row flex items-start gap-2 rounded-sm px-2.5 py-2 text-sm hover:bg-elevated"
           :class="route.params.id === s.id ? 'bg-elevated text-highlighted' : 'text-muted'"
           @click="emit('navigate')"
         >

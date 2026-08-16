@@ -99,6 +99,90 @@ body {
 }
 .oc-markdown hr { border-color: var(--ui-border); margin: 1rem 0; }
 
+/* ---- motion system ---- */
+
+/* page transitions */
+.oc-page-enter-active,
+.oc-page-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.oc-page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.oc-page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* vertical collapse (options panels, tool details, reasoning) */
+.oc-collapse-enter-active,
+.oc-collapse-leave-active {
+  transition: max-height 0.25s ease, opacity 0.2s ease, transform 0.25s ease;
+  overflow: hidden;
+}
+.oc-collapse-enter-from,
+.oc-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.oc-collapse-enter-to,
+.oc-collapse-leave-from {
+  max-height: 500px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* horizontal slide (side panels) */
+.oc-slide-enter-active,
+.oc-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.oc-slide-enter-from,
+.oc-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+/* element appear (new messages, alerts, indicators) */
+@keyframes oc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.oc-appear {
+  animation: oc-fade-up 0.25s ease both;
+}
+
+/* interactive rows/buttons: smooth hover feedback */
+.oc-row {
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.oc-row:hover {
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oc-page-enter-active,
+  .oc-page-leave-active,
+  .oc-collapse-enter-active,
+  .oc-collapse-leave-active,
+  .oc-slide-enter-active,
+  .oc-slide-leave-active,
+  .oc-row {
+    transition: none;
+  }
+  .oc-appear {
+    animation: none;
+  }
+}
+
 /* working indicator: shimmer text + indeterminate bar */
 @keyframes oc-shimmer {
   0% { background-position: 200% 0; }

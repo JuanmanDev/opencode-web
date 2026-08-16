@@ -81,7 +81,7 @@ watch(open, (v) => { if (v) load(path.value) })
 
         <div class="bg-muted rounded-sm divide-y divide-default max-h-64 overflow-y-auto">
           <button
-            class="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated cursor-pointer"
+            class="oc-row flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated cursor-pointer"
             @click="up"
           >
             <UIcon name="i-lucide-corner-left-up" class="size-4 text-muted" />
@@ -97,7 +97,7 @@ watch(open, (v) => { if (v) load(path.value) })
             v-for="entry in entries"
             v-else
             :key="entry.path"
-            class="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated cursor-pointer"
+            class="oc-row flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated cursor-pointer"
             @click="load(entry.path)"
           >
             <UIcon name="i-lucide-folder" class="size-4 text-primary/70" />

@@ -62,8 +62,8 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
-            type=semver,pattern={{version}},value=v${{ needs.release.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.release.outputs.version }}
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
       - name: Build & push web image
         uses: docker/build-push-action@v6
         with:
@@ -81,7 +81,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}-server
           tags: |
             type=raw,value=latest
-            type=semver,pattern={{version}},value=v${{ needs.release.outputs.version }}
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
       - name: Build & push opencode server image
         uses: docker/build-push-action@v6
         with:

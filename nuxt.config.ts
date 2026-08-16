@@ -9,6 +9,7 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   ssr: true,
   app: {
+    pageTransition: { name: 'oc-page', mode: 'out-in' },
     head: {
       title: 'opencode web',
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',

@@ -104,6 +104,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
 <template>
   <div class="flex-1 flex min-h-0">
     <!-- projects panel (desktop, toggleable) -->
+    <Transition name="oc-slide">
     <aside v-if="projectsPanel" class="hidden md:flex w-48 shrink-0 flex-col bg-elevated/60">
       <div class="flex items-center gap-2 px-3 h-12 text-[10px] uppercase tracking-widest text-dimmed">
         Projects
@@ -120,7 +121,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           v-for="d in projectDirs"
           :key="d"
           :to="`/p/${encodeDir(d)}`"
-          class="flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs hover:bg-accented"
+          class="oc-row flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs hover:bg-accented"
           :class="d === directory ? 'bg-accented text-highlighted' : 'text-muted'"
         >
           <UIcon name="i-lucide-folder-git-2" class="size-3.5 shrink-0" />
@@ -128,15 +129,17 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         </NuxtLink>
         <NuxtLink
           to="/"
-          class="flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-dimmed hover:bg-accented"
+          class="oc-row flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-dimmed hover:bg-accented"
         >
           <UIcon name="i-lucide-plus" class="size-3.5 shrink-0" />
           <span>Open another…</span>
         </NuxtLink>
       </div>
     </aside>
+    </Transition>
 
     <!-- desktop sidebar (collapsible + resizable) -->
+    <Transition name="oc-slide">
     <aside
       v-if="sidebarOpen"
       class="hidden md:flex shrink-0 flex-col bg-muted"
@@ -164,6 +167,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
       </div>
       <ProjectSidebar :directory="directory" class="flex-1 min-h-0" />
     </aside>
+    </Transition>
 
     <!-- resize handle -->
     <div

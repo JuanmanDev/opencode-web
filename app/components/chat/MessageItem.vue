@@ -29,7 +29,7 @@ const errorMessage = computed(() => {
 </script>
 
 <template>
-  <div class="px-3 sm:px-4">
+  <div class="px-3 sm:px-4 oc-appear">
     <!-- user message -->
     <div v-if="isUser" class="border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
       <template v-for="part in visibleParts" :key="part.id">
@@ -53,12 +53,18 @@ const errorMessage = computed(() => {
           >
             <UIcon name="i-lucide-brain" class="size-3.5" />
             thinking
-            <UIcon :name="showReasoning ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="size-3 transition-transform duration-200"
+              :class="showReasoning ? 'rotate-180' : ''"
+            />
           </button>
-          <div
-            v-if="showReasoning"
-            class="mt-1 border-l border-default pl-3 text-xs text-muted whitespace-pre-wrap"
-          >{{ (part as any).text }}</div>
+          <Transition name="oc-collapse">
+            <div
+              v-if="showReasoning"
+              class="mt-1 border-l border-default pl-3 text-xs text-muted whitespace-pre-wrap max-h-64 overflow-y-auto"
+            >{{ (part as any).text }}</div>
+          </Transition>
         </div>
 
         <ChatToolPart v-else-if="part.type === 'tool'" :part="part as any" />
