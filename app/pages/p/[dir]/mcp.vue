@@ -71,29 +71,165 @@ function statusColor(status: string) {
   return 'warning'
 }
 
-// add server form
+// ---- add servers ----
 const addOpen = ref(false)
-const addName = ref('')
-const addType = ref<'remote' | 'local'>('remote')
-const addUrl = ref('')
-const addCommand = ref('')
-const adding = ref(false)
+const addingName = ref<string | null>(null)
 
-async function addServer() {
-  adding.value = true
+interface CatalogEntry {
+  name: string
+  title: string
+  description: string
+  icon: string
+  badge?: string
+  config: Record<string, unknown>
+}
+
+// curated suggestions; the MCP-UI demo showcases interactive UI apps in chat
+const CATALOG: CatalogEntry[] = [
+  {
+    name: 'mcp-ui-demo',
+    title: 'MCP-UI demo',
+    description: 'Official mcp-ui example server — tools return interactive UI apps rendered right in the chat.',
+    icon: 'i-lucide-app-window',
+    badge: 'MCP UI',
+    config: { type: 'remote', url: 'https://remote-mcp-server-authless.idosalomon.workers.dev/mcp', enabled: true }
+  },
+  {
+    name: 'context7',
+    title: 'Context7',
+    description: 'Up-to-date documentation for any library or framework.',
+    icon: 'i-lucide-book-open',
+    config: { type: 'remote', url: 'https://mcp.context7.com/mcp', enabled: true }
+  },
+  {
+    name: 'deepwiki',
+    title: 'DeepWiki',
+    description: 'Ask questions about any public GitHub repository.',
+    icon: 'i-lucide-github',
+    config: { type: 'remote', url: 'https://mcp.deepwiki.com/mcp', enabled: true }
+  },
+  {
+    name: 'huggingface',
+    title: 'Hugging Face',
+    description: 'Search models, datasets, papers and Spaces.',
+    icon: 'i-lucide-smile',
+    config: { type: 'remote', url: 'https://huggingface.co/mcp', enabled: true }
+  },
+  {
+    name: 'playwright',
+    title: 'Playwright',
+    description: 'Drive a real browser: navigate, click, screenshot.',
+    icon: 'i-lucide-globe',
+    badge: 'local',
+    config: { type: 'local', command: ['npx', '-y', '@playwright/mcp@latest'], enabled: true }
+  },
+  {
+    name: 'memory',
+    title: 'Memory',
+    description: 'Persistent knowledge-graph memory across sessions.',
+    icon: 'i-lucide-database',
+    badge: 'local',
+    config: { type: 'local', command: ['npx', '-y', '@modelcontextprotocol/server-memory'], enabled: true }
+  }
+]
+
+const installed = computed(() => new Set(entries.value.map((e) => e.name)))
+
+async function addEntry(name: string, config: Record<string, unknown>) {
+  addingName.value = name
   try {
-    const config = addType.value === 'remote'
-      ? { type: 'remote', url: addUrl.value.trim(), enabled: true }
-      : { type: 'local', command: addCommand.value.trim().split(/\s+/), enabled: true }
-    await api.mcpAdd(addName.value.trim(), config)
-    toast.add({ title: `Added ${addName.value}`, color: 'success' })
-    addOpen.value = false
-    addName.value = addUrl.value = addCommand.value = ''
+    await api.mcpAdd(name, config)
     await refresh()
+    const status = entries.value.find((e) => e.name === name)?.status
+    toast.add({
+      title: `Added ${name}`,
+      description: status ? `Status: ${status}` : undefined,
+      color: status === 'failed' || status === 'error' ? 'warning' : 'success'
+    })
   } catch (e) {
-    toast.add({ title: 'Failed to add MCP server', description: String(e), color: 'error' })
+    toast.add({ title: `Failed to add ${name}`, description: String(e), color: 'error' })
   } finally {
-    adding.value = false
+    addingName.value = null
+  }
+}
+
+// smart custom input: URL, command line, opencode/claude JSON — all accepted
+const customName = ref('')
+const customInput = ref('')
+
+function parseCustom(): Array<{ name: string; config: Record<string, unknown> }> {
+  const input = customInput.value.trim()
+  if (!input) return []
+
+  const fallbackName = (hint: string) =>
+    customName.value.trim() ||
+    hint.replace(/^https?:\/\//, '').split(/[/.]/)[0]?.toLowerCase() ||
+    'custom'
+
+  // JSON: single config, or a claude/opencode style map of servers
+  if (input.startsWith('{')) {
+    const parsed = JSON.parse(input)
+    const map = parsed.mcpServers || parsed.mcp
+    if (map && typeof map === 'object') {
+      return Object.entries(map as Record<string, any>).map(([name, raw]) => ({
+        name,
+        config: normalizeConfig(raw)
+      }))
+    }
+    return [{ name: fallbackName('custom'), config: normalizeConfig(parsed) }]
+  }
+
+  if (/^https?:\/\//.test(input)) {
+    return [{ name: fallbackName(input), config: { type: 'remote', url: input, enabled: true } }]
+  }
+
+  // anything else = local command line
+  return [{
+    name: customName.value.trim() || input.split(/\s+/).pop()?.replace(/[^a-z0-9-]/gi, '') || 'local',
+    config: { type: 'local', command: input.split(/\s+/), enabled: true }
+  }]
+}
+
+function normalizeConfig(raw: Record<string, any>): Record<string, unknown> {
+  if (raw.url) {
+    return { type: 'remote', url: raw.url, ...(raw.headers ? { headers: raw.headers } : {}), enabled: raw.enabled !== false }
+  }
+  const command = Array.isArray(raw.command)
+    ? raw.command
+    : [raw.command, ...(Array.isArray(raw.args) ? raw.args : [])].filter(Boolean)
+  return {
+    type: 'local',
+    command,
+    ...(raw.env || raw.environment ? { environment: raw.env || raw.environment } : {}),
+    enabled: raw.enabled !== false
+  }
+}
+
+const addingCustom = ref(false)
+
+async function addCustom() {
+  addingCustom.value = true
+  try {
+    const parsed = parseCustom()
+    if (!parsed.length) return
+    for (const { name, config } of parsed) {
+      await api.mcpAdd(name, config)
+    }
+    await refresh()
+    toast.add({
+      title: parsed.length === 1 ? `Added ${parsed[0]!.name}` : `Added ${parsed.length} servers`,
+      color: 'success'
+    })
+    customName.value = customInput.value = ''
+    addOpen.value = false
+  } catch (e) {
+    toast.add({
+      title: 'Could not add server',
+      description: e instanceof SyntaxError ? 'Invalid JSON.' : String(e),
+      color: 'error'
+    })
+  } finally {
+    addingCustom.value = false
   }
 }
 
@@ -157,38 +293,87 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       </div>
     </div>
 
-    <UModal v-model:open="addOpen" title="Add MCP server" description="Registers the server for this project.">
+    <UModal
+      v-model:open="addOpen"
+      title="Add MCP server"
+      description="One-click suggestions, or paste anything — a URL, a command, or a JSON config."
+    >
       <template #body>
-        <div class="space-y-3">
-          <UFormField label="Name">
-            <UInput v-model="addName" placeholder="context7" class="w-full font-mono" />
-          </UFormField>
-          <UFormField label="Type">
-            <USelectMenu
-              v-model="addType"
-              :items="[{ label: 'Remote (URL)', value: 'remote' }, { label: 'Local (command)', value: 'local' }]"
-              value-key="value"
-              :search-input="false"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField v-if="addType === 'remote'" label="URL">
-            <UInput v-model="addUrl" placeholder="https://mcp.example.com/mcp" class="w-full font-mono" />
-          </UFormField>
-          <UFormField v-else label="Command">
-            <UInput v-model="addCommand" placeholder="npx -y @modelcontextprotocol/server-everything" class="w-full font-mono" />
-          </UFormField>
+        <div class="space-y-5">
+          <section>
+            <h3 class="text-xs font-medium text-muted mb-2">Suggested</h3>
+            <div class="space-y-1.5">
+              <div
+                v-for="entry in CATALOG"
+                :key="entry.name"
+                class="oc-row flex items-center gap-3 rounded-sm bg-muted px-3 py-2.5"
+              >
+                <UIcon :name="entry.icon" class="size-4 text-muted shrink-0" />
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">{{ entry.title }}</span>
+                    <UBadge v-if="entry.badge" size="sm" variant="subtle" :color="entry.badge === 'MCP UI' ? 'primary' : 'neutral'">
+                      {{ entry.badge }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-dimmed truncate">{{ entry.description }}</p>
+                </div>
+                <UButton
+                  v-if="installed.has(entry.name)"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-check"
+                  label="Added"
+                  disabled
+                />
+                <UButton
+                  v-else
+                  size="xs"
+                  color="primary"
+                  variant="soft"
+                  icon="i-lucide-plus"
+                  label="Add"
+                  :loading="addingName === entry.name"
+                  @click="addEntry(entry.name, entry.config)"
+                />
+              </div>
+            </div>
+          </section>
+
+          <USeparator label="or custom" />
+
+          <section class="space-y-2">
+            <UFormField
+              label="URL, command or JSON"
+              size="sm"
+              description="Examples: https://mcp.example.com/mcp · npx -y @playwright/mcp · a pasted mcpServers JSON block (adds all entries)."
+            >
+              <UTextarea
+                v-model="customInput"
+                :rows="3"
+                autoresize
+                :maxrows="8"
+                placeholder='https://mcp.example.com/mcp'
+                class="w-full font-mono"
+              />
+            </UFormField>
+            <UFormField label="Name" size="sm" description="Optional — derived from the URL/command when empty.">
+              <UInput v-model="customName" placeholder="my-server" class="w-full font-mono" />
+            </UFormField>
+          </section>
         </div>
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" color="neutral" label="Cancel" @click="addOpen = false" />
+          <UButton variant="ghost" color="neutral" label="Close" @click="addOpen = false" />
           <UButton
             color="primary"
-            label="Add"
-            :loading="adding"
-            :disabled="!addName.trim() || (addType === 'remote' ? !addUrl.trim() : !addCommand.trim())"
-            @click="addServer"
+            icon="i-lucide-plus"
+            label="Add custom"
+            :loading="addingCustom"
+            :disabled="!customInput.trim()"
+            @click="addCustom"
           />
         </div>
       </template>

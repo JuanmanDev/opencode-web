@@ -49,6 +49,15 @@ test('mcp page lists servers with toggles', async ({ page }) => {
   await page.screenshot({ path: 'docs/screenshots/mcp.png' })
 })
 
+test('add-mcp modal offers catalog suggestions and smart custom input', async ({ page }) => {
+  await page.goto(`/p/${DIR}/mcp`)
+  await page.getByRole('button', { name: 'Add server' }).click()
+  await expect(page.getByText('MCP-UI demo')).toBeVisible()
+  await expect(page.getByText('Suggested')).toBeVisible()
+  await expect(page.getByText('DeepWiki')).toBeVisible()
+  await expect(page.getByPlaceholder('https://mcp.example.com/mcp')).toBeVisible()
+})
+
 test('mobile viewport shows hamburger menu and prompt box', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(`/p/${DIR}/session/ses_mock1`)
