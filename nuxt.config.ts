@@ -27,7 +27,9 @@ export default defineNuxtConfig({
     // Server-side only. Override via env: NUXT_OPENCODE_URL, NUXT_OPENCODE_USERNAME, NUXT_OPENCODE_PASSWORD
     opencodeUrl: 'http://127.0.0.1:4096',
     opencodeUsername: 'opencode',
-    opencodePassword: ''
+    opencodePassword: '',
+    // optional bearer token protecting /api/v1/* and /mcp (NUXT_API_TOKEN)
+    apiToken: ''
   },
   nitro: {
     // keep proxy responses unbuffered for SSE

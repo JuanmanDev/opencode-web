@@ -131,6 +131,33 @@ npm run build && npm run test:e2e   # playwright e2e + screenshots
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) — conventional commits drive [semantic-release](https://github.com/semantic-release/semantic-release) (changelog, GitHub releases, Docker tags — all automatic).
 
+## API & MCP
+
+The app is scriptable three ways — automate opencode from n8n, scripts, or any AI agent:
+
+**REST API** (`/api/v1/*`, spec at [`/api/v1/openapi.json`](http://localhost:3000/api/v1/openapi.json)):
+
+```sh
+# send a prompt and wait for the reply
+curl -X POST https://opencode.example.com/api/v1/sessions/$SESSION/prompt \
+  -H 'content-type: application/json' \
+  -d '{"directory": "/projects/my-app", "text": "Fix the failing tests", "variant": "high"}'
+```
+
+Endpoints: projects, sessions (list/create/delete), messages, prompt (waits for the full reply), abort, models, agents, MCP status.
+
+**MCP server** (Streamable HTTP at `POST /mcp`) — plug opencode-web into Claude, Cursor, or any MCP client:
+
+```json
+{ "mcpServers": { "opencode": { "url": "https://opencode.example.com/mcp" } } }
+```
+
+Tools: `list_projects`, `list_sessions`, `create_session`, `send_prompt` (waits for the reply, auto-creates sessions), `get_messages`, `abort_session`, `list_models`, `mcp_status`.
+
+**WebMCP** — on browsers with `navigator.modelContext`, the page registers its own tools (`opencode_send_prompt`, `opencode_open_project`, …) so in-browser agents can drive the UI directly.
+
+**Auth:** set `NUXT_API_TOKEN` and clients must send `Authorization: Bearer <token>` for `/api/v1/*` and `/mcp`. Unset, these routes rely on your reverse-proxy auth — note tinyauth cookies won't work for MCP clients, so either use the token and exempt `/mcp` from forward-auth, or keep everything LAN-only.
+
 ## Configuration
 
 | env (web) | default | purpose |
@@ -138,6 +165,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) — conventional commits drive [semantic-
 | `NUXT_OPENCODE_URL` | `http://127.0.0.1:4096` | opencode server base URL |
 | `NUXT_OPENCODE_USERNAME` | `opencode` | basic-auth user |
 | `NUXT_OPENCODE_PASSWORD` | *(empty)* | basic-auth password |
+| `NUXT_API_TOKEN` | *(empty)* | bearer token required for `/api/v1/*` and `/mcp` when set |
 
 Health endpoint: `GET /api/health` → `{ ok, opencode }` (used by the Docker healthcheck).
 
