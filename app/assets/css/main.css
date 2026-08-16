@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* opencode-like look: near-black flat surfaces, no visible borders,
+   grey/white highlights instead of a colored accent */
+.dark {
+  --ui-bg: #0a0a0a;
+  --ui-bg-muted: #121214;
+  --ui-bg-elevated: #19191c;
+  --ui-bg-accented: #232327;
+  --ui-border: #1a1a1d;
+  --ui-border-muted: #151517;
+  --ui-border-accented: #26262a;
+  --ui-text-dimmed: #6b6b74;
+  --ui-text-muted: #9a9aa3;
+  --ui-text: #d4d4dc;
+  --ui-text-highlighted: #fafafa;
+  /* highlight = light grey, opencode style */
+  --ui-primary: var(--ui-color-primary-200);
+}
+
+:root {
+  --ui-radius: 0.125rem;
+}
+
+html, body, #__nuxt {
+  height: 100%;
+}
+
+body {
+  background: var(--ui-bg);
+  overscroll-behavior-y: none;
+}
+
+/* markdown body */
+.oc-markdown {
+  line-height: 1.65;
+  word-break: break-word;
+}
+.oc-markdown > *:first-child { margin-top: 0; }
+.oc-markdown > *:last-child { margin-bottom: 0; }
+.oc-markdown p { margin: 0.5rem 0; }
+.oc-markdown h1, .oc-markdown h2, .oc-markdown h3, .oc-markdown h4 {
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+  color: var(--ui-text-highlighted);
+}
+.oc-markdown h1 { font-size: 1.25rem; }
+.oc-markdown h2 { font-size: 1.125rem; }
+.oc-markdown h3 { font-size: 1rem; }
+.oc-markdown ul, .oc-markdown ol { padding-left: 1.25rem; margin: 0.5rem 0; }
+.oc-markdown ul { list-style: disc; }
+.oc-markdown ol { list-style: decimal; }
+.oc-markdown li { margin: 0.15rem 0; }
+.oc-markdown a { color: var(--ui-primary); text-decoration: underline; text-underline-offset: 2px; }
+.oc-markdown blockquote {
+  border-left: 2px solid var(--ui-border-accented);
+  padding-left: 0.75rem;
+  color: var(--ui-text-muted);
+  margin: 0.5rem 0;
+}
+.oc-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.825em;
+  background: var(--ui-bg-elevated);
+  border: 1px solid var(--ui-border-muted);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+}
+.oc-markdown pre {
+  background: var(--ui-bg-muted);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.oc-markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+.oc-markdown table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.oc-markdown th, .oc-markdown td {
+  border: 1px solid var(--ui-border);
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+.oc-markdown hr { border-color: var(--ui-border); margin: 1rem 0; }
+
+/* working indicator: shimmer text + indeterminate bar */
+@keyframes oc-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.oc-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--ui-text-dimmed) 30%,
+    var(--ui-text-highlighted) 50%,
+    var(--ui-text-dimmed) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: oc-shimmer 2.2s linear infinite;
+}
+@keyframes oc-indeterminate {
+  0% { left: -40%; width: 40%; }
+  50% { width: 30%; }
+  100% { left: 100%; width: 40%; }
+}
+.oc-progress {
+  position: relative;
+  overflow: hidden;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ui-bg-accented);
+}
+.oc-progress::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--ui-text-muted);
+  animation: oc-indeterminate 1.5s ease-in-out infinite;
+}
+
+/* thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-border-accented) transparent;
+}

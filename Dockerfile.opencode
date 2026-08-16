@@ -1,0 +1,18 @@
+# opencode server image: runs `opencode serve` for all projects mounted under /projects
+FROM node:24-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git curl ca-certificates ripgrep \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g opencode-ai --no-audit --no-fund
+
+# non-root; state (auth, sessions) lives in /home/node/.local/share/opencode
+RUN mkdir -p /projects && chown node:node /projects
+USER node
+WORKDIR /projects
+
+ENV OPENCODE_SERVER_USERNAME=opencode
+
+EXPOSE 4096
+CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

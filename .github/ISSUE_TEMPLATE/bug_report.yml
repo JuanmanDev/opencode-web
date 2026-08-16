@@ -1,0 +1,34 @@
+name: Bug report
+description: Something is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Also paste browser console errors if any.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: input
+    id: version
+    attributes:
+      label: opencode web version / image tag
+      placeholder: v0.2.1 / ghcr.io/juanmandev/opencode-web:latest
+  - type: input
+    id: opencode
+    attributes:
+      label: opencode server version
+      placeholder: 1.18.18
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Setup
+      options:
+        - Docker + Traefik/tinyauth
+        - Docker (direct port)
+        - npm run dev
+        - other
