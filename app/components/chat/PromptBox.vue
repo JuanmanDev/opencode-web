@@ -15,6 +15,7 @@ const props = defineProps<{
   busy: boolean
   directory: string
   metaLoading?: boolean
+  mcpLoading?: boolean
   queueLength?: number
 }>()
 
@@ -319,13 +320,36 @@ function onKeydown(e: KeyboardEvent) {
         </div>
 
         <!-- MCP: full row -->
-        <div v-if="mcpInfo.length || metaLoading" class="space-y-1.5">
+        <!-- loading: skeleton row while the server list is being fetched -->
+        <div v-if="mcpLoading" class="flex items-center gap-2 rounded-sm bg-elevated/60 px-2.5 py-2">
+          <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin text-muted shrink-0" />
+          <span class="text-xs text-muted">Loading MCP servers…</span>
+          <USkeleton class="h-4 flex-1 max-w-40" />
+        </div>
+
+        <!-- loaded but none configured: point at the MCP settings page -->
+        <div
+          v-else-if="!mcpInfo.length"
+          class="flex items-center gap-2 rounded-sm bg-elevated/60 px-2.5 py-2"
+        >
+          <UIcon name="i-lucide-server-off" class="size-3.5 text-dimmed shrink-0" />
+          <span class="text-xs text-muted flex-1">No MCP servers configured for this project.</span>
+          <UButton
+            size="xs"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-server-cog"
+            label="Configure MCP"
+            :to="`/p/${encodeDir(directory)}/mcp`"
+          />
+        </div>
+
+        <div v-else class="space-y-1.5">
           <div class="flex items-center gap-1.5">
             <USelect
               v-model="mcpMode"
               :items="mcpModeItems"
               value-key="value"
-              :loading="metaLoading"
               size="sm"
               class="flex-1"
               icon="i-lucide-server"
@@ -423,7 +447,14 @@ function onKeydown(e: KeyboardEvent) {
             <UIcon name="i-lucide-bot" class="size-3" />
             {{ agent }}
           </span>
-          <span v-if="mcpMode === 'custom'" class="hidden sm:flex items-center gap-1 shrink-0">
+          <span v-if="mcpLoading" class="hidden sm:flex items-center gap-1 shrink-0">
+            <UIcon name="i-lucide-loader-circle" class="size-3 animate-spin" />
+            mcp
+          </span>
+          <span
+            v-else-if="mcpMode === 'custom' && mcpInfo.length"
+            class="hidden sm:flex items-center gap-1 shrink-0"
+          >
             <UIcon name="i-lucide-server" class="size-3" />
             {{ enabledCount }}/{{ mcpInfo.length }} mcp
           </span>

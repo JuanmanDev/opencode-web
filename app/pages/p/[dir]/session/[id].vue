@@ -79,10 +79,12 @@ async function loadAll() {
 watch(sessionId, loadAll, { immediate: true })
 
 const metaLoading = ref(true)
+const mcpLoading = ref(true)
 const providersCacheKey = computed(() => `opencode-web.providers.${directory.value}`)
 
 async function loadMeta() {
   metaLoading.value = true
+  mcpLoading.value = true
   // stale-while-revalidate: paint the model list instantly from cache so a
   // slow or flaky connection never leaves the selector empty
   try {
@@ -113,8 +115,10 @@ async function loadMeta() {
         tools: toolIds.filter((id) => id.startsWith(`${name}_`)).sort()
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
+    mcpLoading.value = false
   } finally {
     metaLoading.value = false
+    mcpLoading.value = false
   }
 }
 
@@ -364,6 +368,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       :providers="providers"
       :agents="agents"
       :mcp-info="mcpInfo"
+      :mcp-loading="mcpLoading"
       :meta-loading="metaLoading"
       :queue-length="queue.length"
       :busy="busy"
