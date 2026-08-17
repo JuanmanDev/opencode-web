@@ -100,9 +100,20 @@ const variantItems = [
 ]
 
 const mcpModeItems = [
-  { label: 'MCP: project default', value: DEFAULT, icon: 'i-lucide-server' },
-  { label: 'MCP: custom selection', value: 'custom', icon: 'i-lucide-list-checks' }
+  { label: 'project default', value: DEFAULT, icon: 'i-lucide-server' },
+  { label: 'all enabled', value: 'all', icon: 'i-lucide-server' },
+  { label: 'all disabled', value: 'none', icon: 'i-lucide-server-off' },
+  { label: 'custom…', value: 'custom', icon: 'i-lucide-list-checks' }
 ]
+
+const mcpSummary = computed(() => {
+  switch (mcpMode.value) {
+    case 'all': return 'all'
+    case 'none': return 'off'
+    case 'custom': return `${enabledCount.value}/${props.mcpInfo.length}`
+    default: return ''
+  }
+})
 
 const variantLabel = computed(
   () => variantItems.find((v) => v.value === variant.value)?.label || DEFAULT
@@ -179,14 +190,20 @@ function send() {
   const value = text.value.trim()
   if (!value) return
 
-  // custom MCP selection → per-prompt tool filter
+  // MCP mode → per-prompt tool filter
   let tools: Record<string, boolean> | undefined
-  if (mcpMode.value === 'custom') {
+  if (mcpMode.value !== DEFAULT && props.mcpInfo.length) {
     tools = {}
     for (const server of props.mcpInfo) {
-      if (disabledServers.value.includes(server.name)) {
+      const serverOff =
+        mcpMode.value === 'none' ||
+        (mcpMode.value === 'custom' && disabledServers.value.includes(server.name))
+      if (serverOff) {
         tools[`${server.name}*`] = false
         tools[`${server.name}_*`] = false
+      } else if (mcpMode.value === 'all') {
+        tools[`${server.name}*`] = true
+        tools[`${server.name}_*`] = true
       } else {
         for (const toolId of server.tools) {
           if (disabledTools.value.includes(toolId)) tools[toolId] = false
@@ -317,51 +334,51 @@ function onKeydown(e: KeyboardEvent) {
               icon="i-lucide-bot"
             />
           </UFormField>
-        </div>
 
-        <!-- MCP: full row -->
-        <!-- loading: skeleton row while the server list is being fetched -->
-        <div v-if="mcpLoading" class="flex items-center gap-2 rounded-sm bg-elevated/60 px-2.5 py-2">
-          <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin text-muted shrink-0" />
-          <span class="text-xs text-muted">Loading MCP servers…</span>
-          <USkeleton class="h-4 flex-1 max-w-40" />
-        </div>
-
-        <!-- loaded but none configured: point at the MCP settings page -->
-        <div
-          v-else-if="!mcpInfo.length"
-          class="flex items-center gap-2 rounded-sm bg-elevated/60 px-2.5 py-2"
-        >
-          <UIcon name="i-lucide-server-off" class="size-3.5 text-dimmed shrink-0" />
-          <span class="text-xs text-muted flex-1">No MCP servers configured for this project.</span>
-          <UButton
-            size="xs"
-            variant="soft"
-            color="neutral"
-            icon="i-lucide-server-cog"
-            label="Configure MCP"
-            :to="`/p/${encodeDir(directory)}/mcp`"
-          />
-        </div>
-
-        <div v-else class="space-y-1.5">
-          <div class="flex items-center gap-1.5">
+          <!-- MCP shares the same row -->
+          <UFormField label="MCP" size="xs" class="sm:w-44 shrink-0">
             <USelect
+              v-if="mcpLoading"
+              disabled
+              loading
+              :items="[]"
+              placeholder="Loading…"
+              size="sm"
+              class="w-full"
+              icon="i-lucide-server"
+            />
+            <UButton
+              v-else-if="!mcpInfo.length"
+              size="sm"
+              block
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-server-cog"
+              label="Configure MCP"
+              :to="`/p/${encodeDir(directory)}/mcp`"
+            />
+            <USelect
+              v-else
               v-model="mcpMode"
               :items="mcpModeItems"
               value-key="value"
               size="sm"
-              class="flex-1"
+              class="w-full"
               icon="i-lucide-server"
             />
-            <template v-if="mcpMode === 'custom'">
-              <UButton size="xs" variant="soft" color="neutral" label="All on" @click="setAllServers(true)" />
-              <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
-            </template>
+          </UFormField>
+        </div>
+
+        <!-- custom MCP selection: full-width accordion, scrollable -->
+        <div v-if="mcpInfo.length && mcpMode === 'custom'" class="space-y-1.5">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] uppercase tracking-widest text-dimmed flex-1">MCP servers & tools</span>
+            <UButton size="xs" variant="soft" color="neutral" label="All on" @click="setAllServers(true)" />
+            <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
           </div>
 
           <Transition name="oc-collapse">
-            <div v-if="mcpMode === 'custom'" class="rounded-sm bg-elevated/60 divide-y divide-default">
+            <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-52 overflow-y-auto">
               <div v-for="server in mcpInfo" :key="server.name">
                 <!-- accordion header -->
                 <div class="flex items-center gap-2 px-2.5 py-2">
@@ -452,11 +469,11 @@ function onKeydown(e: KeyboardEvent) {
             mcp
           </span>
           <span
-            v-else-if="mcpMode === 'custom' && mcpInfo.length"
+            v-else-if="mcpSummary && mcpInfo.length"
             class="hidden sm:flex items-center gap-1 shrink-0"
           >
             <UIcon name="i-lucide-server" class="size-3" />
-            {{ enabledCount }}/{{ mcpInfo.length }} mcp
+            {{ mcpSummary }} mcp
           </span>
         </button>
         <span class="flex-1" />
