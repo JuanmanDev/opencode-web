@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,8 +23,11 @@ jobs:
       published: ${{ steps.semantic.outputs.new_release_published }}
       version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
+      # always release from the current branch head: runs can sit queued behind
+      # a slow docker build while release commits land on main in the meantime
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
