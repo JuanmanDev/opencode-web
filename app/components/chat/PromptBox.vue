@@ -219,7 +219,7 @@ function send() {
     text: value,
     model: providerID && modelID ? { providerID, modelID } : undefined,
     agent: agent.value !== DEFAULT ? agent.value : undefined,
-    variant: variant.value !== DEFAULT ? variant.value : undefined,
+    variant: variant.value !== DEFAULT && selectedModel.value?.reasoning ? variant.value : undefined,
     tools
   })
   text.value = ''
@@ -313,15 +313,21 @@ function onKeydown(e: KeyboardEvent) {
               />
             </div>
           </UFormField>
-          <UFormField v-if="selectedModel?.reasoning" label="Think level" size="xs" class="sm:w-36 shrink-0">
-            <USelect
-              v-model="variant"
-              :items="variantItems"
-              value-key="value"
-              size="sm"
-              class="w-full"
-              icon="i-lucide-brain"
-            />
+          <UFormField label="Think level" size="xs" class="sm:w-36 shrink-0">
+            <UTooltip
+              :text="selectedModel && !selectedModel.reasoning ? 'This model has no thinking support' : undefined"
+              :disabled="!selectedModel || selectedModel.reasoning"
+            >
+              <USelect
+                v-model="variant"
+                :items="variantItems"
+                value-key="value"
+                :disabled="Boolean(selectedModel && !selectedModel.reasoning)"
+                size="sm"
+                class="w-full"
+                icon="i-lucide-brain"
+              />
+            </UTooltip>
           </UFormField>
           <UFormField label="Agent" size="xs" class="sm:w-40 shrink-0">
             <USelect
@@ -378,19 +384,24 @@ function onKeydown(e: KeyboardEvent) {
           </div>
 
           <Transition name="oc-collapse">
-            <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-52 overflow-y-auto">
+            <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-96 overflow-y-auto">
               <div v-for="server in mcpInfo" :key="server.name">
                 <!-- accordion header -->
                 <div class="flex items-center gap-2 px-2.5 py-2">
-                  <button
-                    class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer text-left"
-                    @click="toggleAccordion(server.name)"
+                  <!-- expandable only when the server's tool list is known -->
+                  <component
+                    :is="server.tools.length ? 'button' : 'div'"
+                    class="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    :class="server.tools.length ? 'cursor-pointer' : ''"
+                    @click="server.tools.length && toggleAccordion(server.name)"
                   >
                     <UIcon
+                      v-if="server.tools.length"
                       name="i-lucide-chevron-down"
                       class="size-3.5 shrink-0 text-dimmed transition-transform duration-200"
                       :class="openServers.includes(server.name) ? 'rotate-180' : ''"
                     />
+                    <UIcon v-else name="i-lucide-server" class="size-3.5 shrink-0 text-dimmed" />
                     <span class="text-sm font-mono truncate">{{ server.name }}</span>
                     <UBadge :color="statusColor(server.status)" variant="subtle" size="sm">
                       {{ server.status }}
@@ -398,7 +409,7 @@ function onKeydown(e: KeyboardEvent) {
                     <span v-if="server.tools.length" class="text-[10px] text-dimmed">
                       {{ server.tools.length }} tools
                     </span>
-                  </button>
+                  </component>
                   <USwitch
                     size="sm"
                     :model-value="!disabledServers.includes(server.name)"
@@ -412,12 +423,9 @@ function onKeydown(e: KeyboardEvent) {
                 <!-- accordion body: per-tool toggles -->
                 <Transition name="oc-collapse">
                   <div
-                    v-if="openServers.includes(server.name)"
+                    v-if="server.tools.length && openServers.includes(server.name)"
                     class="px-8 pb-2 space-y-1"
                   >
-                    <div v-if="!server.tools.length" class="text-xs text-dimmed py-1">
-                      Tool list unavailable for this server.
-                    </div>
                     <UCheckbox
                       v-for="toolId in server.tools"
                       :key="toolId"
