@@ -666,13 +666,6 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             :permission="perm"
             @respond="(r) => respondPermission(perm, r)"
           />
-          <ChatQuestionPrompt
-            v-for="q in questions"
-            :key="q.id"
-            :request="q"
-            @reply="(answers) => replyQuestion(q.id, answers)"
-            @reject="rejectQuestion(q.id)"
-          />
           <!-- local command output (/mcp …) -->
           <div
             v-for="n in localNotes"
@@ -710,7 +703,24 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       </div>
     </div>
 
+    <!-- a pending agent question replaces the chat input (TUI-style focus) -->
+    <div v-if="questions[0]" class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div class="max-w-4xl mx-auto">
+        <ChatQuestionPrompt
+          :key="questions[0].id"
+          :request="questions[0]"
+          class="!mx-0 !my-0"
+          @reply="(answers) => replyQuestion(questions[0]!.id, answers)"
+          @reject="rejectQuestion(questions[0]!.id)"
+        />
+        <p v-if="questions.length > 1" class="text-[10px] text-dimmed mt-1">
+          +{{ questions.length - 1 }} more question(s) after this one
+        </p>
+      </div>
+    </div>
+
     <ChatPromptBox
+      v-else
       :providers="providers"
       :agents="agents"
       :mcp-info="mcpInfo"
