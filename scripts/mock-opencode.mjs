@@ -134,6 +134,14 @@ createServer((req, res) => {
     return
   }
   if (p === '/agent') return json(res, agents)
+  if (p === '/global/config') return json(res, { mcp: { context7: { type: 'remote', url: `http://127.0.0.1:${PORT}/fake-mcp` } } })
+  if (p === '/command') return json(res, [
+    { name: 'review', description: 'Review the current changes', template: '', hints: [] },
+    { name: 'commit', description: 'Create a git commit', template: '', hints: [] }
+  ])
+  if (/^\/session\/[^/]+\/(command|shell|share|summarize|revert|unrevert)$/.test(p) && req.method === 'POST') {
+    return json(res, { ok: true })
+  }
   if (p === '/mcp') return json(res, mcp)
   if (p === '/experimental/tool/ids') {
     return json(res, [

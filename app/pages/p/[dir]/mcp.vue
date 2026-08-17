@@ -18,21 +18,28 @@ interface McpEntry {
 }
 
 const entries = ref<McpEntry[]>([])
-// project-level tool overrides from opencode config (`tools` map)
+// tool overrides from the opencode config (`tools` map) for the active scope
 const configTools = ref<Record<string, boolean>>({})
 const loading = ref(true)
 const toggling = ref<string | null>(null)
 const expanded = ref<string[]>([])
+
+// scope: this project's config, or the global opencode config (all projects)
+const scope = ref<'project' | 'global'>('project')
+
+function patchScoped(body: Record<string, unknown>) {
+  return scope.value === 'global' ? api.patchGlobalConfig(body) : api.patchConfig(body)
+}
 
 async function refresh() {
   loading.value = true
   try {
     const [status, config, remoteTools] = await Promise.all([
       api.mcpStatus().catch(() => ({} as Record<string, McpStatus>)),
-      api.config().catch(() => ({} as Record<string, unknown>)),
+      (scope.value === 'global' ? api.globalConfig() : api.config()).catch(() => ({} as Record<string, unknown>)),
       $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
         '/api/v1/mcp-tools',
-        { query: { directory: directory.value }, timeout: 20000 }
+        { query: { directory: directory.value, scope: scope.value }, timeout: 20000 }
       ).catch(() => ({} as Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>))
     ])
     const mcpConfig = (config.mcp || {}) as Record<string, Record<string, unknown>>
@@ -59,6 +66,61 @@ async function refresh() {
   }
 }
 
+watch(scope, () => { expanded.value = []; refresh() })
+
+// ---- saved enable/disable sets (per scope) ----
+interface PageGroup { name: string; enabled: Record<string, boolean> }
+const groupsKey = computed(() =>
+  `opencode-web.mcp-page-groups.${scope.value === 'global' ? 'GLOBAL' : directory.value}`
+)
+const groups = ref<PageGroup[]>([])
+const groupName = ref('')
+const applyingGroup = ref('')
+
+function loadGroups() {
+  try { groups.value = JSON.parse(localStorage.getItem(groupsKey.value) || '[]') } catch { groups.value = [] }
+}
+onMounted(loadGroups)
+watch(groupsKey, loadGroups)
+
+function saveGroup() {
+  const name = groupName.value.trim()
+  if (!name) return
+  const group: PageGroup = {
+    name,
+    enabled: Object.fromEntries(entries.value.map((e) => [e.name, e.enabled]))
+  }
+  const idx = groups.value.findIndex((g) => g.name === name)
+  if (idx >= 0) groups.value.splice(idx, 1, group)
+  else groups.value.push(group)
+  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+  groupName.value = ''
+  toast.add({ title: `Saved set "${name}"`, description: 'Apply it any time with one click.', color: 'success' })
+}
+
+async function applyGroup(group: PageGroup) {
+  applyingGroup.value = group.name
+  try {
+    const patch: Record<string, { enabled: boolean }> = {}
+    for (const entry of entries.value) {
+      const want = group.enabled[entry.name]
+      if (want !== undefined && want !== entry.enabled) patch[entry.name] = { enabled: want }
+    }
+    if (Object.keys(patch).length) await patchScoped({ mcp: patch })
+    toast.add({ title: `Applied "${group.name}"`, color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: `Failed to apply "${group.name}"`, description: String(e), color: 'error' })
+  } finally {
+    applyingGroup.value = ''
+  }
+}
+
+function deleteGroup(name: string) {
+  groups.value = groups.value.filter((g) => g.name !== name)
+  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+}
+
 function toggleExpand(name: string) {
   expanded.value = expanded.value.includes(name)
     ? expanded.value.filter((n) => n !== name)
@@ -69,7 +131,7 @@ async function toggleTool(toolId: string, enabled: boolean) {
   toggling.value = toolId
   try {
     // persisted project-wide in the opencode config `tools` map
-    await api.patchConfig({ tools: { [toolId]: enabled } })
+    await patchScoped({ tools: { [toolId]: enabled } })
     configTools.value = { ...configTools.value, [toolId]: enabled }
     toast.add({
       title: `${toolId} ${enabled ? 'enabled' : 'disabled'}`,
@@ -97,7 +159,7 @@ async function toggle(entry: McpEntry, enabled: boolean) {
   toggling.value = entry.name
   try {
     // minimal patch: the server merges it into the existing entry
-    await api.patchConfig({ mcp: { [entry.name]: { enabled } } })
+    await patchScoped({ mcp: { [entry.name]: { enabled } } })
     toast.add({
       title: `${entry.name} ${enabled ? 'enabled' : 'disabled'}`,
       description: 'Applies to new sessions in this project.',
@@ -311,9 +373,76 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         <UButton size="xs" variant="soft" icon="i-lucide-refresh-cw" :loading="loading" @click="refresh" />
         <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" @click="addOpen = true" />
       </div>
-      <p class="text-sm text-muted mb-6">
-        Enabled servers for <span class="font-mono">{{ dirName(directory) }}</span>. Toggles are saved to this project's opencode config.
+      <p class="text-sm text-muted mb-4">
+        {{ scope === 'global'
+          ? 'Global opencode config — applies to every project.'
+          : `Enabled servers for ${dirName(directory)} — saved to this project's opencode config.` }}
       </p>
+
+      <!-- scope: project vs global -->
+      <div class="flex items-center gap-1 mb-3">
+        <UButton
+          size="xs"
+          :variant="scope === 'project' ? 'solid' : 'soft'"
+          :color="scope === 'project' ? 'primary' : 'neutral'"
+          icon="i-lucide-folder-git-2"
+          :label="dirName(directory)"
+          @click="scope = 'project'"
+        />
+        <UButton
+          size="xs"
+          :variant="scope === 'global' ? 'solid' : 'soft'"
+          :color="scope === 'global' ? 'primary' : 'neutral'"
+          icon="i-lucide-globe"
+          label="Global"
+          @click="scope = 'global'"
+        />
+      </div>
+
+      <!-- saved enable/disable sets -->
+      <div class="flex flex-wrap items-center gap-1 mb-3">
+        <template v-for="g in groups" :key="g.name">
+          <div class="flex items-center rounded-sm overflow-hidden">
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-layers"
+              :label="g.name"
+              :loading="applyingGroup === g.name"
+              class="rounded-r-none"
+              @click="applyGroup(g)"
+            />
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-x"
+              class="rounded-l-none"
+              :aria-label="`Delete set ${g.name}`"
+              @click="deleteGroup(g.name)"
+            />
+          </div>
+        </template>
+        <UInput
+          v-model="groupName"
+          size="xs"
+          placeholder="Save current set as…"
+          class="w-40 font-mono"
+          @keydown.enter="saveGroup"
+        />
+        <UTooltip text="Save the current enabled/disabled selection">
+          <UButton
+            size="xs"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-save"
+            :disabled="!groupName.trim()"
+            aria-label="Save set"
+            @click="saveGroup"
+          />
+        </UTooltip>
+      </div>
 
       <div class="bg-muted rounded-sm divide-y divide-default">
         <div v-if="loading && !entries.length" class="p-4 space-y-3">

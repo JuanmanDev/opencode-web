@@ -96,6 +96,39 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
         timeout: 1000 * 60 * 60
       }),
 
+    // ---- global config (all projects) ----
+    globalConfig: () => ocFetch<Record<string, unknown>>(`${BASE}/global/config`),
+    patchGlobalConfig: (body: Record<string, unknown>) =>
+      ocFetch(`${BASE}/global/config`, { method: 'PATCH', body }),
+
+    // ---- commands & shell ----
+    commands: () =>
+      ocFetch<Array<{ name: string; description?: string; template?: string; source?: string }>>(
+        `${BASE}/command`, { query: q() }
+      ).catch(() => []),
+    runCommand: (id: string, command: string, args?: string, extra?: Record<string, unknown>) =>
+      ocFetch(`${BASE}/session/${id}/command`, {
+        method: 'POST',
+        body: { command, ...(args ? { arguments: args } : {}), ...(extra || {}) },
+        query: q(),
+        timeout: 1000 * 60 * 60
+      }),
+    shell: (id: string, command: string, extra?: Record<string, unknown>) =>
+      ocFetch(`${BASE}/session/${id}/shell`, {
+        method: 'POST',
+        body: { command, ...(extra || {}) },
+        query: q(),
+        timeout: 1000 * 60 * 30
+      }),
+    share: (id: string) =>
+      ocFetch<{ share?: { url?: string } } & Record<string, unknown>>(`${BASE}/session/${id}/share`, { method: 'POST', body: {}, query: q() }),
+    summarize: (id: string) =>
+      ocFetch(`${BASE}/session/${id}/summarize`, { method: 'POST', body: {}, query: q(), timeout: 1000 * 60 * 10 }),
+    revert: (id: string) =>
+      ocFetch(`${BASE}/session/${id}/revert`, { method: 'POST', body: {}, query: q() }),
+    unrevert: (id: string) =>
+      ocFetch(`${BASE}/session/${id}/unrevert`, { method: 'POST', body: {}, query: q() }),
+
     // ---- questions (agent asking the user) ----
     questions: () =>
       ocFetch<unknown>(`${BASE}/question`, { query: q() })

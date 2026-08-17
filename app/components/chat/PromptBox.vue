@@ -17,6 +17,7 @@ const props = defineProps<{
   metaLoading?: boolean
   mcpLoading?: boolean
   queueLength?: number
+  commands?: Array<{ name: string; description?: string }>
 }>()
 
 const emit = defineEmits<{
@@ -314,7 +315,28 @@ function onFiles(e: Event) {
   input.value = ''
 }
 
+// ---- slash-command autocomplete ----
+const slashMatches = computed(() => {
+  const value = text.value
+  if (!value.startsWith('/') || value.includes('\n')) return []
+  const firstToken = value.slice(1).split(' ')[0] || ''
+  if (value.includes(' ')) return [] // command chosen, user is typing arguments
+  return (props.commands || [])
+    .filter((c) => c.name.toLowerCase().startsWith(firstToken.toLowerCase()))
+    .slice(0, 8)
+})
+
+function pickCommand(name: string) {
+  text.value = `/${name} `
+  ;(document.activeElement as HTMLElement)?.blur?.()
+}
+
 function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Tab' && slashMatches.value.length) {
+    e.preventDefault()
+    pickCommand(slashMatches.value[0]!.name)
+    return
+  }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
     send()
@@ -324,7 +346,25 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-    <div class="max-w-4xl mx-auto space-y-2">
+    <div class="max-w-4xl mx-auto space-y-2 relative">
+      <!-- slash command autocomplete -->
+      <CollapseTransition>
+        <div
+          v-if="slashMatches.length"
+          class="absolute bottom-full left-0 right-0 mb-1 rounded-sm bg-elevated shadow-lg divide-y divide-default max-h-64 overflow-y-auto z-20"
+        >
+          <button
+            v-for="cmd in slashMatches"
+            :key="cmd.name"
+            class="oc-row flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:bg-accented cursor-pointer"
+            @mousedown.prevent="pickCommand(cmd.name)"
+          >
+            <span class="font-mono text-sm text-highlighted">/{{ cmd.name }}</span>
+            <span class="text-xs text-dimmed truncate">{{ cmd.description }}</span>
+          </button>
+          <div class="px-3 py-1 text-[10px] text-dimmed">Tab completes · `!command` runs shell</div>
+        </div>
+      </CollapseTransition>
       <UTextarea
         v-model="text"
         :rows="2"

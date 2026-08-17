@@ -21,6 +21,7 @@ const session = ref<SessionInfo | null>(null)
 const messages = ref<MessageWithParts[]>([])
 const providers = ref<ProvidersResponse | null>(null)
 const agents = ref<AgentInfo[]>([])
+const commands = ref<Array<{ name: string; description?: string; source?: string }>>([])
 const mcpInfo = ref<Array<{
   name: string
   status: string
@@ -323,11 +324,12 @@ async function loadMeta() {
   } catch { /* ignore */ }
 
   try {
-    const [prov, ag, mcp, toolIds, remoteTools] = await Promise.all([
+    const [prov, ag, mcp, toolIds, cmds, remoteTools] = await Promise.all([
       api.providers().catch(() => null),
       api.agents().catch(() => [] as AgentInfo[]),
       api.mcpStatus().catch(() => ({} as Record<string, any>)),
       api.toolIds(),
+      api.commands(),
       // opencode doesn't expose MCP tool ids, so our server asks the remote
       // MCP servers themselves for their tool lists
       $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
@@ -340,6 +342,7 @@ async function loadMeta() {
       try { localStorage.setItem(providersCacheKey.value, JSON.stringify(prov)) } catch { /* full */ }
     }
     agents.value = ag
+    commands.value = cmds
     mcpInfo.value = Object.entries(mcp)
       .map(([name, s]) => {
         const remote = remoteTools[name]
@@ -476,9 +479,98 @@ function dispatch(payload: PromptPayload) {
   scrollToBottom(true)
 }
 
+// opencode built-in slash commands handled through their APIs
+const BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
+  { name: 'init', description: 'Analyze the project and create/update AGENTS.md' },
+  { name: 'share', description: 'Share this conversation (returns a link)' },
+  { name: 'compact', description: 'Summarize the conversation to free context' },
+  { name: 'summarize', description: 'Alias of /compact' },
+  { name: 'undo', description: 'Revert the last change' },
+  { name: 'redo', description: 'Restore the reverted change' },
+  { name: 'mcp', description: 'Manage MCP servers (list, add, test…)' },
+  { name: 'test', description: 'UI demos, e.g. /test question' }
+]
+
+const allCommands = computed(() => [
+  ...BUILTIN_COMMANDS,
+  ...commands.value.map((c) => ({
+    name: c.name,
+    description: c.description || `${c.source || 'custom'} command`
+  }))
+])
+
+async function runSlashCommand(text: string) {
+  const trimmed = text.trim().replace(/^\//, '')
+  const [name = '', ...rest] = trimmed.split(/\s+/)
+  const args = rest.join(' ')
+  try {
+    switch (name) {
+      case 'init':
+        busy.value = true
+        note('Running **/init** — analyzing the project…')
+        api.runCommand(sessionId.value, 'init', args).catch(() =>
+          dispatch({ text: 'Analyze this project and create or update AGENTS.md with build commands, conventions and architecture notes.' })
+        )
+        return
+      case 'share': {
+        const res = await api.share(sessionId.value)
+        const url = (res as any)?.share?.url || (res as any)?.url
+        note(url ? `Shared: ${url}` : 'Share requested.')
+        return
+      }
+      case 'compact':
+      case 'summarize':
+        busy.value = true
+        note('Summarizing the conversation…')
+        api.summarize(sessionId.value).catch((e) => note(`❌ ${e?.data?.message || e}`))
+        return
+      case 'undo':
+        await api.revert(sessionId.value)
+        note('Reverted the last change.')
+        loadAll()
+        return
+      case 'redo':
+        await api.unrevert(sessionId.value)
+        note('Restored the reverted change.')
+        loadAll()
+        return
+      default: {
+        if (commands.value.some((c) => c.name === name)) {
+          busy.value = true
+          api.runCommand(sessionId.value, name, args).catch((e) => {
+            busy.value = false
+            note(`❌ /${name}: ${e?.data?.message || e}`)
+          })
+          return
+        }
+        note([
+          `Unknown command: \`/${name}\`. Available:`,
+          '',
+          ...allCommands.value.map((c) => `- \`/${c.name}\` — ${c.description}`)
+        ].join('\n'))
+      }
+    }
+  } catch (e) {
+    note(`❌ /${name}: ${(e as any)?.data?.message || e}`)
+  }
+}
+
 function send(payload: PromptPayload) {
+  const trimmed = payload.text.trim()
+  // !cmd -> run a shell command inside the session
+  if (trimmed.startsWith('!')) {
+    const cmd = trimmed.slice(1).trim()
+    if (!cmd) return
+    busy.value = true
+    note(`$ ${cmd}`)
+    api.shell(sessionId.value, cmd).catch((e) => {
+      busy.value = false
+      note(`❌ shell: ${e?.data?.message || e}`)
+    })
+    return
+  }
   // /mcp … -> handled locally by the UI, never sent to the agent
-  if (payload.text.trim().startsWith('/mcp')) {
+  if (trimmed.startsWith('/mcp')) {
     runMcpCommand(payload.text)
     return
   }
@@ -497,6 +589,11 @@ function send(payload: PromptPayload) {
       }]
     })
     note('Demo question injected — the chat input is replaced by the answer card until you reply or dismiss. Type your own answer in the text field for the "Other" case.')
+    return
+  }
+  // any other /command -> opencode command runner
+  if (trimmed.startsWith('/')) {
+    runSlashCommand(trimmed)
     return
   }
   if (busy.value) {
@@ -762,6 +859,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       :mcp-loading="mcpLoading"
       :meta-loading="metaLoading"
       :queue-length="queue.length"
+      :commands="allCommands"
       :busy="busy"
       :directory="directory"
       @send="send"

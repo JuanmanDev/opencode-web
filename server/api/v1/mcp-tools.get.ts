@@ -190,11 +190,12 @@ async function fetchToolsSse(url: string, headers: Record<string, string>): Prom
 
 export default defineEventHandler(async (event) => {
   requireApiToken(event)
-  const { directory } = getQuery(event) as { directory?: string }
+  const { directory, scope } = getQuery(event) as { directory?: string; scope?: string }
 
-  const config = await opencodeFetch<{ mcp?: Record<string, McpConfigEntry> }>('/config', {
-    query: { directory }
-  }).catch(() => ({ mcp: {} as Record<string, McpConfigEntry> }))
+  const config = await opencodeFetch<{ mcp?: Record<string, McpConfigEntry> }>(
+    scope === 'global' ? '/global/config' : '/config',
+    { query: scope === 'global' ? {} : { directory } }
+  ).catch(() => ({ mcp: {} as Record<string, McpConfigEntry> }))
 
   const entries = Object.entries(config.mcp || {})
   const results: Record<string, { tools: ToolInfo[]; error?: string }> = {}
