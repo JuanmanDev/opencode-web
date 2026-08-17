@@ -6,41 +6,87 @@ const directory = computed(() => decodeDir(route.params.dir as string))
 const api = useOpencodeApi(directory)
 const toast = useToast()
 
+interface McpTool { id: string; name: string; description?: string }
+
 interface McpEntry {
   name: string
   status: string
   error?: string
   config?: Record<string, unknown>
   enabled: boolean
+  tools: McpTool[]
 }
 
 const entries = ref<McpEntry[]>([])
+// project-level tool overrides from opencode config (`tools` map)
+const configTools = ref<Record<string, boolean>>({})
 const loading = ref(true)
 const toggling = ref<string | null>(null)
+const expanded = ref<string[]>([])
 
 async function refresh() {
   loading.value = true
   try {
-    const [status, config] = await Promise.all([
+    const [status, config, remoteTools] = await Promise.all([
       api.mcpStatus().catch(() => ({} as Record<string, McpStatus>)),
-      api.config().catch(() => ({} as Record<string, unknown>))
+      api.config().catch(() => ({} as Record<string, unknown>)),
+      $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
+        '/api/v1/mcp-tools',
+        { query: { directory: directory.value }, timeout: 20000 }
+      ).catch(() => ({} as Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>))
     ])
     const mcpConfig = (config.mcp || {}) as Record<string, Record<string, unknown>>
+    configTools.value = (config.tools || {}) as Record<string, boolean>
     const names = new Set([...Object.keys(status), ...Object.keys(mcpConfig)])
     entries.value = [...names].sort().map((name) => {
       const s = (status[name] || {}) as Record<string, unknown>
       const cfg = mcpConfig[name]
+      const remote = remoteTools[name]
       const statusText = String(s.status || s.state || (cfg?.enabled === false ? 'disabled' : 'unknown'))
       return {
         name,
         status: statusText,
-        error: typeof s.error === 'string' ? s.error : undefined,
+        error: typeof s.error === 'string' ? s.error : remote?.error,
         config: cfg,
-        enabled: cfg?.enabled !== false && statusText !== 'disabled'
+        enabled: cfg?.enabled !== false && statusText !== 'disabled',
+        tools: (remote?.tools || [])
+          .map((t) => ({ id: `${name}_${t.name}`, name: t.name, description: t.description }))
+          .sort((a, b) => a.name.localeCompare(b.name))
       }
     })
   } finally {
     loading.value = false
+  }
+}
+
+function toggleExpand(name: string) {
+  expanded.value = expanded.value.includes(name)
+    ? expanded.value.filter((n) => n !== name)
+    : [...expanded.value, name]
+}
+
+async function toggleTool(toolId: string, enabled: boolean) {
+  toggling.value = toolId
+  try {
+    // persisted project-wide in the opencode config `tools` map
+    await api.patchConfig({ tools: { [toolId]: enabled } })
+    configTools.value = { ...configTools.value, [toolId]: enabled }
+    toast.add({
+      title: `${toolId} ${enabled ? 'enabled' : 'disabled'}`,
+      description: 'Applies to new sessions in this project.',
+      color: 'success'
+    })
+  } catch (e) {
+    const status = (e as { statusCode?: number })?.statusCode
+    toast.add({
+      title: `Failed to update ${toolId}`,
+      description: directory.value === '/' && status === 500
+        ? 'The root directory (/) has no writable opencode config. Open a real project folder to change tool settings.'
+        : String(e),
+      color: 'error'
+    })
+  } finally {
+    toggling.value = null
   }
 }
 
@@ -268,28 +314,61 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             <USkeleton class="h-5 w-9 rounded-full" />
           </div>
         </div>
-        <div
-          v-for="entry in entries"
-          :key="entry.name"
-          class="flex items-center gap-3 px-4 py-3"
-        >
-          <UIcon name="i-lucide-server" class="size-4 text-muted shrink-0" />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-medium font-mono truncate">{{ entry.name }}</span>
-              <UBadge :color="statusColor(entry.status)" variant="subtle" size="sm">{{ entry.status }}</UBadge>
-            </div>
-            <div v-if="entry.error" class="text-xs text-error truncate">{{ entry.error }}</div>
-            <div v-else-if="entry.config?.url" class="text-xs text-dimmed font-mono truncate">{{ entry.config.url }}</div>
-            <div v-else-if="entry.config?.command" class="text-xs text-dimmed font-mono truncate">
-              {{ Array.isArray(entry.config.command) ? (entry.config.command as string[]).join(' ') : entry.config.command }}
-            </div>
+        <div v-for="entry in entries" :key="entry.name">
+          <div class="flex items-center gap-3 px-4 py-3">
+            <!-- expandable when the server's tool list is known -->
+            <component
+              :is="entry.tools.length ? 'button' : 'div'"
+              class="flex items-center gap-3 min-w-0 flex-1 text-left"
+              :class="entry.tools.length ? 'cursor-pointer' : ''"
+              @click="entry.tools.length && toggleExpand(entry.name)"
+            >
+              <UIcon
+                v-if="entry.tools.length"
+                name="i-lucide-chevron-down"
+                class="size-4 text-dimmed shrink-0 transition-transform duration-200"
+                :class="expanded.includes(entry.name) ? 'rotate-180' : ''"
+              />
+              <UIcon v-else name="i-lucide-server" class="size-4 text-muted shrink-0" />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium font-mono truncate">{{ entry.name }}</span>
+                  <UBadge :color="statusColor(entry.status)" variant="subtle" size="sm">{{ entry.status }}</UBadge>
+                  <span v-if="entry.tools.length" class="text-[10px] text-dimmed">{{ entry.tools.length }} tools</span>
+                </div>
+                <div v-if="entry.error" class="text-xs text-error truncate">{{ entry.error }}</div>
+                <div v-else-if="entry.config?.url" class="text-xs text-dimmed font-mono truncate">{{ entry.config.url }}</div>
+                <div v-else-if="entry.config?.command" class="text-xs text-dimmed font-mono truncate">
+                  {{ Array.isArray(entry.config.command) ? (entry.config.command as string[]).join(' ') : entry.config.command }}
+                </div>
+              </div>
+            </component>
+            <USwitch
+              :model-value="entry.enabled"
+              :disabled="toggling === entry.name"
+              @update:model-value="(v: boolean) => toggle(entry, v)"
+            />
           </div>
-          <USwitch
-            :model-value="entry.enabled"
-            :disabled="toggling === entry.name"
-            @update:model-value="(v: boolean) => toggle(entry, v)"
-          />
+
+          <!-- per-tool project-level toggles -->
+          <CollapseTransition>
+            <div
+              v-if="entry.tools.length && expanded.includes(entry.name)"
+              class="px-11 pb-3 space-y-1.5"
+            >
+              <UCheckbox
+                v-for="tool in entry.tools"
+                :key="tool.id"
+                size="sm"
+                :label="tool.name"
+                :description="tool.description"
+                :disabled="!entry.enabled || toggling === tool.id"
+                :model-value="configTools[tool.id] !== false"
+                :ui="{ label: 'font-mono text-xs', description: 'text-[10px] text-dimmed' }"
+                @update:model-value="(v) => toggleTool(tool.id, v === true)"
+              />
+            </div>
+          </CollapseTransition>
         </div>
         <div v-if="!loading && !entries.length && serverDegraded" class="flex items-center justify-center gap-2 px-4 py-8 text-sm text-error">
           <UIcon name="i-lucide-plug-zap" class="size-4" />
