@@ -34,6 +34,8 @@ const scroller = ref<HTMLElement>()
 const pinnedToBottom = ref(true)
 
 const chime = useChime()
+const projectMeta = useProjectMeta()
+onMounted(projectMeta.load)
 // ring when a reply finishes (busy -> idle), not on initial load
 watch(busy, (now, before) => {
   if (before && !now && !loading.value) chime.play()
@@ -304,6 +306,14 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       <span class="text-sm font-medium truncate">{{ session?.title || 'Untitled session' }}</span>
       <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse">working</UBadge>
       <span class="flex-1" />
+      <UButton
+        icon="i-lucide-star"
+        :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
+        variant="ghost"
+        size="xs"
+        :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
+        @click="projectMeta.toggleFavorite(directory, sessionId)"
+      />
       <UButton
         :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
         color="neutral"

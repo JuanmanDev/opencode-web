@@ -157,6 +157,14 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         <UIcon name="i-lucide-terminal" class="size-4 text-primary shrink-0" />
         <span class="text-sm font-semibold truncate flex-1">{{ dirName(directory) }}</span>
         <UButton
+          icon="i-lucide-house"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="All projects"
+          to="/"
+        />
+        <UButton
           icon="i-lucide-panel-left-close"
           color="neutral"
           variant="ghost"

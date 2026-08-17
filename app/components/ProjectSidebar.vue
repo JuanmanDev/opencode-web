@@ -6,6 +6,18 @@ const route = useRoute()
 const dirParam = computed(() => encodeDir(props.directory))
 const { sessions, refreshing, refresh, remove } = useSessions(() => props.directory)
 const { busy: busySessions } = useBusySessions()
+const projectMeta = useProjectMeta()
+
+onMounted(projectMeta.load)
+
+// favorites pinned on top
+const sortedSessions = computed(() => {
+  const favs = projectMeta.of(props.directory).favorites
+  return [...sessions.value].sort((a, b) => {
+    const favDiff = Number(favs.includes(b.id)) - Number(favs.includes(a.id))
+    return favDiff || (b.time?.updated || 0) - (a.time?.updated || 0)
+  })
+})
 const api = useOpencodeApi(() => props.directory)
 const toast = useToast()
 
@@ -70,7 +82,7 @@ function fmtTime(ts?: number) {
     </div>
     <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
       <div
-        v-for="s in sessions"
+        v-for="s in sortedSessions"
         :key="s.id"
         class="group relative"
       >
@@ -87,12 +99,22 @@ function fmtTime(ts?: number) {
             :class="busySessions[s.id] ? 'animate-spin text-highlighted' : 'text-dimmed'"
           />
           <div class="min-w-0 flex-1">
-            <div class="truncate pr-5">{{ s.title || 'Untitled session' }}</div>
+            <div class="truncate pr-11">{{ s.title || 'Untitled session' }}</div>
             <div class="text-[10px] text-dimmed font-mono">
               {{ busySessions[s.id] ? 'working…' : fmtTime(s.time?.updated || s.time?.created) }}
             </div>
           </div>
         </NuxtLink>
+        <UButton
+          icon="i-lucide-star"
+          size="xs"
+          :color="projectMeta.isFavorite(directory, s.id) ? 'primary' : 'neutral'"
+          variant="ghost"
+          class="absolute right-7 top-1.5"
+          :class="projectMeta.isFavorite(directory, s.id) ? '' : 'opacity-0 group-hover:opacity-100'"
+          :aria-label="projectMeta.isFavorite(directory, s.id) ? 'Unfavorite' : 'Favorite'"
+          @click.stop.prevent="projectMeta.toggleFavorite(directory, s.id)"
+        />
         <UButton
           icon="i-lucide-trash-2"
           size="xs"

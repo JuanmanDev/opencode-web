@@ -2,6 +2,11 @@ import type { SessionInfo } from '#shared/types/opencode'
 
 const CACHE_PREFIX = 'opencode-web.sessions.'
 
+/** Cached session list for a directory (instant paint, may be stale). */
+export function readSessionsCache(directory: string): SessionInfo[] {
+  return readCache(directory)
+}
+
 function readCache(directory: string): SessionInfo[] {
   if (!import.meta.client) return []
   try {
