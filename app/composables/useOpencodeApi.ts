@@ -96,6 +96,16 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
         timeout: 1000 * 60 * 60
       }),
 
+    // ---- questions (agent asking the user) ----
+    questions: () =>
+      ocFetch<unknown>(`${BASE}/question`, { query: q() })
+        .then((res) => (Array.isArray(res) ? res : (res as { data?: unknown[] })?.data || []) as Array<Record<string, any>>)
+        .catch(() => [] as Array<Record<string, any>>),
+    replyQuestion: (requestID: string, answers: string[][]) =>
+      ocFetch(`${BASE}/question/${requestID}/reply`, { method: 'POST', body: { answers }, query: q() }),
+    rejectQuestion: (requestID: string) =>
+      ocFetch(`${BASE}/question/${requestID}/reject`, { method: 'POST', body: {}, query: q() }),
+
     respondPermission: (sessionID: string, permissionID: string, response: 'once' | 'always' | 'reject') =>
       ocFetch(`${BASE}/session/${sessionID}/permissions/${permissionID}`, {
         method: 'POST',

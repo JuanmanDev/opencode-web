@@ -85,30 +85,6 @@ function fmtTime(ts?: number) {
   return `${Math.round(diff / 86400_000)}d ago`
 }
 
-// inline conversation rename
-const renamingId = ref('')
-const renameText = ref('')
-
-function startRename(dir: string, s: SessionInfo) {
-  renamingId.value = s.id
-  renameText.value = s.title || ''
-  nextTick(() => {
-    (document.getElementById(`rename-${s.id}`) as HTMLInputElement | null)?.focus()
-  })
-}
-
-async function commitRename(dir: string, s: SessionInfo) {
-  const title = renameText.value.trim()
-  renamingId.value = ''
-  if (!title || title === s.title) return
-  try {
-    await useOpencodeApi(() => dir).renameSession(s.id, title)
-    sessionsByDir.value[dir] = (sessionsByDir.value[dir] || []).map((x) =>
-      x.id === s.id ? { ...x, title } : x
-    )
-  } catch { /* keep old title */ }
-}
-
 // description editing
 const editOpen = ref(false)
 const editDir = ref('')
@@ -128,7 +104,7 @@ function saveEdit() {
 
 <template>
   <div class="flex-1 overflow-y-auto">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
+    <div class="w-full px-4 sm:px-8 py-8 sm:py-14">
       <div class="flex items-center gap-3 mb-1">
         <div class="size-9 rounded-sm bg-elevated flex items-center justify-center">
           <UIcon name="i-lucide-terminal" class="size-5 text-highlighted" />
@@ -227,31 +203,10 @@ function saveEdit() {
                   class="size-3.5 shrink-0 mt-0.5"
                   :class="projectMeta.isFavorite(item.directory, s.id) ? 'text-primary' : 'text-dimmed'"
                 />
-                <!-- click the title to rename in place -->
-                <UInput
-                  v-if="renamingId === s.id"
-                  :id="`rename-${s.id}`"
-                  v-model="renameText"
-                  size="xs"
-                  class="flex-1"
-                  @click.stop.prevent
-                  @keydown.enter.prevent="commitRename(item.directory, s)"
-                  @keydown.esc="renamingId = ''"
-                  @blur="commitRename(item.directory, s)"
-                />
-                <span
-                  v-else
-                  class="text-xs leading-snug line-clamp-2 flex-1 hover:underline decoration-dotted underline-offset-2"
-                  title="Click to rename"
-                  @click.stop.prevent="startRename(item.directory, s)"
-                >{{ s.title || 'Untitled session' }}</span>
+                <span class="text-xs leading-snug line-clamp-2 flex-1">{{ s.title || 'Untitled session' }}</span>
               </div>
-              <div class="text-[10px] text-dimmed font-mono mt-1 pl-5 flex items-center gap-2">
+              <div class="text-[10px] text-dimmed font-mono mt-1 pl-5">
                 {{ fmtTime(s.time?.updated || s.time?.created) }}
-                <UIcon
-                  name="i-lucide-pencil"
-                  class="size-3 opacity-0 group-hover/card:opacity-60"
-                />
               </div>
             </NuxtLink>
           </HScroll>

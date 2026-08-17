@@ -146,32 +146,38 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
       :style="{ width: sidebarWidth + 'px' }"
     >
       <div class="flex items-center gap-1 pl-3 pr-2 h-12">
-        <UButton
-          :icon="projectsPanel ? 'i-lucide-panel-left-close' : 'i-lucide-folder-tree'"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          :aria-label="projectsPanel ? 'Hide projects panel' : 'Show projects panel'"
-          @click="projectsPanel = !projectsPanel"
-        />
+        <UTooltip :text="projectsPanel ? 'Hide projects panel' : 'Show projects panel'">
+          <UButton
+            :icon="projectsPanel ? 'i-lucide-panel-left-close' : 'i-lucide-folder-tree'"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            :aria-label="projectsPanel ? 'Hide projects panel' : 'Show projects panel'"
+            @click="projectsPanel = !projectsPanel"
+          />
+        </UTooltip>
         <UIcon name="i-lucide-terminal" class="size-4 text-primary shrink-0" />
         <span class="text-sm font-semibold truncate flex-1">{{ dirName(directory) }}</span>
-        <UButton
-          icon="i-lucide-house"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          aria-label="All projects"
-          to="/"
-        />
-        <UButton
-          icon="i-lucide-panel-left-close"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          aria-label="Hide sidebar"
-          @click="sidebarOpen = false"
-        />
+        <UTooltip text="All projects (home)">
+          <UButton
+            icon="i-lucide-house"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="All projects"
+            to="/"
+          />
+        </UTooltip>
+        <UTooltip text="Hide sidebar">
+          <UButton
+            icon="i-lucide-panel-left-close"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Hide sidebar"
+            @click="sidebarOpen = false"
+          />
+        </UTooltip>
       </div>
       <ProjectSidebar :directory="directory" class="flex-1 min-h-0" />
     </aside>
@@ -187,35 +193,52 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
 
     <!-- desktop mini rail when collapsed -->
     <aside v-if="!sidebarOpen" class="hidden md:flex w-12 shrink-0 flex-col items-center gap-1 bg-muted py-2">
-      <UButton
-        icon="i-lucide-panel-left-open"
-        color="neutral"
-        variant="ghost"
-        aria-label="Show sidebar"
-        @click="sidebarOpen = true"
-      />
-      <UButton
-        icon="i-lucide-messages-square"
-        color="neutral"
-        variant="ghost"
-        aria-label="Sessions"
-        :to="`/p/${route.params.dir}`"
-      />
-      <UButton
-        icon="i-lucide-server-cog"
-        color="neutral"
-        variant="ghost"
-        aria-label="MCP servers"
-        :to="`/p/${route.params.dir}/mcp`"
-      />
+      <UTooltip text="Show sidebar" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-panel-left-open"
+          color="neutral"
+          variant="ghost"
+          aria-label="Show sidebar"
+          @click="sidebarOpen = true"
+        />
+      </UTooltip>
+      <UTooltip text="Sessions" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-messages-square"
+          color="neutral"
+          variant="ghost"
+          aria-label="Sessions"
+          :to="`/p/${route.params.dir}`"
+        />
+      </UTooltip>
+      <UTooltip text="MCP servers" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-server-cog"
+          color="neutral"
+          variant="ghost"
+          aria-label="MCP servers"
+          :to="`/p/${route.params.dir}/mcp`"
+        />
+      </UTooltip>
+      <UTooltip text="Usage & cost" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-chart-column"
+          color="neutral"
+          variant="ghost"
+          aria-label="Usage & cost"
+          :to="`/p/${route.params.dir}/stats`"
+        />
+      </UTooltip>
       <span class="flex-1" />
-      <UButton
-        icon="i-lucide-house"
-        color="neutral"
-        variant="ghost"
-        aria-label="All projects"
-        to="/"
-      />
+      <UTooltip text="All projects (home)" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-house"
+          color="neutral"
+          variant="ghost"
+          aria-label="All projects"
+          to="/"
+        />
+      </UTooltip>
     </aside>
 
     <!-- mobile slideover -->
@@ -236,6 +259,14 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         />
         <UIcon name="i-lucide-terminal" class="size-4 text-primary" />
         <span class="text-sm font-semibold truncate flex-1">{{ dirName(directory) }}</span>
+        <UButton
+          icon="i-lucide-house"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="All projects"
+          to="/"
+        />
         <UButton
           :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
           color="neutral"

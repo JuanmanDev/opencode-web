@@ -141,6 +141,14 @@ interface CatalogEntry {
 // curated suggestions; the MCP-UI demo showcases interactive UI apps in chat
 const CATALOG: CatalogEntry[] = [
   {
+    name: 'demo-ui-apps',
+    title: 'Demo UI apps (built-in)',
+    description: 'This app\'s own demo MCP server: metric card, dynamic background, forex chart, weather — rendered live in chat. The opencode server must be able to reach this web app\'s URL.',
+    icon: 'i-lucide-sparkles',
+    badge: 'MCP UI',
+    config: { type: 'remote', url: 'SELF', enabled: true }
+  },
+  {
     name: 'mcp-ui-demo',
     title: 'MCP-UI demo',
     description: 'Official mcp-ui example server — tools return interactive UI apps rendered right in the chat.',
@@ -192,6 +200,10 @@ const installed = computed(() => new Set(entries.value.map((e) => e.name)))
 async function addEntry(name: string, config: Record<string, unknown>) {
   addingName.value = name
   try {
+    // 'SELF' -> this web app's own demo MCP server
+    if (config.url === 'SELF') {
+      config = { ...config, url: `${window.location.origin}/mcp-demo` }
+    }
     await api.mcpAdd(name, config)
     await refresh()
     const status = entries.value.find((e) => e.name === name)?.status

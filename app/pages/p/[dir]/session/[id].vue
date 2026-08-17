@@ -38,6 +38,137 @@ const chime = useChime()
 const projectMeta = useProjectMeta()
 onMounted(projectMeta.load)
 
+// ---- agent questions ----
+const questions = ref<Array<{ id: string; questions: any[] }>>([])
+
+async function loadQuestions() {
+  const all = await api.questions()
+  questions.value = all
+    .filter((q) => !q.sessionID || q.sessionID === sessionId.value)
+    .filter((q) => q.id && Array.isArray(q.questions))
+    .map((q) => ({ id: String(q.id), questions: q.questions }))
+}
+
+async function replyQuestion(requestID: string, answers: string[][]) {
+  try {
+    await api.replyQuestion(requestID, answers)
+    questions.value = questions.value.filter((q) => q.id !== requestID)
+  } catch (e) {
+    toast.add({ title: 'Failed to send answer', description: String(e), color: 'error' })
+  }
+}
+
+async function rejectQuestion(requestID: string) {
+  try {
+    await api.rejectQuestion(requestID)
+  } finally {
+    questions.value = questions.value.filter((q) => q.id !== requestID)
+  }
+}
+
+// ---- local /mcp chat commands (handled by the UI, not sent to the agent) ----
+const localNotes = ref<Array<{ id: string; text: string }>>([])
+let noteCounter = 0
+
+function note(text: string) {
+  localNotes.value.push({ id: `note-${++noteCounter}`, text })
+  scrollToBottom(true)
+}
+
+async function runMcpCommand(input: string) {
+  const [, sub = 'help', ...rest] = input.trim().split(/\s+/)
+  const name = rest[0]
+  try {
+    switch (sub) {
+      case 'list': {
+        const status = await api.mcpStatus()
+        const rows = Object.entries(status)
+          .map(([n, s]) => `| ${n} | ${(s as any)?.status || 'unknown'} |`)
+          .join('\n')
+        note(`**MCP servers**\n\n| server | status |\n| --- | --- |\n${rows || '| _none_ | |'}`)
+        break
+      }
+      case 'add': {
+        const target = rest.slice(1).join(' ')
+        if (!name || !target) return note('Usage: `/mcp add <name> <url | command…>`')
+        const config = /^https?:\/\//.test(target)
+          ? { type: 'remote', url: target, enabled: true }
+          : { type: 'local', command: target.split(/\s+/), enabled: true }
+        await api.mcpAdd(name, config)
+        note(`Added MCP server **${name}**.`)
+        loadMeta()
+        break
+      }
+      case 'enable':
+      case 'disable': {
+        if (!name) return note(`Usage: \`/mcp ${sub} <name>\``)
+        await api.patchConfig({ mcp: { [name]: { enabled: sub === 'enable' } } })
+        note(`**${name}** ${sub}d. Applies to new sessions.`)
+        loadMeta()
+        break
+      }
+      case 'remove': {
+        if (!name) return note('Usage: `/mcp remove <name>`')
+        try {
+          await api.patchConfig({ mcp: { [name]: null } })
+          note(`Removed **${name}** from the project config.`)
+        } catch {
+          await api.patchConfig({ mcp: { [name]: { enabled: false } } })
+          note(`Could not delete **${name}** via the API — disabled it instead.`)
+        }
+        loadMeta()
+        break
+      }
+      case 'test': {
+        if (!name) return note('Usage: `/mcp test <name>`')
+        const res = await $fetch<Record<string, { tools: Array<{ name: string }>; error?: string }>>(
+          '/api/v1/mcp-tools',
+          { query: { directory: directory.value }, timeout: 30000 }
+        )
+        const info = res[name]
+        if (!info) note(`**${name}**: not found in the project config.`)
+        else if (info.error) note(`**${name}**: ❌ ${info.error}`)
+        else note(`**${name}**: ✅ ${info.tools.length} tools\n\n${info.tools.slice(0, 30).map((t) => `- \`${t.name}\``).join('\n')}`)
+        break
+      }
+      default:
+        note([
+          '**/mcp commands**',
+          '',
+          '- `/mcp list` — servers and status',
+          '- `/mcp add <name> <url|command…>` — register a server',
+          '- `/mcp enable|disable <name>` — toggle for this project',
+          '- `/mcp remove <name>` — delete from the project config',
+          '- `/mcp test <name>` — connect and list its tools'
+        ].join('\n'))
+    }
+  } catch (e) {
+    note(`❌ ${e instanceof Error ? e.message : e}`)
+  }
+}
+
+// ---- title rename (edit lives inside the conversation) ----
+const renamingTitle = ref(false)
+const titleDraft = ref('')
+
+function startTitleRename() {
+  titleDraft.value = session.value?.title || ''
+  renamingTitle.value = true
+  nextTick(() => (document.getElementById('session-title-input') as HTMLInputElement | null)?.focus())
+}
+
+async function commitTitleRename() {
+  const title = titleDraft.value.trim()
+  renamingTitle.value = false
+  if (!title || title === session.value?.title) return
+  try {
+    await api.renameSession(sessionId.value, title)
+    if (session.value) session.value = { ...session.value, title }
+  } catch (e) {
+    toast.add({ title: 'Rename failed', description: String(e), color: 'error' })
+  }
+}
+
 // ---- todos ----
 const todos = ref<TodoItem[]>([])
 const todosOpen = ref(true)
@@ -134,6 +265,7 @@ async function loadAll() {
     session.value = s
     messages.value = msgs
     loadTodos()
+    loadQuestions()
     const last = msgs[msgs.length - 1]
     busy.value = Boolean(
       last && last.info.role === 'assistant' && !last.info.time?.completed && !last.info.error
@@ -285,6 +417,8 @@ useOpencodeEvents(directory, (event) => {
       permissions.value = permissions.value.filter((p) => p.id !== id)
       break
     }
+    default:
+      if (event.type.startsWith('question')) loadQuestions()
   }
 })
 
@@ -321,6 +455,11 @@ function dispatch(payload: PromptPayload) {
 }
 
 function send(payload: PromptPayload) {
+  // /mcp … -> handled locally by the UI, never sent to the agent
+  if (payload.text.trim().startsWith('/mcp')) {
+    runMcpCommand(payload.text)
+    return
+  }
   if (busy.value) {
     queue.value.push(payload)
     return
@@ -377,41 +516,64 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
   <div class="flex-1 flex flex-col min-h-0">
     <!-- session header -->
     <div class="hidden md:flex items-center gap-2 h-12 px-4 bg-muted/50 shrink-0">
-      <span class="text-sm font-medium truncate">{{ session?.title || 'Untitled session' }}</span>
+      <UInput
+        v-if="renamingTitle"
+        id="session-title-input"
+        v-model="titleDraft"
+        size="xs"
+        class="w-72"
+        @keydown.enter.prevent="commitTitleRename"
+        @keydown.esc="renamingTitle = false"
+        @blur="commitTitleRename"
+      />
+      <UTooltip v-else text="Click to rename">
+        <button
+          class="text-sm font-medium truncate cursor-pointer hover:underline decoration-dotted underline-offset-2"
+          @click="startTitleRename"
+        >{{ session?.title || 'Untitled session' }}</button>
+      </UTooltip>
       <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse">working</UBadge>
       <span class="flex-1" />
-      <UButton
-        icon="i-lucide-git-branch"
-        color="neutral"
-        variant="ghost"
-        size="xs"
-        aria-label="Fork this conversation"
-        @click="forkSession()"
-      />
-      <UButton
-        icon="i-lucide-file-diff"
-        color="neutral"
-        variant="ghost"
-        size="xs"
-        aria-label="Show file changes"
-        @click="openDiff"
-      />
-      <UButton
-        icon="i-lucide-star"
-        :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
-        variant="ghost"
-        size="xs"
-        :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
-        @click="projectMeta.toggleFavorite(directory, sessionId)"
-      />
-      <UButton
-        :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
-        color="neutral"
-        variant="ghost"
-        size="xs"
-        :aria-label="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'"
-        @click="chime.toggle()"
-      />
+      <UTooltip text="Fork this conversation">
+        <UButton
+          icon="i-lucide-git-branch"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="Fork this conversation"
+          @click="forkSession()"
+        />
+      </UTooltip>
+      <UTooltip text="Show file changes">
+        <UButton
+          icon="i-lucide-file-diff"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="Show file changes"
+          @click="openDiff"
+        />
+      </UTooltip>
+      <UTooltip :text="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite' : 'Favorite'">
+        <UButton
+          icon="i-lucide-star"
+          :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
+          variant="ghost"
+          size="xs"
+          :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
+          @click="projectMeta.toggleFavorite(directory, sessionId)"
+        />
+      </UTooltip>
+      <UTooltip :text="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'">
+        <UButton
+          :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :aria-label="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'"
+          @click="chime.toggle()"
+        />
+      </UTooltip>
       <span class="text-xs text-dimmed font-mono truncate max-w-64">{{ directory }}</span>
     </div>
 
@@ -500,9 +662,28 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             :permission="perm"
             @respond="(r) => respondPermission(perm, r)"
           />
+          <ChatQuestionPrompt
+            v-for="q in questions"
+            :key="q.id"
+            :request="q"
+            @reply="(answers) => replyQuestion(q.id, answers)"
+            @reject="rejectQuestion(q.id)"
+          />
+          <!-- local command output (/mcp …) -->
+          <div
+            v-for="n in localNotes"
+            :key="n.id"
+            class="oc-appear mx-3 sm:mx-4 my-2 rounded-sm bg-muted px-3 py-2"
+          >
+            <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-dimmed mb-1">
+              <UIcon name="i-lucide-terminal" class="size-3" /> local
+            </div>
+            <Markdown :text="n.text" />
+          </div>
           <ChatWorking v-if="busy" :activity="activity" />
 
           <!-- queued prompts -->
+          <CollapseTransition>
           <div v-if="queue.length" class="px-3 sm:px-4 py-1 space-y-1">
             <div
               v-for="(item, i) in queue"
@@ -520,6 +701,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
               />
             </div>
           </div>
+          </CollapseTransition>
         </template>
       </div>
     </div>

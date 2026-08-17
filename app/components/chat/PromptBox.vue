@@ -392,14 +392,16 @@ function onKeydown(e: KeyboardEvent) {
                   </button>
                 </template>
               </USelectMenu>
-              <UButton
-                color="neutral"
-                variant="soft"
-                size="sm"
-                icon="i-lucide-plug"
-                aria-label="Configure providers"
-                @click="providersOpen = true"
-              />
+              <UTooltip text="Configure providers">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  icon="i-lucide-plug"
+                  aria-label="Configure providers"
+                  @click="providersOpen = true"
+                />
+              </UTooltip>
             </div>
           </UFormField>
           <UFormField label="Think level" size="xs" class="sm:w-36 shrink-0">
@@ -578,6 +580,7 @@ function onKeydown(e: KeyboardEvent) {
       </CollapseTransition>
 
       <!-- attachment chips -->
+      <CollapseTransition>
       <div v-if="attachments.length" class="flex flex-wrap gap-1">
         <UBadge
           v-for="(file, i) in attachments"
@@ -594,6 +597,7 @@ function onKeydown(e: KeyboardEvent) {
           </button>
         </UBadge>
       </div>
+      </CollapseTransition>
 
       <div class="flex items-center gap-1.5 min-w-0">
         <input
@@ -604,22 +608,26 @@ function onKeydown(e: KeyboardEvent) {
           class="hidden"
           @change="onFiles"
         >
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          icon="i-lucide-paperclip"
-          aria-label="Attach files"
-          @click="pickFiles"
-        />
-        <UButton
-          color="neutral"
-          :variant="optionsOpen ? 'soft' : 'ghost'"
-          size="xs"
-          :icon="optionsOpen ? 'i-lucide-chevron-down' : 'i-lucide-sliders-horizontal'"
-          :aria-label="optionsOpen ? 'Hide options' : 'Show model, think level, agent and MCP options'"
-          @click="optionsOpen = !optionsOpen"
-        />
+        <UTooltip text="Attach files">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            icon="i-lucide-paperclip"
+            aria-label="Attach files"
+            @click="pickFiles"
+          />
+        </UTooltip>
+        <UTooltip :text="optionsOpen ? 'Hide options' : 'Model, think level, agent & MCP options'">
+          <UButton
+            color="neutral"
+            :variant="optionsOpen ? 'soft' : 'ghost'"
+            size="xs"
+            :icon="optionsOpen ? 'i-lucide-chevron-down' : 'i-lucide-sliders-horizontal'"
+            :aria-label="optionsOpen ? 'Hide options' : 'Show model, think level, agent and MCP options'"
+            @click="optionsOpen = !optionsOpen"
+          />
+        </UTooltip>
         <button
           class="flex items-center gap-2 min-w-0 text-[11px] font-mono text-dimmed hover:text-muted cursor-pointer"
           @click="optionsOpen = !optionsOpen"
