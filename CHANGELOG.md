@@ -1,3 +1,5 @@
+## [0.9.0](https://github.com/JuanmanDev/opencode-web/compare/0.8.0...0.9.0) (2026-08-17)
+
 ## [0.8.0](https://github.com/JuanmanDev/opencode-web/compare/0.7.0...0.8.0) (2026-08-17)
 
 ## [0.7.0](https://github.com/JuanmanDev/opencode-web/compare/0.6.0...0.7.0) (2026-08-17)
