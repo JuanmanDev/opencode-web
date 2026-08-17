@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import type { AgentInfo, ProvidersResponse } from '#shared/types/opencode'
 
+export interface McpServerInfo {
+  name: string
+  status: string
+  error?: string
+  tools: string[]
+}
+
 const props = defineProps<{
   providers: ProvidersResponse | null
   agents: AgentInfo[]
-  mcpServers: string[]
+  mcpInfo: McpServerInfo[]
   busy: boolean
   directory: string
   metaLoading?: boolean
+  queueLength?: number
 }>()
 
 const emit = defineEmits<{
@@ -31,11 +39,11 @@ const model = ref<string>('')     // "providerID/modelID"
 const agent = ref<string>(DEFAULT)
 const variant = ref<string>(DEFAULT)
 const mcpMode = ref<string>(DEFAULT)
-const mcpSelected = ref<string[]>([])
+const disabledServers = ref<string[]>([])
+const disabledTools = ref<string[]>([])
 const optionsOpen = ref(false)
-
-const CONFIGURE = '__configure__'
 const providersOpen = ref(false)
+const openServers = ref<string[]>([])
 
 interface ModelItem {
   label: string
@@ -72,21 +80,6 @@ const modelItems = computed<ModelItem[]>(() => {
   )
 })
 
-// "Configure providers…" pinned as last scrollable entry
-const modelSelectItems = computed(() => [
-  ...modelItems.value,
-  { label: 'Configure providers…', value: CONFIGURE, provider: '', reasoning: false, ctx: 0, cost: '' }
-])
-
-// intercept the configure sentinel so it never becomes the selected model
-const modelProxy = computed({
-  get: () => model.value,
-  set: (v: string) => {
-    if (v === CONFIGURE) providersOpen.value = true
-    else model.value = v
-  }
-})
-
 const agentItems = computed(() => [
   { label: 'default agent', value: DEFAULT, icon: 'i-lucide-bot' },
   ...props.agents
@@ -106,13 +99,24 @@ const variantItems = [
 ]
 
 const mcpModeItems = [
-  { label: 'project default', value: DEFAULT, icon: 'i-lucide-server' },
-  { label: 'custom selection', value: 'custom', icon: 'i-lucide-list-checks' }
+  { label: 'MCP: project default', value: DEFAULT, icon: 'i-lucide-server' },
+  { label: 'MCP: custom selection', value: 'custom', icon: 'i-lucide-list-checks' }
 ]
 
 const variantLabel = computed(
   () => variantItems.find((v) => v.value === variant.value)?.label || DEFAULT
 )
+
+const enabledCount = computed(
+  () => props.mcpInfo.filter((s) => !disabledServers.value.includes(s.name)).length
+)
+
+function statusColor(status: string) {
+  if (['connected', 'running', 'ok'].includes(status)) return 'success' as const
+  if (['failed', 'error'].includes(status)) return 'error' as const
+  if (status === 'disabled') return 'neutral' as const
+  return 'warning' as const
+}
 
 // remember last used settings per project
 const prefsKey = computed(() => `opencode-web.prefs.${props.directory}`)
@@ -124,7 +128,8 @@ onMounted(() => {
     if (saved.agent) agent.value = saved.agent || DEFAULT
     if (saved.variant) variant.value = saved.variant || DEFAULT
     if (saved.mcpMode) mcpMode.value = saved.mcpMode
-    if (Array.isArray(saved.mcpSelected)) mcpSelected.value = saved.mcpSelected
+    if (Array.isArray(saved.disabledServers)) disabledServers.value = saved.disabledServers
+    if (Array.isArray(saved.disabledTools)) disabledTools.value = saved.disabledTools
   } catch { /* ignore */ }
 })
 
@@ -136,48 +141,62 @@ watch(modelItems, (items) => {
   if (candidate) model.value = candidate
 }, { immediate: true })
 
-// when switching to custom the first time, start with everything enabled
-watch(mcpMode, (mode) => {
-  if (mode === 'custom' && mcpSelected.value.length === 0) {
-    mcpSelected.value = [...props.mcpServers]
-  }
-})
-
-watch([model, agent, variant, mcpMode, mcpSelected], () => {
+watch([model, agent, variant, mcpMode, disabledServers, disabledTools], () => {
   localStorage.setItem(prefsKey.value, JSON.stringify({
     model: model.value,
     agent: agent.value,
     variant: variant.value,
     mcpMode: mcpMode.value,
-    mcpSelected: mcpSelected.value
+    disabledServers: disabledServers.value,
+    disabledTools: disabledTools.value
   }))
 }, { deep: true })
 
-function toggleMcp(name: string) {
-  const idx = mcpSelected.value.indexOf(name)
-  if (idx >= 0) mcpSelected.value.splice(idx, 1)
-  else mcpSelected.value.push(name)
+function toggleServer(name: string, enabled: boolean) {
+  disabledServers.value = enabled
+    ? disabledServers.value.filter((s) => s !== name)
+    : [...new Set([...disabledServers.value, name])]
+}
+
+function setAllServers(enabled: boolean) {
+  disabledServers.value = enabled ? [] : props.mcpInfo.map((s) => s.name)
+}
+
+function toggleTool(id: string, enabled: boolean) {
+  disabledTools.value = enabled
+    ? disabledTools.value.filter((t) => t !== id)
+    : [...new Set([...disabledTools.value, id])]
+}
+
+function toggleAccordion(name: string) {
+  openServers.value = openServers.value.includes(name)
+    ? openServers.value.filter((s) => s !== name)
+    : [...openServers.value, name]
 }
 
 function send() {
   const value = text.value.trim()
-  if (!value || props.busy) return
-  const [providerID, ...rest] = model.value.split('/')
-  const modelID = rest.join('/')
+  if (!value) return
 
-  // custom MCP selection → disable tools of unchecked servers for this prompt
+  // custom MCP selection → per-prompt tool filter
   let tools: Record<string, boolean> | undefined
   if (mcpMode.value === 'custom') {
     tools = {}
-    for (const name of props.mcpServers) {
-      if (!mcpSelected.value.includes(name)) {
-        tools[`${name}*`] = false
-        tools[`${name}_*`] = false
+    for (const server of props.mcpInfo) {
+      if (disabledServers.value.includes(server.name)) {
+        tools[`${server.name}*`] = false
+        tools[`${server.name}_*`] = false
+      } else {
+        for (const toolId of server.tools) {
+          if (disabledTools.value.includes(toolId)) tools[toolId] = false
+        }
       }
     }
     if (Object.keys(tools).length === 0) tools = undefined
   }
 
+  const [providerID, ...rest] = model.value.split('/')
+  const modelID = rest.join('/')
   emit('send', {
     text: value,
     model: providerID && modelID ? { providerID, modelID } : undefined,
@@ -198,7 +217,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-    <div class="max-w-3xl mx-auto space-y-2">
+    <div class="max-w-4xl mx-auto space-y-2">
       <UTextarea
         v-model="text"
         :rows="2"
@@ -211,15 +230,16 @@ function onKeydown(e: KeyboardEvent) {
         @keydown="onKeydown"
       />
 
-      <!-- collapsible options: model / think level / agent / mcp -->
+      <!-- collapsible options -->
       <Transition name="oc-collapse">
       <div v-if="optionsOpen" class="space-y-2">
+        <!-- one row on wide screens: model / think / agent -->
         <div class="flex flex-col sm:flex-row gap-1.5">
-          <UFormField label="Model" size="xs" class="flex-1">
+          <UFormField label="Model" size="xs" class="flex-1 min-w-0">
             <div class="flex gap-1">
               <USelectMenu
-                v-model="modelProxy"
-                :items="modelSelectItems"
+                v-model="model"
+                :items="modelItems"
                 value-key="value"
                 :filter-fields="['label', 'provider']"
                 :search-input="{ placeholder: 'Search models or providers…' }"
@@ -229,25 +249,8 @@ function onKeydown(e: KeyboardEvent) {
                 class="w-full min-w-0"
                 icon="i-lucide-cpu"
               >
-                <template #empty>
-                  <div
-                    class="flex items-center gap-2 px-2 py-3 text-sm"
-                    :class="!metaLoading && serverDegraded ? 'text-error' : 'text-muted'"
-                  >
-                    <UIcon v-if="metaLoading" name="i-lucide-loader-circle" class="size-4 animate-spin" />
-                    <UIcon v-else-if="serverDegraded" name="i-lucide-plug-zap" class="size-4" />
-                    {{ metaLoading ? 'Loading models…' : (serverDegraded ? 'Server not responding' : 'No models found') }}
-                  </div>
-                </template>
                 <template #item="{ item }">
-                  <div
-                    v-if="item.value === CONFIGURE"
-                    class="flex items-center gap-2 w-full text-highlighted"
-                  >
-                    <UIcon name="i-lucide-settings-2" class="size-4 shrink-0" />
-                    <span class="text-sm">Configure providers…</span>
-                  </div>
-                  <div v-else class="flex items-center gap-2 w-full min-w-0">
+                  <div class="flex items-center gap-2 w-full min-w-0">
                     <div class="min-w-0 flex-1">
                       <div class="truncate text-sm">{{ item.label }}</div>
                       <div class="text-[10px] text-dimmed font-mono truncate">
@@ -261,6 +264,26 @@ function onKeydown(e: KeyboardEvent) {
                     />
                   </div>
                 </template>
+                <template #empty>
+                  <div
+                    class="flex items-center gap-2 px-2 py-3 text-sm"
+                    :class="!metaLoading && serverDegraded ? 'text-error' : 'text-muted'"
+                  >
+                    <UIcon v-if="metaLoading" name="i-lucide-loader-circle" class="size-4 animate-spin" />
+                    <UIcon v-else-if="serverDegraded" name="i-lucide-plug-zap" class="size-4" />
+                    {{ metaLoading ? 'Loading models…' : (serverDegraded ? 'Server not responding' : 'No models found') }}
+                  </div>
+                </template>
+                <!-- always visible, unaffected by the search filter -->
+                <template #content-bottom>
+                  <button
+                    class="flex w-full items-center gap-2 px-2.5 py-2 text-sm text-highlighted bg-elevated hover:bg-accented cursor-pointer"
+                    @mousedown.prevent="providersOpen = true"
+                  >
+                    <UIcon name="i-lucide-settings-2" class="size-4 shrink-0" />
+                    Configure providers…
+                  </button>
+                </template>
               </USelectMenu>
               <UButton
                 color="neutral"
@@ -272,7 +295,7 @@ function onKeydown(e: KeyboardEvent) {
               />
             </div>
           </UFormField>
-          <UFormField v-if="selectedModel?.reasoning" label="Think level" size="xs" class="sm:w-40">
+          <UFormField v-if="selectedModel?.reasoning" label="Think level" size="xs" class="sm:w-36 shrink-0">
             <USelect
               v-model="variant"
               :items="variantItems"
@@ -282,7 +305,7 @@ function onKeydown(e: KeyboardEvent) {
               icon="i-lucide-brain"
             />
           </UFormField>
-          <UFormField label="Agent" size="xs" class="sm:w-44">
+          <UFormField label="Agent" size="xs" class="sm:w-40 shrink-0">
             <USelect
               v-model="agent"
               :items="agentItems"
@@ -295,31 +318,78 @@ function onKeydown(e: KeyboardEvent) {
           </UFormField>
         </div>
 
-        <div v-if="mcpServers.length || metaLoading" class="flex flex-col sm:flex-row gap-1.5 sm:items-end">
-          <UFormField label="MCP servers" size="xs" class="sm:w-48">
+        <!-- MCP: full row -->
+        <div v-if="mcpInfo.length || metaLoading" class="space-y-1.5">
+          <div class="flex items-center gap-1.5">
             <USelect
               v-model="mcpMode"
               :items="mcpModeItems"
               value-key="value"
               :loading="metaLoading"
               size="sm"
-              class="w-full"
+              class="flex-1"
               icon="i-lucide-server"
             />
-          </UFormField>
-          <Transition name="oc-slide">
-            <div v-if="mcpMode === 'custom'" class="flex flex-wrap gap-1 pb-0.5">
-              <UButton
-                v-for="name in mcpServers"
-                :key="name"
-                size="xs"
-                :color="mcpSelected.includes(name) ? 'primary' : 'neutral'"
-                :variant="mcpSelected.includes(name) ? 'soft' : 'ghost'"
-                :icon="mcpSelected.includes(name) ? 'i-lucide-check' : 'i-lucide-x'"
-                :label="name"
-                class="font-mono transition-all duration-150"
-                @click="toggleMcp(name)"
-              />
+            <template v-if="mcpMode === 'custom'">
+              <UButton size="xs" variant="soft" color="neutral" label="All on" @click="setAllServers(true)" />
+              <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
+            </template>
+          </div>
+
+          <Transition name="oc-collapse">
+            <div v-if="mcpMode === 'custom'" class="rounded-sm bg-elevated/60 divide-y divide-default">
+              <div v-for="server in mcpInfo" :key="server.name">
+                <!-- accordion header -->
+                <div class="flex items-center gap-2 px-2.5 py-2">
+                  <button
+                    class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer text-left"
+                    @click="toggleAccordion(server.name)"
+                  >
+                    <UIcon
+                      name="i-lucide-chevron-down"
+                      class="size-3.5 shrink-0 text-dimmed transition-transform duration-200"
+                      :class="openServers.includes(server.name) ? 'rotate-180' : ''"
+                    />
+                    <span class="text-sm font-mono truncate">{{ server.name }}</span>
+                    <UBadge :color="statusColor(server.status)" variant="subtle" size="sm">
+                      {{ server.status }}
+                    </UBadge>
+                    <span v-if="server.tools.length" class="text-[10px] text-dimmed">
+                      {{ server.tools.length }} tools
+                    </span>
+                  </button>
+                  <USwitch
+                    size="sm"
+                    :model-value="!disabledServers.includes(server.name)"
+                    @update:model-value="(v: boolean) => toggleServer(server.name, v)"
+                  />
+                </div>
+                <p v-if="server.error" class="px-8 pb-2 text-xs text-error break-words -mt-1">
+                  {{ server.error }}
+                </p>
+
+                <!-- accordion body: per-tool toggles -->
+                <Transition name="oc-collapse">
+                  <div
+                    v-if="openServers.includes(server.name)"
+                    class="px-8 pb-2 space-y-1"
+                  >
+                    <div v-if="!server.tools.length" class="text-xs text-dimmed py-1">
+                      Tool list unavailable for this server.
+                    </div>
+                    <UCheckbox
+                      v-for="toolId in server.tools"
+                      :key="toolId"
+                      size="sm"
+                      :label="toolId.slice(server.name.length + 1) || toolId"
+                      :disabled="disabledServers.includes(server.name)"
+                      :model-value="!disabledTools.includes(toolId)"
+                      :ui="{ label: 'font-mono text-xs' }"
+                      @update:model-value="(v) => toggleTool(toolId, v === true)"
+                    />
+                  </div>
+                </Transition>
+              </div>
             </div>
           </Transition>
         </div>
@@ -335,7 +405,6 @@ function onKeydown(e: KeyboardEvent) {
           :aria-label="optionsOpen ? 'Hide options' : 'Show model, think level, agent and MCP options'"
           @click="optionsOpen = !optionsOpen"
         />
-        <!-- compact summary of current settings; tap opens the panel -->
         <button
           class="flex items-center gap-2 min-w-0 text-[11px] font-mono text-dimmed hover:text-muted cursor-pointer"
           @click="optionsOpen = !optionsOpen"
@@ -356,10 +425,13 @@ function onKeydown(e: KeyboardEvent) {
           </span>
           <span v-if="mcpMode === 'custom'" class="hidden sm:flex items-center gap-1 shrink-0">
             <UIcon name="i-lucide-server" class="size-3" />
-            {{ mcpSelected.length }}/{{ mcpServers.length }} mcp
+            {{ enabledCount }}/{{ mcpInfo.length }} mcp
           </span>
         </button>
         <span class="flex-1" />
+        <UBadge v-if="queueLength" color="neutral" variant="subtle" size="sm">
+          {{ queueLength }} queued
+        </UBadge>
         <UButton
           v-if="busy"
           color="error"
@@ -370,11 +442,11 @@ function onKeydown(e: KeyboardEvent) {
           @click="emit('abort')"
         />
         <UButton
-          v-else
-          color="primary"
+          :color="busy ? 'neutral' : 'primary'"
+          :variant="busy ? 'soft' : 'solid'"
           size="xs"
-          icon="i-lucide-send"
-          label="Send"
+          :icon="busy ? 'i-lucide-list-plus' : 'i-lucide-send'"
+          :label="busy ? 'Queue' : 'Send'"
           :disabled="!text.trim()"
           @click="send"
         />

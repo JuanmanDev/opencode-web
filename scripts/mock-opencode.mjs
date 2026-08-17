@@ -112,6 +112,13 @@ createServer((req, res) => {
   if (p === '/config') return json(res, { mcp: { context7: { type: 'remote', url: 'https://mcp.context7.com/mcp' }, playwright: { type: 'local', command: ['npx', '@playwright/mcp'] }, 'home-assistant': { type: 'remote', url: 'http://ha:8086/mcp', enabled: false } } })
   if (p === '/agent') return json(res, agents)
   if (p === '/mcp') return json(res, mcp)
+  if (p === '/experimental/tool/ids') {
+    return json(res, [
+      'bash', 'read', 'edit', 'glob',
+      'context7_query-docs', 'context7_resolve-library-id',
+      'playwright_navigate', 'playwright_click', 'playwright_screenshot'
+    ])
+  }
   if (p === '/file') return json(res, files)
 
   if (p === '/session' && req.method === 'GET') return json(res, sessions)

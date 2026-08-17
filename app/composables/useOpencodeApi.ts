@@ -40,6 +40,16 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
 
     // ---- MCP ----
     mcpStatus: () => ocFetch<Record<string, McpStatus>>(`${BASE}/mcp`, { query: q() }),
+    /** All tool ids (including MCP tools, prefixed with the server name). */
+    toolIds: () =>
+      ocFetch<unknown>(`${BASE}/experimental/tool/ids`, { query: q() })
+        .then((res) => {
+          const list = Array.isArray(res) ? res : []
+          return list
+            .map((t) => (typeof t === 'string' ? t : (t as { id?: string })?.id || ''))
+            .filter(Boolean)
+        })
+        .catch(() => [] as string[]),
     mcpAdd: (name: string, config: Record<string, unknown>) =>
       ocFetch(`${BASE}/mcp`, { method: 'POST', body: { name, config }, query: q() }),
 

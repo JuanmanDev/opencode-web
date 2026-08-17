@@ -30,6 +30,8 @@ export function reportServerOk() {
 
 /** $fetch instance used for all opencode API calls: feeds the health state. */
 export const ocFetch = $fetch.create({
+  retry: 1,
+  retryDelay: 400,
   onResponse({ response }) {
     if (response.ok) reportServerOk()
   },

@@ -20,7 +20,7 @@ const session = ref<SessionInfo | null>(null)
 const messages = ref<MessageWithParts[]>([])
 const providers = ref<ProvidersResponse | null>(null)
 const agents = ref<AgentInfo[]>([])
-const mcpServers = ref<string[]>([])
+const mcpInfo = ref<Array<{ name: string; status: string; error?: string; tools: string[] }>>([])
 const permissions = ref<PermissionRequest[]>([])
 const busy = ref(false)
 const loading = ref(true)
@@ -79,18 +79,40 @@ async function loadAll() {
 watch(sessionId, loadAll, { immediate: true })
 
 const metaLoading = ref(true)
+const providersCacheKey = computed(() => `opencode-web.providers.${directory.value}`)
 
 async function loadMeta() {
   metaLoading.value = true
+  // stale-while-revalidate: paint the model list instantly from cache so a
+  // slow or flaky connection never leaves the selector empty
   try {
-    const [prov, ag, mcp] = await Promise.all([
+    const cached = JSON.parse(localStorage.getItem(providersCacheKey.value) || 'null')
+    if (cached && !providers.value) {
+      providers.value = cached
+      metaLoading.value = false
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const [prov, ag, mcp, toolIds] = await Promise.all([
       api.providers().catch(() => null),
       api.agents().catch(() => [] as AgentInfo[]),
-      api.mcpStatus().catch(() => ({}))
+      api.mcpStatus().catch(() => ({} as Record<string, any>)),
+      api.toolIds()
     ])
-    providers.value = prov
+    if (prov) {
+      providers.value = prov
+      try { localStorage.setItem(providersCacheKey.value, JSON.stringify(prov)) } catch { /* full */ }
+    }
     agents.value = ag
-    mcpServers.value = Object.keys(mcp).sort()
+    mcpInfo.value = Object.entries(mcp)
+      .map(([name, s]) => ({
+        name,
+        status: String((s as any)?.status || (s as any)?.state || 'unknown'),
+        error: typeof (s as any)?.error === 'string' ? (s as any).error : undefined,
+        tools: toolIds.filter((id) => id.startsWith(`${name}_`)).sort()
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   } finally {
     metaLoading.value = false
   }
@@ -168,13 +190,18 @@ useOpencodeEvents(directory, (event) => {
   }
 })
 
-function send(payload: {
+type PromptPayload = {
   text: string
   model?: { providerID: string; modelID: string }
   agent?: string
   variant?: string
   tools?: Record<string, boolean>
-}) {
+}
+
+// prompts sent while the agent is busy wait in a queue and fire on idle
+const queue = ref<PromptPayload[]>([])
+
+function dispatch(payload: PromptPayload) {
   busy.value = true
   pinnedToBottom.value = true
   api.prompt(sessionId.value, {
@@ -189,6 +216,22 @@ function send(payload: {
   })
   scrollToBottom(true)
 }
+
+function send(payload: PromptPayload) {
+  if (busy.value) {
+    queue.value.push(payload)
+    return
+  }
+  dispatch(payload)
+}
+
+watch(busy, (now, before) => {
+  if (before && !now && queue.value.length) {
+    const next = queue.value.shift()!
+    // small delay so the finished reply settles before the next prompt
+    setTimeout(() => dispatch(next), 400)
+  }
+})
 
 async function abort() {
   try {
@@ -250,7 +293,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       class="flex-1 overflow-y-auto min-h-0 py-2"
       @scroll.passive="onScroll"
     >
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-4xl mx-auto">
         <div v-if="loading" class="px-3 sm:px-4 py-4 space-y-4">
           <div class="space-y-2">
             <USkeleton class="h-9 w-2/3" />
@@ -294,6 +337,25 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             @respond="(r) => respondPermission(perm, r)"
           />
           <ChatWorking v-if="busy" :activity="activity" />
+
+          <!-- queued prompts -->
+          <div v-if="queue.length" class="px-3 sm:px-4 py-1 space-y-1">
+            <div
+              v-for="(item, i) in queue"
+              :key="i"
+              class="oc-appear flex items-center gap-2 rounded-sm bg-elevated/70 px-2.5 py-1.5 text-xs"
+            >
+              <UIcon name="i-lucide-clock" class="size-3.5 text-dimmed shrink-0" />
+              <span class="truncate flex-1 font-mono text-muted">{{ item.text }}</span>
+              <UButton
+                icon="i-lucide-x"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="queue.splice(i, 1)"
+              />
+            </div>
+          </div>
         </template>
       </div>
     </div>
@@ -301,8 +363,9 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     <ChatPromptBox
       :providers="providers"
       :agents="agents"
-      :mcp-servers="mcpServers"
+      :mcp-info="mcpInfo"
       :meta-loading="metaLoading"
+      :queue-length="queue.length"
       :busy="busy"
       :directory="directory"
       @send="send"

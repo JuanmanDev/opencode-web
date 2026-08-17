@@ -31,7 +31,7 @@ const errorMessage = computed(() => {
 <template>
   <div class="px-3 sm:px-4 oc-appear">
     <!-- user message -->
-    <div v-if="isUser" class="border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
+    <div v-if="isUser" class="oc-send border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
       <template v-for="part in visibleParts" :key="part.id">
         <div v-if="part.type === 'text'" class="text-sm whitespace-pre-wrap break-words">{{ (part as any).text }}</div>
         <div v-else-if="part.type === 'file'" class="flex items-center gap-1.5 text-xs text-muted mt-1">
