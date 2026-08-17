@@ -73,8 +73,17 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
      * Send a prompt. The response streams in via SSE, so we deliberately do not
      * await completion here - errors surface as session.error events too.
      */
+    fork: (id: string, messageID?: string) =>
+      ocFetch<SessionInfo>(`${BASE}/session/${id}/fork`, {
+        method: 'POST',
+        body: messageID ? { messageID } : {},
+        query: q()
+      }),
+    diff: (id: string) =>
+      ocFetch<unknown>(`${BASE}/session/${id}/diff`, { method: 'POST', body: {}, query: q() }),
+
     prompt: (id: string, body: {
-      parts: Array<{ type: 'text'; text: string }>
+      parts: Array<Record<string, unknown>>
       model?: { providerID: string; modelID: string }
       agent?: string
       variant?: string

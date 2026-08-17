@@ -85,6 +85,30 @@ function fmtTime(ts?: number) {
   return `${Math.round(diff / 86400_000)}d ago`
 }
 
+// inline conversation rename
+const renamingId = ref('')
+const renameText = ref('')
+
+function startRename(dir: string, s: SessionInfo) {
+  renamingId.value = s.id
+  renameText.value = s.title || ''
+  nextTick(() => {
+    (document.getElementById(`rename-${s.id}`) as HTMLInputElement | null)?.focus()
+  })
+}
+
+async function commitRename(dir: string, s: SessionInfo) {
+  const title = renameText.value.trim()
+  renamingId.value = ''
+  if (!title || title === s.title) return
+  try {
+    await useOpencodeApi(() => dir).renameSession(s.id, title)
+    sessionsByDir.value[dir] = (sessionsByDir.value[dir] || []).map((x) =>
+      x.id === s.id ? { ...x, title } : x
+    )
+  } catch { /* keep old title */ }
+}
+
 // description editing
 const editOpen = ref(false)
 const editDir = ref('')
@@ -104,7 +128,7 @@ function saveEdit() {
 
 <template>
   <div class="flex-1 overflow-y-auto">
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
       <div class="flex items-center gap-3 mb-1">
         <div class="size-9 rounded-sm bg-elevated flex items-center justify-center">
           <UIcon name="i-lucide-terminal" class="size-5 text-highlighted" />
@@ -186,16 +210,16 @@ function saveEdit() {
             />
           </div>
 
-          <!-- horizontal carousel of recent conversations -->
-          <div
+          <!-- full-width carousel of recent conversations: drag, arrows, scrollbar -->
+          <HScroll
             v-if="index < CAROUSEL_PROJECTS && carouselSessions(item.directory).length"
-            class="flex gap-2 overflow-x-auto px-3 sm:px-4 pb-3 pt-0.5"
+            class="px-3 sm:px-4 pb-3 pt-0.5"
           >
             <NuxtLink
               v-for="s in carouselSessions(item.directory)"
               :key="s.id"
               :to="`/p/${encodeDir(item.directory)}/session/${s.id}`"
-              class="oc-row shrink-0 w-52 rounded-sm bg-elevated/70 hover:bg-accented px-2.5 py-2"
+              class="oc-row group/card shrink-0 w-60 rounded-sm bg-elevated/70 hover:bg-accented px-2.5 py-2"
             >
               <div class="flex items-start gap-1.5">
                 <UIcon
@@ -203,13 +227,34 @@ function saveEdit() {
                   class="size-3.5 shrink-0 mt-0.5"
                   :class="projectMeta.isFavorite(item.directory, s.id) ? 'text-primary' : 'text-dimmed'"
                 />
-                <span class="text-xs leading-snug line-clamp-2 flex-1">{{ s.title || 'Untitled session' }}</span>
+                <!-- click the title to rename in place -->
+                <UInput
+                  v-if="renamingId === s.id"
+                  :id="`rename-${s.id}`"
+                  v-model="renameText"
+                  size="xs"
+                  class="flex-1"
+                  @click.stop.prevent
+                  @keydown.enter.prevent="commitRename(item.directory, s)"
+                  @keydown.esc="renamingId = ''"
+                  @blur="commitRename(item.directory, s)"
+                />
+                <span
+                  v-else
+                  class="text-xs leading-snug line-clamp-2 flex-1 hover:underline decoration-dotted underline-offset-2"
+                  title="Click to rename"
+                  @click.stop.prevent="startRename(item.directory, s)"
+                >{{ s.title || 'Untitled session' }}</span>
               </div>
-              <div class="text-[10px] text-dimmed font-mono mt-1 pl-5">
+              <div class="text-[10px] text-dimmed font-mono mt-1 pl-5 flex items-center gap-2">
                 {{ fmtTime(s.time?.updated || s.time?.created) }}
+                <UIcon
+                  name="i-lucide-pencil"
+                  class="size-3 opacity-0 group-hover/card:opacity-60"
+                />
               </div>
             </NuxtLink>
-          </div>
+          </HScroll>
         </div>
 
         <div v-if="projectsLoading && !knownDirs.length" class="bg-muted rounded-sm p-3 space-y-2">

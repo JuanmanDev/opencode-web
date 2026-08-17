@@ -26,6 +26,7 @@ const emit = defineEmits<{
     agent?: string
     variant?: string
     tools?: Record<string, boolean>
+    files?: Array<{ mime: string; filename: string; url: string }>
   }]
   abort: []
   refreshProviders: []
@@ -245,7 +246,7 @@ function toggleAccordion(name: string) {
 
 function send() {
   const value = text.value.trim()
-  if (!value) return
+  if (!value && !attachments.value.length) return
 
   // MCP mode → per-prompt tool filter
   let tools: Record<string, boolean> | undefined
@@ -277,9 +278,40 @@ function send() {
     model: providerID && modelID ? { providerID, modelID } : undefined,
     agent: agent.value !== DEFAULT ? agent.value : undefined,
     variant: variant.value !== DEFAULT && selectedModel.value?.reasoning ? variant.value : undefined,
-    tools
+    tools,
+    files: attachments.value.length
+      ? attachments.value.map(({ mime, filename, url }) => ({ mime, filename, url }))
+      : undefined
   })
   text.value = ''
+  attachments.value = []
+}
+
+// ---- attachments (sent as opencode file parts, data URLs) ----
+const attachments = ref<Array<{ mime: string; filename: string; url: string; size: number }>>([])
+const fileInput = ref<HTMLInputElement>()
+const MAX_FILE = 4 * 1024 * 1024
+
+function pickFiles() {
+  fileInput.value?.click()
+}
+
+function onFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  for (const file of Array.from(input.files || [])) {
+    if (file.size > MAX_FILE) continue
+    const reader = new FileReader()
+    reader.onload = () => {
+      attachments.value.push({
+        mime: file.type || 'application/octet-stream',
+        filename: file.name,
+        url: String(reader.result),
+        size: file.size
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+  input.value = ''
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -545,7 +577,41 @@ function onKeydown(e: KeyboardEvent) {
       </div>
       </CollapseTransition>
 
+      <!-- attachment chips -->
+      <div v-if="attachments.length" class="flex flex-wrap gap-1">
+        <UBadge
+          v-for="(file, i) in attachments"
+          :key="i"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+          class="oc-appear font-mono"
+        >
+          <UIcon name="i-lucide-paperclip" class="size-3 mr-1" />
+          {{ file.filename }}
+          <button class="ml-1 cursor-pointer hover:text-error" @click="attachments.splice(i, 1)">
+            <UIcon name="i-lucide-x" class="size-3" />
+          </button>
+        </UBadge>
+      </div>
+
       <div class="flex items-center gap-1.5 min-w-0">
+        <input
+          ref="fileInput"
+          type="file"
+          multiple
+          accept="image/*,application/pdf,text/*,.md,.json,.csv"
+          class="hidden"
+          @change="onFiles"
+        >
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-paperclip"
+          aria-label="Attach files"
+          @click="pickFiles"
+        />
         <UButton
           color="neutral"
           :variant="optionsOpen ? 'soft' : 'ghost'"
@@ -607,7 +673,7 @@ function onKeydown(e: KeyboardEvent) {
             size="xs"
             :icon="busy ? 'i-lucide-list-plus' : 'i-lucide-send'"
             :label="busy ? 'Queue' : 'Send'"
-            :disabled="!text.trim()"
+            :disabled="!text.trim() && !attachments.length"
             @click="send"
           />
         </Transition>

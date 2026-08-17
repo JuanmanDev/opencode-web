@@ -74,6 +74,15 @@ function fmtTime(ts?: number) {
         :to="`/p/${dirParam}/mcp`"
         @click="emit('navigate')"
       />
+      <UButton
+        block
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-chart-column"
+        label="Usage & cost"
+        :to="`/p/${dirParam}/stats`"
+        @click="emit('navigate')"
+      />
     </div>
 
     <div class="flex items-center gap-1.5 px-3 pb-1 text-[10px] uppercase tracking-widest text-dimmed">

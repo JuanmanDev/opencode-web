@@ -2,6 +2,7 @@
 import type { MessageWithParts, Part, TokenUsage } from '#shared/types/opencode'
 
 const props = defineProps<{ message: MessageWithParts }>()
+const emit = defineEmits<{ fork: [] }>()
 
 const info = computed(() => props.message.info)
 const isUser = computed(() => info.value.role === 'user')
@@ -31,7 +32,18 @@ const errorMessage = computed(() => {
 <template>
   <div class="px-3 sm:px-4 oc-appear">
     <!-- user message -->
-    <div v-if="isUser" class="oc-send border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
+    <div v-if="isUser" class="oc-send group/msg relative border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
+      <UTooltip text="Fork the conversation from here">
+        <UButton
+          icon="i-lucide-git-branch"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          class="absolute right-1.5 top-1.5 opacity-0 group-hover/msg:opacity-100"
+          aria-label="Fork from this message"
+          @click="emit('fork')"
+        />
+      </UTooltip>
       <template v-for="part in visibleParts" :key="part.id">
         <div v-if="part.type === 'text'" class="text-sm whitespace-pre-wrap break-words">{{ (part as any).text }}</div>
         <div v-else-if="part.type === 'file'" class="flex items-center gap-1.5 text-xs text-muted mt-1">

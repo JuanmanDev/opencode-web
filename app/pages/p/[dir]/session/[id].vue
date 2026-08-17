@@ -6,7 +6,8 @@ import type {
   Part,
   PermissionRequest,
   ProvidersResponse,
-  SessionInfo
+  SessionInfo,
+  TodoItem
 } from '#shared/types/opencode'
 
 const route = useRoute()
@@ -36,6 +37,70 @@ const pinnedToBottom = ref(true)
 const chime = useChime()
 const projectMeta = useProjectMeta()
 onMounted(projectMeta.load)
+
+// ---- todos ----
+const todos = ref<TodoItem[]>([])
+const todosOpen = ref(true)
+
+async function loadTodos() {
+  todos.value = await api.todos(sessionId.value)
+}
+
+function todoIcon(status: string) {
+  if (status === 'completed') return 'i-lucide-check-circle-2'
+  if (status === 'in_progress') return 'i-lucide-loader-circle'
+  if (status === 'cancelled') return 'i-lucide-circle-off'
+  return 'i-lucide-circle'
+}
+
+// ---- fork ----
+async function forkSession(messageID?: string) {
+  try {
+    const forked = await api.fork(sessionId.value, messageID)
+    toast.add({ title: 'Session forked', color: 'success' })
+    navigateTo(`/p/${route.params.dir}/session/${forked.id}`)
+  } catch (e) {
+    toast.add({ title: 'Fork failed', description: String(e), color: 'error' })
+  }
+}
+
+// ---- diff viewer ----
+const diffOpen = ref(false)
+const diffLoading = ref(false)
+const diffFiles = ref<Array<{ file: string; text: string }>>([])
+
+async function openDiff() {
+  diffOpen.value = true
+  diffLoading.value = true
+  diffFiles.value = []
+  try {
+    const res = await api.diff(sessionId.value)
+    if (typeof res === 'string') {
+      diffFiles.value = [{ file: 'changes', text: res }]
+    } else if (Array.isArray(res)) {
+      diffFiles.value = res.map((f: any) => ({
+        file: String(f.file || f.filename || f.path || 'file'),
+        text: String(f.patch || f.diff || f.text || JSON.stringify(f, null, 2))
+      }))
+    } else if (res && typeof res === 'object') {
+      diffFiles.value = Object.entries(res as Record<string, unknown>).map(([file, value]) => ({
+        file,
+        text: typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+      }))
+    }
+  } catch (e) {
+    toast.add({ title: 'Could not load diff', description: String(e), color: 'error' })
+  } finally {
+    diffLoading.value = false
+  }
+}
+
+function diffLineClass(line: string) {
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'text-success'
+  if (line.startsWith('-') && !line.startsWith('---')) return 'text-error'
+  if (line.startsWith('@@')) return 'text-info'
+  return 'text-muted'
+}
 // ring when a reply finishes (busy -> idle), not on initial load
 watch(busy, (now, before) => {
   if (before && !now && !loading.value) chime.play()
@@ -68,6 +133,7 @@ async function loadAll() {
     ])
     session.value = s
     messages.value = msgs
+    loadTodos()
     const last = msgs[msgs.length - 1]
     busy.value = Boolean(
       last && last.info.role === 'assistant' && !last.info.time?.completed && !last.info.error
@@ -192,7 +258,10 @@ useOpencodeEvents(directory, (event) => {
       }
       break
     case 'session.idle':
-      if (props.sessionID === sessionId.value) busy.value = false
+      if (props.sessionID === sessionId.value) {
+        busy.value = false
+        loadTodos()
+      }
       break
     case 'session.error': {
       const sid = props.sessionID
@@ -225,6 +294,7 @@ type PromptPayload = {
   agent?: string
   variant?: string
   tools?: Record<string, boolean>
+  files?: Array<{ mime: string; filename: string; url: string }>
 }
 
 // prompts sent while the agent is busy wait in a queue and fire on idle
@@ -233,8 +303,12 @@ const queue = ref<PromptPayload[]>([])
 function dispatch(payload: PromptPayload) {
   busy.value = true
   pinnedToBottom.value = true
+  const parts: Array<Record<string, unknown>> = [
+    ...(payload.files || []).map((f) => ({ type: 'file', mime: f.mime, filename: f.filename, url: f.url })),
+    ...(payload.text ? [{ type: 'text', text: payload.text }] : [])
+  ]
   api.prompt(sessionId.value, {
-    parts: [{ type: 'text', text: payload.text }],
+    parts: parts as never,
     model: payload.model,
     agent: payload.agent,
     variant: payload.variant,
@@ -307,6 +381,22 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse">working</UBadge>
       <span class="flex-1" />
       <UButton
+        icon="i-lucide-git-branch"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        aria-label="Fork this conversation"
+        @click="forkSession()"
+      />
+      <UButton
+        icon="i-lucide-file-diff"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        aria-label="Show file changes"
+        @click="openDiff"
+      />
+      <UButton
         icon="i-lucide-star"
         :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
         variant="ghost"
@@ -324,6 +414,42 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       />
       <span class="text-xs text-dimmed font-mono truncate max-w-64">{{ directory }}</span>
     </div>
+
+    <!-- live todo list from the agent -->
+    <CollapseTransition>
+      <div v-if="todos.length" class="bg-muted/40 px-3 sm:px-4 py-1.5 shrink-0">
+        <div class="max-w-4xl mx-auto">
+          <button
+            class="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-dimmed cursor-pointer"
+            @click="todosOpen = !todosOpen"
+          >
+            Todos ({{ todos.filter(t => t.status === 'completed').length }}/{{ todos.length }})
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="size-3 transition-transform duration-200"
+              :class="todosOpen ? 'rotate-180' : ''"
+            />
+          </button>
+          <CollapseTransition>
+            <div v-if="todosOpen" class="pt-1 space-y-0.5">
+              <div
+                v-for="(todo, i) in todos"
+                :key="i"
+                class="flex items-center gap-1.5 text-xs"
+                :class="todo.status === 'completed' ? 'text-dimmed line-through' : 'text-muted'"
+              >
+                <UIcon
+                  :name="todoIcon(todo.status)"
+                  class="size-3.5 shrink-0"
+                  :class="todo.status === 'in_progress' ? 'animate-spin text-highlighted' : ''"
+                />
+                {{ todo.content }}
+              </div>
+            </div>
+          </CollapseTransition>
+        </div>
+      </div>
+    </CollapseTransition>
 
     <div
       ref="scroller"
@@ -366,6 +492,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             v-for="message in messages"
             :key="message.info.id"
             :message="message"
+            @fork="forkSession(message.info.id)"
           />
           <ChatPermissionPrompt
             v-for="perm in permissions"
@@ -410,5 +537,26 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       @abort="abort"
       @refresh-providers="loadMeta"
     />
+
+    <!-- diff slideover -->
+    <USlideover v-model:open="diffOpen" title="File changes" description="Everything this session edited.">
+      <template #body>
+        <div v-if="diffLoading" class="space-y-2">
+          <USkeleton v-for="i in 4" :key="i" class="h-5 w-full" />
+        </div>
+        <div v-else-if="!diffFiles.length" class="text-sm text-dimmed py-6 text-center">
+          No changes recorded for this session.
+        </div>
+        <div v-else class="space-y-4">
+          <div v-for="entry in diffFiles" :key="entry.file">
+            <div class="flex items-center gap-1.5 text-xs font-mono text-highlighted mb-1">
+              <UIcon name="i-lucide-file-diff" class="size-3.5" />
+              {{ entry.file }}
+            </div>
+            <pre class="text-[11px] font-mono bg-muted rounded-sm p-2 overflow-x-auto leading-relaxed"><template v-for="(line, i) in entry.text.split('\n')" :key="i"><span :class="diffLineClass(line)">{{ line }}</span>{{ '\n' }}</template></pre>
+          </div>
+        </div>
+      </template>
+    </USlideover>
   </div>
 </template>

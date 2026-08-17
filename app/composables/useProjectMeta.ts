@@ -17,10 +17,21 @@ export function useProjectMeta() {
     } catch {
       meta.value = {}
     }
+    // server copy wins so favorites/descriptions follow you across devices
+    $fetch<Record<string, ProjectMeta>>('/api/v1/meta', { timeout: 8000 })
+      .then((server) => {
+        if (server && typeof server === 'object' && Object.keys(server).length) {
+          meta.value = { ...meta.value, ...server }
+          localStorage.setItem(KEY, JSON.stringify(meta.value))
+        }
+      })
+      .catch(() => { /* offline: localStorage is enough */ })
   }
 
   function persist() {
     localStorage.setItem(KEY, JSON.stringify(meta.value))
+    $fetch('/api/v1/meta', { method: 'PUT', body: meta.value, timeout: 8000 })
+      .catch(() => { /* sync later */ })
   }
 
   function of(directory: string): ProjectMeta {

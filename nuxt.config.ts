@@ -13,7 +13,16 @@ export default defineNuxtConfig({
     head: {
       title: 'opencode web',
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
-      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', href: '/favicon.svg' }
+      ],
+      meta: [
+        { name: 'theme-color', content: '#0a0a0a' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }
+      ],
       htmlAttrs: { lang: 'en' }
     }
   },
@@ -35,6 +44,13 @@ export default defineNuxtConfig({
     // keep proxy responses unbuffered for SSE
     routeRules: {
       '/api/opencode/event': { cache: false }
+    },
+    // small persistent store for project metadata (descriptions, favorites)
+    storage: {
+      data: { driver: 'fs', base: './.data' }
+    },
+    devStorage: {
+      data: { driver: 'fs', base: './.data' }
     }
   }
 })

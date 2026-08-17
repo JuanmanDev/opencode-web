@@ -80,6 +80,114 @@ async function fetchTools(url: string, headers: Record<string, string>): Promise
     .filter((t: ToolInfo) => t.name)
 }
 
+// Legacy HTTP+SSE transport (pre-2025 spec): GET opens a stream that first
+// announces a POST endpoint; JSON-RPC responses arrive back over the stream.
+async function fetchToolsSse(url: string, headers: Record<string, string>): Promise<ToolInfo[]> {
+  const controller = new AbortController()
+  const kill = setTimeout(() => controller.abort(), 12000)
+  try {
+    const res = await fetch(url, {
+      headers: { accept: 'text/event-stream', ...headers },
+      signal: controller.signal
+    })
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let endpoint: string | null = null
+    const pending = new Map<number, (msg: any) => void>()
+
+    const processBuffer = () => {
+      let idx: number
+      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+        const chunk = buffer.slice(0, idx)
+        buffer = buffer.slice(idx + 2)
+        const eventName = chunk.match(/^event:\s*(.+)$/m)?.[1]?.trim() || 'message'
+        const data = chunk.split('\n')
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).trim())
+          .join('\n')
+        if (eventName === 'endpoint') {
+          endpoint = data
+        } else if (data) {
+          try {
+            const msg = JSON.parse(data)
+            if (msg.id != null && pending.has(msg.id)) {
+              pending.get(msg.id)!(msg)
+              pending.delete(msg.id)
+            }
+          } catch { /* non-JSON event */ }
+        }
+      }
+    }
+
+    ;(async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          processBuffer()
+        }
+      } catch { /* aborted */ }
+    })()
+
+    const waitFor = <T>(check: () => T | null | undefined, ms: number) =>
+      new Promise<T>((resolve, reject) => {
+        const iv = setInterval(() => {
+          const value = check()
+          if (value != null) { clearInterval(iv); resolve(value) }
+        }, 50)
+        setTimeout(() => { clearInterval(iv); reject(new Error('SSE timeout')) }, ms)
+      })
+
+    await waitFor(() => endpoint, 6000)
+    const postUrl = new URL(endpoint!, url).toString()
+
+    const call = (id: number, method: string, params: Record<string, unknown>) => {
+      const reply = new Promise<any>((resolve) => pending.set(id, resolve))
+      return fetch(postUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        signal: controller.signal
+      }).then(() => Promise.race([
+        reply,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RPC timeout')), 6000))
+      ]))
+    }
+
+    const init = await call(1, 'initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'opencode-web', version: '1' }
+    })
+    if (init?.error) throw new Error(init.error.message || 'initialize failed')
+    fetch(postUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+      signal: controller.signal
+    }).catch(() => {})
+
+    const list = await call(2, 'tools/list', {})
+    if (list?.error) throw new Error(list.error.message || 'tools/list failed')
+    const tools = Array.isArray(list?.result?.tools) ? list.result.tools : []
+    return tools
+      .map((t: any) => ({
+        name: String(t?.name || ''),
+        description: typeof t?.description === 'string'
+          ? t.description.split('\n')[0]!.slice(0, 140)
+          : undefined
+      }))
+      .filter((t: ToolInfo) => t.name)
+  } finally {
+    clearTimeout(kill)
+    controller.abort()
+  }
+}
+
 export default defineEventHandler(async (event) => {
   requireApiToken(event)
   const { directory } = getQuery(event) as { directory?: string }
@@ -99,10 +207,21 @@ export default defineEventHandler(async (event) => {
     try {
       results[name] = { tools: await fetchTools(entry.url, entry.headers || {}) }
     } catch (error) {
-      results[name] = {
-        tools: [],
-        error: error instanceof Error ? error.message : String(error)
+      const message = error instanceof Error ? error.message : String(error)
+      // 404/405 usually means a legacy SSE-only server: try the old transport
+      if (/40[45]/.test(message)) {
+        try {
+          results[name] = { tools: await fetchToolsSse(entry.url, entry.headers || {}) }
+          return
+        } catch (sseError) {
+          results[name] = {
+            tools: [],
+            error: `${message}; SSE fallback: ${sseError instanceof Error ? sseError.message : sseError}`
+          }
+          return
+        }
       }
+      results[name] = { tools: [], error: message }
     }
   }))
 
