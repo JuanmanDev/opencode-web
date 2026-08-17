@@ -267,8 +267,12 @@ async function loadAll() {
     loadTodos()
     loadQuestions()
     const last = msgs[msgs.length - 1]
+    // an incomplete assistant message older than a few hours is a zombie
+    // (server restarted mid-run) - never lock the input on it
+    const age = Date.now() - (last?.info.time?.created || 0)
     busy.value = Boolean(
-      last && last.info.role === 'assistant' && !last.info.time?.completed && !last.info.error
+      last && last.info.role === 'assistant' && !last.info.time?.completed &&
+      !last.info.error && age < 1000 * 60 * 60 * 6
     )
   } catch (e) {
     const err = e as { statusCode?: number; data?: { message?: string } }

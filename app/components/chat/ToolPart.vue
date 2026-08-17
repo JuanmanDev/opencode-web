@@ -22,6 +22,14 @@ const statusUi = computed(() => {
   }
 })
 
+// the `question` tool gets a readable rendering instead of raw JSON
+interface QuestionInput { question: string; header?: string; options?: Array<{ label: string; description?: string }> }
+const questionData = computed<QuestionInput[]>(() => {
+  if (props.part.tool !== 'question') return []
+  const s = state.value as unknown as Record<string, any>
+  return Array.isArray(s.input?.questions) ? s.input.questions : []
+})
+
 const input = computed(() => {
   const s = state.value as unknown as Record<string, unknown>
   if (!s.input) return ''
@@ -72,7 +80,34 @@ const htmlResources = computed<HtmlResource[]>(() => {
 </script>
 
 <template>
-  <div class="rounded-sm bg-muted text-sm my-1">
+  <!-- readable card for the agent's question tool -->
+  <div v-if="questionData.length" class="rounded-sm bg-muted text-sm my-1 px-3 py-2.5 space-y-2">
+    <div class="flex items-center gap-2">
+      <UIcon name="i-lucide-message-circle-question" class="size-4 text-primary shrink-0" />
+      <span class="text-[10px] uppercase tracking-widest text-dimmed">The agent asked</span>
+      <UBadge v-if="status === 'completed'" color="success" variant="subtle" size="sm">answered</UBadge>
+      <UBadge v-else color="warning" variant="subtle" size="sm">waiting</UBadge>
+    </div>
+    <div v-for="(q, i) in questionData" :key="i" class="space-y-1">
+      <p class="text-sm">{{ q.question }}</p>
+      <div class="flex flex-wrap gap-1">
+        <UBadge
+          v-for="opt in q.options || []"
+          :key="opt.label"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+        >{{ opt.label }}</UBadge>
+      </div>
+    </div>
+    <pre v-if="status === 'completed' && output" class="text-xs font-mono bg-elevated rounded p-2 whitespace-pre-wrap">{{ output }}</pre>
+    <p v-else class="text-xs text-dimmed">
+      Answer with the card at the bottom of the conversation. If no card is shown,
+      this question expired after a server restart — just send a new message to continue.
+    </p>
+  </div>
+
+  <div v-else class="rounded-sm bg-muted text-sm my-1">
     <button
       class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left cursor-pointer"
       @click="open = !open"
