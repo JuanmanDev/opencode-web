@@ -95,7 +95,7 @@ const htmlResources = computed<HtmlResource[]>(() => {
       />
     </button>
 
-    <Transition name="oc-collapse">
+    <CollapseTransition>
     <div v-if="open" class="px-2.5 py-2 space-y-2">
       <div v-if="input">
         <div class="text-[10px] uppercase tracking-wide text-dimmed mb-1">Input</div>
@@ -111,7 +111,7 @@ const htmlResources = computed<HtmlResource[]>(() => {
         >{{ output.length > 20000 ? output.slice(0, 20000) + '\n… (truncated)' : output }}</pre>
       </div>
     </div>
-    </Transition>
+    </CollapseTransition>
 
     <div v-if="htmlResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
       <ChatMcpHtmlFrame

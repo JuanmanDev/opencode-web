@@ -5,7 +5,7 @@ export interface McpServerInfo {
   name: string
   status: string
   error?: string
-  tools: string[]
+  tools: Array<{ id: string; name: string; description?: string }>
 }
 
 const props = defineProps<{
@@ -180,6 +180,63 @@ function toggleTool(id: string, enabled: boolean) {
     : [...new Set([...disabledTools.value, id])]
 }
 
+// ---- saved MCP groups: named sets of the current enable/disable selection ----
+interface McpGroup { name: string; disabledServers: string[]; disabledTools: string[] }
+const groupsKey = computed(() => `opencode-web.mcp-groups.${props.directory}`)
+const groups = ref<McpGroup[]>([])
+const groupName = ref('')
+const activeGroup = ref('')
+
+onMounted(() => {
+  try {
+    groups.value = JSON.parse(localStorage.getItem(groupsKey.value) || '[]')
+  } catch { groups.value = [] }
+})
+
+function persistGroups() {
+  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+}
+
+function saveGroup() {
+  const name = groupName.value.trim()
+  if (!name) return
+  const group: McpGroup = {
+    name,
+    disabledServers: [...disabledServers.value],
+    disabledTools: [...disabledTools.value]
+  }
+  const idx = groups.value.findIndex((g) => g.name === name)
+  if (idx >= 0) groups.value.splice(idx, 1, group)
+  else groups.value.push(group)
+  persistGroups()
+  activeGroup.value = name
+  groupName.value = ''
+}
+
+function applyGroup(name: string) {
+  const group = groups.value.find((g) => g.name === name)
+  if (!group) return
+  disabledServers.value = [...group.disabledServers]
+  disabledTools.value = [...group.disabledTools]
+  activeGroup.value = name
+}
+
+function deleteGroup(name: string) {
+  groups.value = groups.value.filter((g) => g.name !== name)
+  if (activeGroup.value === name) activeGroup.value = ''
+  persistGroups()
+}
+
+// manual changes deviate from the applied group
+watch([disabledServers, disabledTools], () => {
+  const group = groups.value.find((g) => g.name === activeGroup.value)
+  if (!group) return
+  const same =
+    JSON.stringify([...group.disabledServers].sort()) === JSON.stringify([...disabledServers.value].sort()) &&
+    JSON.stringify([...group.disabledTools].sort()) === JSON.stringify([...disabledTools.value].sort())
+  if (!same) activeGroup.value = ''
+}, { deep: true })
+
 function toggleAccordion(name: string) {
   openServers.value = openServers.value.includes(name)
     ? openServers.value.filter((s) => s !== name)
@@ -205,8 +262,8 @@ function send() {
         tools[`${server.name}*`] = true
         tools[`${server.name}_*`] = true
       } else {
-        for (const toolId of server.tools) {
-          if (disabledTools.value.includes(toolId)) tools[toolId] = false
+        for (const tool of server.tools) {
+          if (disabledTools.value.includes(tool.id)) tools[tool.id] = false
         }
       }
     }
@@ -249,7 +306,7 @@ function onKeydown(e: KeyboardEvent) {
       />
 
       <!-- collapsible options -->
-      <Transition name="oc-collapse">
+      <CollapseTransition>
       <div v-if="optionsOpen" class="space-y-2">
         <!-- one row on wide screens: model / think / agent -->
         <div class="flex flex-col sm:flex-row gap-1.5">
@@ -376,6 +433,7 @@ function onKeydown(e: KeyboardEvent) {
         </div>
 
         <!-- custom MCP selection: full-width accordion, scrollable -->
+        <CollapseTransition>
         <div v-if="mcpInfo.length && mcpMode === 'custom'" class="space-y-1.5">
           <div class="flex items-center gap-1.5">
             <span class="text-[10px] uppercase tracking-widest text-dimmed flex-1">MCP servers & tools</span>
@@ -383,8 +441,49 @@ function onKeydown(e: KeyboardEvent) {
             <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
           </div>
 
-          <Transition name="oc-collapse">
-            <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-96 overflow-y-auto">
+          <!-- saved groups: apply with one click, save the current selection -->
+          <div class="flex flex-wrap items-center gap-1">
+            <template v-for="g in groups" :key="g.name">
+              <div class="flex items-center rounded-sm overflow-hidden">
+                <UButton
+                  size="xs"
+                  :variant="activeGroup === g.name ? 'solid' : 'soft'"
+                  :color="activeGroup === g.name ? 'primary' : 'neutral'"
+                  icon="i-lucide-layers"
+                  :label="g.name"
+                  class="rounded-r-none"
+                  @click="applyGroup(g.name)"
+                />
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  icon="i-lucide-x"
+                  class="rounded-l-none"
+                  :aria-label="`Delete group ${g.name}`"
+                  @click="deleteGroup(g.name)"
+                />
+              </div>
+            </template>
+            <UInput
+              v-model="groupName"
+              size="xs"
+              placeholder="Save selection as…"
+              class="w-36 font-mono"
+              @keydown.enter="saveGroup"
+            />
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-save"
+              :disabled="!groupName.trim()"
+              aria-label="Save MCP group"
+              @click="saveGroup"
+            />
+          </div>
+
+          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-96 overflow-y-auto">
               <div v-for="server in mcpInfo" :key="server.name">
                 <!-- accordion header -->
                 <div class="flex items-center gap-2 px-2.5 py-2">
@@ -421,29 +520,30 @@ function onKeydown(e: KeyboardEvent) {
                 </p>
 
                 <!-- accordion body: per-tool toggles -->
-                <Transition name="oc-collapse">
+                <CollapseTransition>
                   <div
                     v-if="server.tools.length && openServers.includes(server.name)"
                     class="px-8 pb-2 space-y-1"
                   >
                     <UCheckbox
-                      v-for="toolId in server.tools"
-                      :key="toolId"
+                      v-for="tool in server.tools"
+                      :key="tool.id"
                       size="sm"
-                      :label="toolId.slice(server.name.length + 1) || toolId"
+                      :label="tool.name"
+                      :description="tool.description"
                       :disabled="disabledServers.includes(server.name)"
-                      :model-value="!disabledTools.includes(toolId)"
-                      :ui="{ label: 'font-mono text-xs' }"
-                      @update:model-value="(v) => toggleTool(toolId, v === true)"
+                      :model-value="!disabledTools.includes(tool.id)"
+                      :ui="{ label: 'font-mono text-xs', description: 'text-[10px] text-dimmed' }"
+                      @update:model-value="(v) => toggleTool(tool.id, v === true)"
                     />
                   </div>
-                </Transition>
+                </CollapseTransition>
               </div>
             </div>
-          </Transition>
         </div>
+        </CollapseTransition>
       </div>
-      </Transition>
+      </CollapseTransition>
 
       <div class="flex items-center gap-1.5 min-w-0">
         <UButton
@@ -488,24 +588,29 @@ function onKeydown(e: KeyboardEvent) {
         <UBadge v-if="queueLength" color="neutral" variant="subtle" size="sm">
           {{ queueLength }} queued
         </UBadge>
-        <UButton
-          v-if="busy"
-          color="error"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-square"
-          label="Stop"
-          @click="emit('abort')"
-        />
-        <UButton
-          :color="busy ? 'neutral' : 'primary'"
-          :variant="busy ? 'soft' : 'solid'"
-          size="xs"
-          :icon="busy ? 'i-lucide-list-plus' : 'i-lucide-send'"
-          :label="busy ? 'Queue' : 'Send'"
-          :disabled="!text.trim()"
-          @click="send"
-        />
+        <Transition name="oc-swap">
+          <UButton
+            v-if="busy"
+            color="error"
+            variant="soft"
+            size="xs"
+            icon="i-lucide-square"
+            label="Stop"
+            @click="emit('abort')"
+          />
+        </Transition>
+        <Transition name="oc-swap" mode="out-in">
+          <UButton
+            :key="busy ? 'queue' : 'send'"
+            :color="busy ? 'neutral' : 'primary'"
+            :variant="busy ? 'soft' : 'solid'"
+            size="xs"
+            :icon="busy ? 'i-lucide-list-plus' : 'i-lucide-send'"
+            :label="busy ? 'Queue' : 'Send'"
+            :disabled="!text.trim()"
+            @click="send"
+          />
+        </Transition>
       </div>
     </div>
 

@@ -52,7 +52,7 @@ onBeforeUnmount(() => clearInterval(timer))
 <template>
   <div>
     <!-- slim banner: any recent errors -->
-    <Transition name="oc-collapse">
+    <CollapseTransition>
     <div
       v-if="serverDegraded"
       class="flex items-center gap-2 px-3 py-1.5 text-xs bg-error/10 text-error"
@@ -70,7 +70,7 @@ onBeforeUnmount(() => clearInterval(timer))
         @click="checkNow"
       />
     </div>
-    </Transition>
+    </CollapseTransition>
 
     <!-- modal: too many errors -->
     <UModal v-model:open="modalOpen" :dismissible="true" title="Server not responding">

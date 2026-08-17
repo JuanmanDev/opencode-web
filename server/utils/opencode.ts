@@ -18,13 +18,15 @@ export function opencodeFetch<T = unknown>(
     headers.authorization =
       'Basic ' + Buffer.from(`${config.opencodeUsername}:${config.opencodePassword}`).toString('base64')
   }
-  return $fetch(joinURL(config.opencodeUrl, path), {
+  // untyped alias: dynamic URLs make nitro's typed $fetch route-matching blow up
+  const fetcher = $fetch as unknown as (url: string, opts: Record<string, unknown>) => Promise<T>
+  return fetcher(joinURL(config.opencodeUrl, path), {
     method: opts.method || 'GET',
-    body: opts.body as Record<string, unknown> | undefined,
+    body: opts.body,
     query: opts.query,
     headers,
     timeout: opts.timeoutMs ?? 15000
-  }) as Promise<T>
+  })
 }
 
 /**

@@ -50,7 +50,8 @@ watch(directory, refresh)
 async function toggle(entry: McpEntry, enabled: boolean) {
   toggling.value = entry.name
   try {
-    await api.patchConfig({ mcp: { [entry.name]: { ...(entry.config || {}), enabled } } })
+    // minimal patch: the server merges it into the existing entry
+    await api.patchConfig({ mcp: { [entry.name]: { enabled } } })
     toast.add({
       title: `${entry.name} ${enabled ? 'enabled' : 'disabled'}`,
       description: 'Applies to new sessions in this project.',
@@ -58,7 +59,14 @@ async function toggle(entry: McpEntry, enabled: boolean) {
     })
     await refresh()
   } catch (e) {
-    toast.add({ title: `Failed to update ${entry.name}`, description: String(e), color: 'error' })
+    const status = (e as { statusCode?: number })?.statusCode
+    toast.add({
+      title: `Failed to update ${entry.name}`,
+      description: directory.value === '/' && status === 500
+        ? 'The root directory (/) has no writable opencode config. Open a real project folder to change MCP settings.'
+        : String(e),
+      color: 'error'
+    })
   } finally {
     toggling.value = null
   }

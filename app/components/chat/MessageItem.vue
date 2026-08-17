@@ -59,12 +59,12 @@ const errorMessage = computed(() => {
               :class="showReasoning ? 'rotate-180' : ''"
             />
           </button>
-          <Transition name="oc-collapse">
+          <CollapseTransition>
             <div
               v-if="showReasoning"
               class="mt-1 border-l border-default pl-3 text-xs text-muted whitespace-pre-wrap max-h-64 overflow-y-auto"
             >{{ (part as any).text }}</div>
-          </Transition>
+          </CollapseTransition>
         </div>
 
         <ChatToolPart v-else-if="part.type === 'tool'" :part="part as any" />

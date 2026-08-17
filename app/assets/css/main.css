@@ -145,6 +145,17 @@ body {
   transform: translateX(-12px);
 }
 
+/* quick swap for buttons/labels that change state (Send ⇄ Queue, Stop) */
+.oc-swap-enter-active,
+.oc-swap-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.oc-swap-enter-from,
+.oc-swap-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
 /* element appear (new messages, alerts, indicators) */
 @keyframes oc-fade-up {
   from {
@@ -193,6 +204,8 @@ body {
   .oc-collapse-leave-active,
   .oc-slide-enter-active,
   .oc-slide-leave-active,
+  .oc-swap-enter-active,
+  .oc-swap-leave-active,
   .oc-row {
     transition: none;
   }

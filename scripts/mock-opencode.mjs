@@ -109,7 +109,30 @@ createServer((req, res) => {
 
   if (p === '/project') return json(res, projects)
   if (p === '/config/providers') return json(res, providers)
-  if (p === '/config') return json(res, { mcp: { context7: { type: 'remote', url: 'https://mcp.context7.com/mcp' }, playwright: { type: 'local', command: ['npx', '@playwright/mcp'] }, 'home-assistant': { type: 'remote', url: 'http://ha:8086/mcp', enabled: false } } })
+  if (p === '/config') return json(res, { mcp: { context7: { type: 'remote', url: `http://127.0.0.1:${PORT}/fake-mcp` }, playwright: { type: 'local', command: ['npx', '@playwright/mcp'] }, 'home-assistant': { type: 'remote', url: 'http://127.0.0.1:1/unreachable', enabled: false } } })
+
+  // minimal MCP server (Streamable HTTP) so tool discovery is testable offline
+  if (p === '/fake-mcp' && req.method === 'POST') {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      let msg = {}
+      try { msg = JSON.parse(body) } catch { /* ignore */ }
+      if (msg.id === undefined || msg.id === null) { res.writeHead(202); return res.end() }
+      const reply = (result) => json(res, { jsonrpc: '2.0', id: msg.id, result })
+      if (msg.method === 'initialize') {
+        return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'fake', version: '1' } })
+      }
+      if (msg.method === 'tools/list') {
+        return reply({ tools: [
+          { name: 'query-docs', description: 'Query up-to-date documentation' },
+          { name: 'resolve-library-id', description: 'Find a library id' }
+        ] })
+      }
+      reply({})
+    })
+    return
+  }
   if (p === '/agent') return json(res, agents)
   if (p === '/mcp') return json(res, mcp)
   if (p === '/experimental/tool/ids') {

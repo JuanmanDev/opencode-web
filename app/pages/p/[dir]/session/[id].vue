@@ -20,7 +20,12 @@ const session = ref<SessionInfo | null>(null)
 const messages = ref<MessageWithParts[]>([])
 const providers = ref<ProvidersResponse | null>(null)
 const agents = ref<AgentInfo[]>([])
-const mcpInfo = ref<Array<{ name: string; status: string; error?: string; tools: string[] }>>([])
+const mcpInfo = ref<Array<{
+  name: string
+  status: string
+  error?: string
+  tools: Array<{ id: string; name: string; description?: string }>
+}>>([])
 const permissions = ref<PermissionRequest[]>([])
 const busy = ref(false)
 const loading = ref(true)
@@ -96,11 +101,17 @@ async function loadMeta() {
   } catch { /* ignore */ }
 
   try {
-    const [prov, ag, mcp, toolIds] = await Promise.all([
+    const [prov, ag, mcp, toolIds, remoteTools] = await Promise.all([
       api.providers().catch(() => null),
       api.agents().catch(() => [] as AgentInfo[]),
       api.mcpStatus().catch(() => ({} as Record<string, any>)),
-      api.toolIds()
+      api.toolIds(),
+      // opencode doesn't expose MCP tool ids, so our server asks the remote
+      // MCP servers themselves for their tool lists
+      $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
+        '/api/v1/mcp-tools',
+        { query: { directory: directory.value }, timeout: 20000 }
+      ).catch(() => ({} as Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>))
     ])
     if (prov) {
       providers.value = prov
@@ -108,12 +119,24 @@ async function loadMeta() {
     }
     agents.value = ag
     mcpInfo.value = Object.entries(mcp)
-      .map(([name, s]) => ({
-        name,
-        status: String((s as any)?.status || (s as any)?.state || 'unknown'),
-        error: typeof (s as any)?.error === 'string' ? (s as any).error : undefined,
-        tools: toolIds.filter((id) => id.startsWith(`${name}_`)).sort()
-      }))
+      .map(([name, s]) => {
+        const remote = remoteTools[name]
+        const fromRemote = (remote?.tools || []).map((t) => ({
+          id: `${name}_${t.name}`,
+          name: t.name,
+          description: t.description
+        }))
+        const fromIds = toolIds
+          .filter((id) => id.startsWith(`${name}_`))
+          .filter((id) => !fromRemote.some((t) => t.id === id))
+          .map((id) => ({ id, name: id.slice(name.length + 1) }))
+        return {
+          name,
+          status: String((s as any)?.status || (s as any)?.state || 'unknown'),
+          error: typeof (s as any)?.error === 'string' ? (s as any).error : remote?.error,
+          tools: [...fromRemote, ...fromIds].sort((a, b) => a.name.localeCompare(b.name))
+        }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
     mcpLoading.value = false
   } finally {
