@@ -104,7 +104,7 @@ function saveEdit() {
 
 <template>
   <div class="flex-1 overflow-y-auto">
-    <div class="w-full px-4 sm:px-8 py-8 sm:py-14">
+    <div class="max-w-3xl mx-auto px-4 py-8 sm:py-14">
       <div class="flex items-center gap-3 mb-1">
         <div class="size-9 rounded-sm bg-elevated flex items-center justify-center">
           <UIcon name="i-lucide-terminal" class="size-5 text-highlighted" />
@@ -147,11 +147,10 @@ function saveEdit() {
         <div
           v-for="(item, index) in knownDirs"
           :key="item.directory"
-          class="bg-muted rounded-sm overflow-hidden"
         >
-          <!-- project row -->
+          <!-- project row: standard width -->
           <div
-            class="oc-row group flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-elevated cursor-pointer"
+            class="oc-row group flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-muted rounded-sm hover:bg-elevated cursor-pointer"
             @click="openProject(item.directory)"
           >
             <UIcon name="i-lucide-folder-git-2" class="size-4 text-primary/70 shrink-0" />
@@ -186,10 +185,10 @@ function saveEdit() {
             />
           </div>
 
-          <!-- full-width carousel of recent conversations: drag, arrows, scrollbar -->
+          <!-- carousel breaks out to the full viewport width -->
           <HScroll
             v-if="index < CAROUSEL_PROJECTS && carouselSessions(item.directory).length"
-            class="px-3 sm:px-4 pb-3 pt-0.5"
+            class="relative left-1/2 -translate-x-1/2 w-screen px-4 sm:px-8 pt-2 pb-1"
           >
             <NuxtLink
               v-for="s in carouselSessions(item.directory)"

@@ -50,6 +50,11 @@ async function loadQuestions() {
 }
 
 async function replyQuestion(requestID: string, answers: string[][]) {
+  if (requestID.startsWith('local-demo')) {
+    questions.value = questions.value.filter((q) => q.id !== requestID)
+    note(`✅ Demo answer received: **${answers.map((a) => a.join(', ')).join(' | ')}** — with a real agent question this reply goes to opencode and the agent continues.`)
+    return
+  }
   try {
     await api.replyQuestion(requestID, answers)
     questions.value = questions.value.filter((q) => q.id !== requestID)
@@ -59,12 +64,25 @@ async function replyQuestion(requestID: string, answers: string[][]) {
 }
 
 async function rejectQuestion(requestID: string) {
+  if (requestID.startsWith('local-demo')) {
+    questions.value = questions.value.filter((q) => q.id !== requestID)
+    return
+  }
   try {
     await api.rejectQuestion(requestID)
   } finally {
     questions.value = questions.value.filter((q) => q.id !== requestID)
   }
 }
+
+// while the agent works, poll for questions too - not every opencode version
+// emits question events over SSE
+let questionPoll: ReturnType<typeof setInterval> | undefined
+watch(busy, (now) => {
+  clearInterval(questionPoll)
+  if (now) questionPoll = setInterval(loadQuestions, 8000)
+}, { immediate: true })
+onBeforeUnmount(() => clearInterval(questionPoll))
 
 // ---- local /mcp chat commands (handled by the UI, not sent to the agent) ----
 const localNotes = ref<Array<{ id: string; text: string }>>([])
@@ -462,6 +480,23 @@ function send(payload: PromptPayload) {
   // /mcp … -> handled locally by the UI, never sent to the agent
   if (payload.text.trim().startsWith('/mcp')) {
     runMcpCommand(payload.text)
+    return
+  }
+  // /test question -> inject a demo question card to try the reply flow
+  if (payload.text.trim().startsWith('/test')) {
+    questions.value.push({
+      id: `local-demo-${Date.now()}`,
+      questions: [{
+        header: 'Demo question',
+        question: 'Which JS framework do you want?',
+        options: [
+          { label: 'Vue', description: 'Nuxt, composition API' },
+          { label: 'Svelte', description: 'SvelteKit, runes' },
+          { label: 'React', description: 'Next.js, hooks' }
+        ]
+      }]
+    })
+    note('Demo question injected — the chat input is replaced by the answer card until you reply or dismiss. Type your own answer in the text field for the "Other" case.')
     return
   }
   if (busy.value) {
