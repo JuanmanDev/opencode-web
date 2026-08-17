@@ -8,6 +8,10 @@ export default defineNuxtConfig({
   },
   devtools: { enabled: false },
   ssr: true,
+  experimental: {
+    // stale chunk after a redeploy/dev restart -> reload instead of erroring
+    emitRouteChunkError: 'automatic'
+  },
   app: {
     pageTransition: { name: 'oc-page', mode: 'out-in' },
     head: {
