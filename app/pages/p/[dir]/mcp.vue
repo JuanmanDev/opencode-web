@@ -20,6 +20,8 @@ interface McpEntry {
 const entries = ref<McpEntry[]>([])
 // tool overrides from the opencode config (`tools` map) for the active scope
 const configTools = ref<Record<string, boolean>>({})
+// permission overrides ('ask' | 'allow' | 'deny') from the config `permission` map
+const configPermission = ref<Record<string, string>>({})
 const loading = ref(true)
 const toggling = ref<string | null>(null)
 const expanded = ref<string[]>([])
@@ -44,6 +46,10 @@ async function refresh() {
     ])
     const mcpConfig = (config.mcp || {}) as Record<string, Record<string, unknown>>
     configTools.value = (config.tools || {}) as Record<string, boolean>
+    configPermission.value = Object.fromEntries(
+      Object.entries((config.permission || {}) as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'string')
+    ) as Record<string, string>
     const names = new Set([...Object.keys(status), ...Object.keys(mcpConfig)])
     entries.value = [...names].sort().map((name) => {
       const s = (status[name] || {}) as Record<string, unknown>
@@ -68,8 +74,15 @@ async function refresh() {
 
 watch(scope, () => { expanded.value = []; refresh() })
 
-// ---- saved enable/disable sets (per scope) ----
-interface PageGroup { name: string; enabled: Record<string, boolean> }
+// ---- saved presets: tri-state per server + per-tool overrides, shared
+// server-side across devices (localStorage as offline fallback) ----
+interface PageGroup {
+  name: string
+  servers?: Record<string, ServerMode>
+  tools?: Record<string, Exclude<ToolMode, 'inherit'>>
+  /** legacy on/off format */
+  enabled?: Record<string, boolean>
+}
 const groupsKey = computed(() =>
   `opencode-web.mcp-page-groups.${scope.value === 'global' ? 'GLOBAL' : directory.value}`
 )
@@ -79,34 +92,77 @@ const applyingGroup = ref('')
 
 function loadGroups() {
   try { groups.value = JSON.parse(localStorage.getItem(groupsKey.value) || '[]') } catch { groups.value = [] }
+  // shared copy wins so presets follow you across devices
+  $fetch<PageGroup[]>('/api/v1/mcp-presets', { query: { key: groupsKey.value }, timeout: 8000 })
+    .then((shared) => {
+      if (Array.isArray(shared) && shared.length) {
+        groups.value = shared
+        localStorage.setItem(groupsKey.value, JSON.stringify(shared))
+      }
+    })
+    .catch(() => { /* offline */ })
 }
 onMounted(loadGroups)
 watch(groupsKey, loadGroups)
 
+function persistGroups() {
+  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+  $fetch('/api/v1/mcp-presets', {
+    method: 'PUT',
+    query: { key: groupsKey.value },
+    body: groups.value,
+    timeout: 8000
+  }).catch(() => { /* offline: local copy is kept */ })
+}
+
 function saveGroup() {
   const name = groupName.value.trim()
   if (!name) return
+  const tools: Record<string, Exclude<ToolMode, 'inherit'>> = {}
+  for (const entry of entries.value) {
+    for (const tool of entry.tools) {
+      const mode = toolMode(tool.id)
+      if (mode !== 'inherit') tools[tool.id] = mode
+    }
+  }
   const group: PageGroup = {
     name,
-    enabled: Object.fromEntries(entries.value.map((e) => [e.name, e.enabled]))
+    servers: Object.fromEntries(entries.value.map((e) => [e.name, serverMode(e)])),
+    tools
   }
   const idx = groups.value.findIndex((g) => g.name === name)
   if (idx >= 0) groups.value.splice(idx, 1, group)
   else groups.value.push(group)
-  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+  persistGroups()
   groupName.value = ''
-  toast.add({ title: `Saved set "${name}"`, description: 'Apply it any time with one click.', color: 'success' })
+  toast.add({ title: `Saved preset "${name}"`, description: 'Shared across your devices.', color: 'success' })
 }
 
 async function applyGroup(group: PageGroup) {
   applyingGroup.value = group.name
   try {
-    const patch: Record<string, { enabled: boolean }> = {}
+    const mcpPatch: Record<string, { enabled: boolean }> = {}
+    const permissionPatch: Record<string, string> = {}
+    const toolsPatch: Record<string, boolean> = {}
+
+    const servers = group.servers
+      || Object.fromEntries(Object.entries(group.enabled || {}).map(([n, on]) => [n, on ? 'allow' : 'off']))
     for (const entry of entries.value) {
-      const want = group.enabled[entry.name]
-      if (want !== undefined && want !== entry.enabled) patch[entry.name] = { enabled: want }
+      const want = servers[entry.name] as ServerMode | undefined
+      if (!want) continue
+      mcpPatch[entry.name] = { enabled: want !== 'off' }
+      if (want !== 'off') permissionPatch[`${entry.name}_*`] = want
     }
-    if (Object.keys(patch).length) await patchScoped({ mcp: patch })
+    for (const [toolId, mode] of Object.entries(group.tools || {})) {
+      toolsPatch[toolId] = mode !== 'deny'
+      if (mode !== 'deny') permissionPatch[toolId] = mode
+    }
+
+    await patchScoped({
+      mcp: mcpPatch,
+      ...(Object.keys(toolsPatch).length ? { tools: toolsPatch } : {}),
+      ...(Object.keys(permissionPatch).length ? { permission: permissionPatch } : {})
+    })
     toast.add({ title: `Applied "${group.name}"`, color: 'success' })
     await refresh()
   } catch (e) {
@@ -118,7 +174,7 @@ async function applyGroup(group: PageGroup) {
 
 function deleteGroup(name: string) {
   groups.value = groups.value.filter((g) => g.name !== name)
-  localStorage.setItem(groupsKey.value, JSON.stringify(groups.value))
+  persistGroups()
 }
 
 function toggleExpand(name: string) {
@@ -127,58 +183,80 @@ function toggleExpand(name: string) {
     : [...expanded.value, name]
 }
 
-async function toggleTool(toolId: string, enabled: boolean) {
-  toggling.value = toolId
-  try {
-    // persisted project-wide in the opencode config `tools` map
-    await patchScoped({ tools: { [toolId]: enabled } })
-    configTools.value = { ...configTools.value, [toolId]: enabled }
-    toast.add({
-      title: `${toolId} ${enabled ? 'enabled' : 'disabled'}`,
-      description: 'Applies to new sessions in this project.',
-      color: 'success'
-    })
-  } catch (e) {
-    const status = (e as { statusCode?: number })?.statusCode
-    toast.add({
-      title: `Failed to update ${toolId}`,
-      description: directory.value === '/' && status === 500
-        ? 'The root directory (/) has no writable opencode config. Open a real project folder to change tool settings.'
-        : String(e),
-      color: 'error'
-    })
-  } finally {
-    toggling.value = null
-  }
+// ---- tri-state: off / ask / allow ----
+type ServerMode = 'off' | 'ask' | 'allow'
+type ToolMode = 'inherit' | 'deny' | 'ask' | 'allow'
+
+function serverMode(entry: McpEntry): ServerMode {
+  if (!entry.enabled) return 'off'
+  const perm = configPermission.value[`${entry.name}_*`] || configPermission.value[`${entry.name}*`]
+  return perm === 'ask' ? 'ask' : 'allow'
 }
 
-onMounted(refresh)
-watch(directory, refresh)
-
-async function toggle(entry: McpEntry, enabled: boolean) {
+async function setServerMode(entry: McpEntry, mode: ServerMode) {
   toggling.value = entry.name
   try {
-    // minimal patch: the server merges it into the existing entry
-    await patchScoped({ mcp: { [entry.name]: { enabled } } })
+    if (mode === 'off') {
+      await patchScoped({ mcp: { [entry.name]: { enabled: false } } })
+    } else {
+      await patchScoped({
+        mcp: { [entry.name]: { enabled: true } },
+        permission: { [`${entry.name}_*`]: mode }
+      })
+      configPermission.value = { ...configPermission.value, [`${entry.name}_*`]: mode }
+    }
     toast.add({
-      title: `${entry.name} ${enabled ? 'enabled' : 'disabled'}`,
-      description: 'Applies to new sessions in this project.',
+      title: `${entry.name}: ${mode === 'off' ? 'disabled' : mode === 'ask' ? 'enabled (asks first)' : 'enabled (no ask)'}`,
+      description: 'Applies to new sessions.',
       color: 'success'
     })
     await refresh()
   } catch (e) {
-    const status = (e as { statusCode?: number })?.statusCode
-    toast.add({
-      title: `Failed to update ${entry.name}`,
-      description: directory.value === '/' && status === 500
-        ? 'The root directory (/) has no writable opencode config. Open a real project folder to change MCP settings.'
-        : String(e),
-      color: 'error'
-    })
+    toast.add({ title: `Failed to update ${entry.name}`, description: String(e), color: 'error' })
   } finally {
     toggling.value = null
   }
 }
+
+function toolMode(toolId: string): ToolMode {
+  if (configTools.value[toolId] === false) return 'deny'
+  const perm = configPermission.value[toolId]
+  return perm === 'ask' || perm === 'allow' ? perm : 'inherit'
+}
+
+async function setToolMode(toolId: string, mode: ToolMode) {
+  toggling.value = toolId
+  try {
+    if (mode === 'deny') {
+      await patchScoped({ tools: { [toolId]: false } })
+      configTools.value = { ...configTools.value, [toolId]: false }
+    } else if (mode === 'inherit') {
+      await patchScoped({ tools: { [toolId]: true } })
+      configTools.value = { ...configTools.value, [toolId]: true }
+      const { [toolId]: _gone, ...rest } = configPermission.value
+      configPermission.value = rest
+    } else {
+      await patchScoped({ tools: { [toolId]: true }, permission: { [toolId]: mode } })
+      configTools.value = { ...configTools.value, [toolId]: true }
+      configPermission.value = { ...configPermission.value, [toolId]: mode }
+    }
+    toast.add({ title: `${toolId}: ${mode}`, color: 'success' })
+  } catch (e) {
+    toast.add({ title: `Failed to update ${toolId}`, description: String(e), color: 'error' })
+  } finally {
+    toggling.value = null
+  }
+}
+
+const TOOL_MODES = [
+  { label: 'inherit', value: 'inherit' },
+  { label: 'off', value: 'deny' },
+  { label: 'ask', value: 'ask' },
+  { label: 'auto', value: 'allow' }
+]
+
+onMounted(refresh)
+watch(directory, refresh)
 
 function statusColor(status: string) {
   if (['connected', 'running', 'ok', 'success'].includes(status)) return 'success'
@@ -484,11 +562,20 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
                 </div>
               </div>
             </component>
-            <USwitch
-              :model-value="entry.enabled"
-              :disabled="toggling === entry.name"
-              @update:model-value="(v: boolean) => toggle(entry, v)"
-            />
+            <!-- tri-state: off / ask before using / auto (no ask) -->
+            <div class="flex items-center rounded-sm overflow-hidden shrink-0">
+              <UButton
+                v-for="mode in (['off', 'ask', 'allow'] as const)"
+                :key="mode"
+                size="xs"
+                :label="mode === 'allow' ? 'auto' : mode"
+                :color="serverMode(entry) === mode ? (mode === 'off' ? 'neutral' : 'primary') : 'neutral'"
+                :variant="serverMode(entry) === mode ? 'solid' : 'soft'"
+                :loading="toggling === entry.name && serverMode(entry) !== mode"
+                class="rounded-none"
+                @click="setServerMode(entry, mode)"
+              />
+            </div>
           </div>
 
           <!-- per-tool project-level toggles -->
@@ -497,17 +584,27 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               v-if="entry.tools.length && expanded.includes(entry.name)"
               class="px-11 pb-3 space-y-1.5"
             >
-              <UCheckbox
+              <div
                 v-for="tool in entry.tools"
                 :key="tool.id"
-                size="sm"
-                :label="tool.name"
-                :description="tool.description"
-                :disabled="!entry.enabled || toggling === tool.id"
-                :model-value="configTools[tool.id] !== false"
-                :ui="{ label: 'font-mono text-xs', description: 'text-[10px] text-dimmed' }"
-                @update:model-value="(v) => toggleTool(tool.id, v === true)"
-              />
+                class="flex items-center gap-2"
+              >
+                <div class="min-w-0 flex-1">
+                  <div class="font-mono text-xs" :class="toolMode(tool.id) === 'deny' ? 'text-dimmed line-through' : ''">
+                    {{ tool.name }}
+                  </div>
+                  <div v-if="tool.description" class="text-[10px] text-dimmed truncate">{{ tool.description }}</div>
+                </div>
+                <USelect
+                  :items="TOOL_MODES"
+                  value-key="value"
+                  :model-value="toolMode(tool.id)"
+                  :disabled="!entry.enabled || toggling === tool.id"
+                  size="xs"
+                  class="w-24 shrink-0"
+                  @update:model-value="(v) => setToolMode(tool.id, v as any)"
+                />
+              </div>
             </div>
           </CollapseTransition>
         </div>

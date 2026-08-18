@@ -101,12 +101,25 @@ const srcdoc = computed(() => {
   return props.html
 })
 
+// loading state: cleared on the iframe load event, or earlier when the MCP
+// app signals readiness (mcp-ui lifecycle message)
+const frameLoading = ref(true)
+watch(() => [props.url, props.html, props.script], () => { frameLoading.value = true })
+
+function onFrameLoad() {
+  frameLoading.value = false
+}
+
 function onMessage(e: MessageEvent) {
   if (e.source !== frame.value?.contentWindow) return
   const data = e.data
   if (data && typeof data === 'object') {
+    if (typeof data.type === 'string' && /ready|lifecycle/i.test(data.type)) frameLoading.value = false
     const h = data.payload?.height ?? data.height
-    if (typeof h === 'number' && h > 40 && h < 6000) height.value = Math.max(h, props.viewer ? 400 : 60)
+    if (typeof h === 'number' && h > 40 && h < 6000) {
+      frameLoading.value = false
+      height.value = Math.max(h, props.viewer ? 400 : 60)
+    }
   }
 }
 
@@ -152,18 +165,29 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
       <UIcon :name="appViewer!.view.value === 'full' ? 'i-lucide-maximize-2' : 'i-lucide-panel-right'" class="size-4" />
       Currently showing {{ appViewer!.view.value === 'full' ? 'in fullscreen' : 'in the side panel' }} — click to move back to the chat
     </button>
-    <iframe
-      v-else
-      ref="frame"
-      :srcdoc="srcdoc"
-      :src="url"
-      :sandbox="url
-        ? 'allow-scripts allow-same-origin allow-forms allow-popups'
-        : 'allow-scripts allow-forms'"
-      class="w-full bg-white dark:bg-neutral-950"
-      :class="viewer ? 'flex-1' : ''"
-      :style="viewer ? undefined : { height: height + 'px' }"
-      :title="title || 'MCP app'"
-    />
+    <div v-else class="relative" :class="viewer ? 'flex-1 min-h-0 flex' : ''">
+      <iframe
+        ref="frame"
+        :srcdoc="srcdoc"
+        :src="url"
+        :sandbox="url
+          ? 'allow-scripts allow-same-origin allow-forms allow-popups'
+          : 'allow-scripts allow-forms'"
+        class="w-full bg-white dark:bg-neutral-950"
+        :class="viewer ? 'flex-1' : ''"
+        :style="viewer ? undefined : { height: height + 'px' }"
+        :title="title || 'MCP app'"
+        @load="onFrameLoad"
+      />
+      <Transition name="oc-swap">
+        <div
+          v-if="frameLoading"
+          class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="size-5 animate-spin text-muted" />
+          <span class="text-xs oc-shimmer-text">Loading app…</span>
+        </div>
+      </Transition>
+    </div>
   </div>
 </template>

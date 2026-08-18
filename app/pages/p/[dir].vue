@@ -106,8 +106,18 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
     <!-- projects panel (desktop, toggleable) -->
     <Transition name="oc-slide">
     <aside v-if="projectsPanel" class="hidden md:flex w-48 shrink-0 flex-col bg-elevated/60">
-      <div class="flex items-center gap-2 px-3 h-12 text-[10px] uppercase tracking-widest text-dimmed">
-        Projects
+      <div class="flex items-center gap-2 pl-3 pr-1.5 h-12">
+        <span class="text-[10px] uppercase tracking-widest text-dimmed flex-1">Projects</span>
+        <UTooltip text="Hide projects panel">
+          <UButton
+            icon="i-lucide-panel-left-close"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Hide projects panel"
+            @click="projectsPanel = false"
+          />
+        </UTooltip>
       </div>
       <div class="flex-1 overflow-y-auto px-1.5 pb-2 space-y-0.5">
         <div v-if="projectsLoading && !projectDirs.length" class="px-2 space-y-2 pt-1">
@@ -146,14 +156,14 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
       :style="{ width: sidebarWidth + 'px' }"
     >
       <div class="flex items-center gap-1 pl-3 pr-2 h-12">
-        <UTooltip :text="projectsPanel ? 'Hide projects panel' : 'Show projects panel'">
+        <UTooltip v-if="!projectsPanel" text="Show projects panel">
           <UButton
-            :icon="projectsPanel ? 'i-lucide-panel-left-close' : 'i-lucide-folder-tree'"
+            icon="i-lucide-folder-tree"
             color="neutral"
             variant="ghost"
             size="xs"
-            :aria-label="projectsPanel ? 'Hide projects panel' : 'Show projects panel'"
-            @click="projectsPanel = !projectsPanel"
+            aria-label="Show projects panel"
+            @click="projectsPanel = true"
           />
         </UTooltip>
         <UIcon name="i-lucide-terminal" class="size-4 text-primary shrink-0" />
@@ -192,6 +202,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
     />
 
     <!-- desktop mini rail when collapsed -->
+    <Transition name="oc-slide">
     <aside v-if="!sidebarOpen" class="hidden md:flex w-12 shrink-0 flex-col items-center gap-1 bg-muted py-2">
       <UTooltip text="Show sidebar" :content="{ side: 'right' }">
         <UButton
@@ -240,6 +251,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         />
       </UTooltip>
     </aside>
+    </Transition>
 
     <!-- mobile slideover -->
     <USlideover v-model:open="mobileMenuOpen" side="left" :title="dirName(directory)">

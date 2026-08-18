@@ -86,12 +86,19 @@ export async function callRemoteMcpTool(
 
   // servers often return app links as http://localhost:PORT (their own host):
   // rewrite to the MCP server's hostname so browsers elsewhere can reach them
-  const serverHost = new URL(url).hostname
+  const serverUrl = new URL(url)
   const fixUrl = (link: string) => {
     try {
       const u = new URL(link)
-      if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(u.hostname) && !['localhost', '127.0.0.1'].includes(serverHost)) {
-        u.hostname = serverHost
+      if (
+        ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(u.hostname) &&
+        !['localhost', '127.0.0.1'].includes(serverUrl.hostname)
+      ) {
+        // the app lives behind the same host/proxy as the MCP server:
+        // inherit its protocol and host:port, keep only path + query
+        u.protocol = serverUrl.protocol
+        u.hostname = serverUrl.hostname
+        u.port = serverUrl.port // '' clears an explicit port
         return u.toString()
       }
     } catch { /* not a URL */ }
