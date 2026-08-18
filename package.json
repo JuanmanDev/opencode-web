@@ -6,7 +6,7 @@
   "description": "A better web UI for opencode: chat, projects, MCP apps & UI. Traefik/tinyauth friendly.",
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev --host --port 3011",
+    "dev": "nuxt dev --host=0.0.0.0 --port=3011",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
