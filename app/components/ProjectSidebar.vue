@@ -7,6 +7,7 @@ const dirParam = computed(() => encodeDir(props.directory))
 const { sessions, refreshing, refresh, remove } = useSessions(() => props.directory)
 const { busy: busySessions } = useBusySessions()
 const projectMeta = useProjectMeta()
+const globalSearch = useGlobalSearch()
 
 onMounted(projectMeta.load)
 
@@ -86,6 +87,14 @@ function fmtTime(ts?: number) {
         label="Usage & cost"
         :to="`/p/${dirParam}/stats`"
         @click="emit('navigate')"
+      />
+      <UButton
+        block
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-search"
+        label="Search everything"
+        @click="globalSearch.open.value = true; emit('navigate')"
       />
     </div>
 

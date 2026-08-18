@@ -371,6 +371,8 @@ async function addEntry(name: string, config: Record<string, unknown>) {
       config = { ...config, url: `${window.location.origin}/mcp-demo` }
     }
     await api.mcpAdd(name, config)
+    // POST /mcp only registers in memory; persist so it survives restarts
+    await patchScoped({ mcp: { [name]: config } }).catch(() => {})
     await refresh()
     const status = entries.value.find((e) => e.name === name)?.status
     toast.add({
@@ -446,6 +448,7 @@ async function addCustom() {
     if (!parsed.length) return
     for (const { name, config } of parsed) {
       await api.mcpAdd(name, config)
+      await patchScoped({ mcp: { [name]: config } }).catch(() => {})
     }
     await refresh()
     toast.add({

@@ -85,82 +85,7 @@ function fmtTime(ts?: number) {
   return `${Math.round(diff / 86400_000)}d ago`
 }
 
-// ---- global search: projects, sessions, presets, settings pages ----
-const globalQuery = ref('')
-
-interface SearchHit { type: string; icon: string; label: string; sub?: string; to: string }
-
-const searchHits = computed<SearchHit[]>(() => {
-  const q = globalQuery.value.trim().toLowerCase()
-  if (!q) return []
-  const hits: SearchHit[] = []
-
-  for (const item of knownDirs.value) {
-    const desc = projectMeta.of(item.directory).description || ''
-    if (item.directory.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) {
-      hits.push({
-        type: 'project',
-        icon: 'i-lucide-folder-git-2',
-        label: dirName(item.directory),
-        sub: item.directory,
-        to: `/p/${encodeDir(item.directory)}`
-      })
-    }
-  }
-
-  for (const item of knownDirs.value.slice(0, 12)) {
-    const list = sessionsByDir.value[item.directory] || readSessionsCache(item.directory)
-    for (const s of list) {
-      if ((s.title || '').toLowerCase().includes(q)) {
-        hits.push({
-          type: 'session',
-          icon: 'i-lucide-message-square',
-          label: s.title || 'Untitled session',
-          sub: dirName(item.directory),
-          to: `/p/${encodeDir(item.directory)}/session/${s.id}`
-        })
-      }
-    }
-  }
-
-  try {
-    const presets = JSON.parse(localStorage.getItem('opencode-web.mcp-presets.shared') || '[]') as Array<{ name: string }>
-    for (const p of presets) {
-      if (p.name.toLowerCase().includes(q) && knownDirs.value[0]) {
-        hits.push({
-          type: 'preset',
-          icon: 'i-lucide-layers',
-          label: p.name,
-          sub: 'MCP preset',
-          to: `/p/${encodeDir(knownDirs.value[0]!.directory)}/mcp`
-        })
-      }
-    }
-  } catch { /* ignore */ }
-
-  // settings/config pages
-  for (const item of knownDirs.value.slice(0, 8)) {
-    const name = dirName(item.directory).toLowerCase()
-    if ('mcp servers config settings'.includes(q) || name.includes(q)) {
-      hits.push({
-        type: 'config',
-        icon: 'i-lucide-server-cog',
-        label: `MCP settings — ${dirName(item.directory)}`,
-        to: `/p/${encodeDir(item.directory)}/mcp`
-      })
-    }
-    if ('usage cost stats tokens'.includes(q) || name.includes(q)) {
-      hits.push({
-        type: 'config',
-        icon: 'i-lucide-chart-column',
-        label: `Usage & cost — ${dirName(item.directory)}`,
-        to: `/p/${encodeDir(item.directory)}/stats`
-      })
-    }
-  }
-
-  return hits.slice(0, 20)
-})
+const globalSearch = useGlobalSearch()
 
 // description editing
 const editOpen = ref(false)
@@ -200,43 +125,15 @@ function saveEdit() {
         class="mb-6"
       />
 
-      <!-- global search -->
-      <div class="relative max-w-2xl mb-4">
-        <UInput
-          v-model="globalQuery"
-          size="lg"
-          icon="i-lucide-search"
-          placeholder="Search projects, sessions, presets, settings…"
-          class="w-full"
-          :ui="{ trailing: 'pe-1' }"
-          @keydown.esc="globalQuery = ''"
-        >
-          <template v-if="globalQuery" #trailing>
-            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="globalQuery = ''" />
-          </template>
-        </UInput>
-        <CollapseTransition>
-          <div
-            v-if="globalQuery.trim()"
-            class="absolute top-full left-0 right-0 mt-1 z-30 rounded-sm bg-elevated shadow-xl divide-y divide-default max-h-96 overflow-y-auto"
-          >
-            <NuxtLink
-              v-for="(hit, i) in searchHits"
-              :key="i"
-              :to="hit.to"
-              class="oc-row flex items-center gap-2.5 px-3 py-2 hover:bg-accented"
-            >
-              <UIcon :name="hit.icon" class="size-4 text-dimmed shrink-0" />
-              <span class="text-sm truncate flex-1">{{ hit.label }}</span>
-              <span v-if="hit.sub" class="text-[10px] text-dimmed font-mono truncate max-w-40">{{ hit.sub }}</span>
-              <UBadge size="sm" variant="subtle" color="neutral">{{ hit.type }}</UBadge>
-            </NuxtLink>
-            <div v-if="!searchHits.length" class="px-3 py-4 text-sm text-dimmed text-center">
-              No results for “{{ globalQuery }}”
-            </div>
-          </div>
-        </CollapseTransition>
-      </div>
+      <!-- global search (modal, Ctrl+K) -->
+      <button
+        class="oc-row flex items-center gap-2.5 w-full max-w-2xl mb-4 rounded-sm bg-muted hover:bg-elevated px-3 py-2.5 text-sm text-dimmed cursor-pointer"
+        @click="globalSearch.open.value = true"
+      >
+        <UIcon name="i-lucide-search" class="size-4" />
+        <span class="flex-1 text-left">Search projects, sessions, MCP servers, presets…</span>
+        <UKbd size="sm">Ctrl</UKbd><UKbd size="sm">K</UKbd>
+      </button>
 
       <div class="flex flex-col sm:flex-row gap-2 mb-8 max-w-2xl">
         <UInput

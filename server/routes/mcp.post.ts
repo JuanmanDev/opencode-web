@@ -87,6 +87,68 @@ const TOOLS = [
       properties: { directory: { type: 'string' } },
       required: ['directory']
     }
+  },
+  {
+    name: 'list_mcp',
+    description: 'List MCP servers with status, transport and (for remote servers) their tools.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string' },
+        include_tools: { type: 'boolean', description: 'also fetch tool lists from remote servers (slower)' }
+      },
+      required: ['directory']
+    }
+  },
+  {
+    name: 'set_mcp_mode',
+    description: 'Set an MCP server to off, ask (permission prompt) or auto (no ask). Persists in the opencode config.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string' },
+        server: { type: 'string' },
+        mode: { type: 'string', enum: ['off', 'ask', 'auto'] },
+        global: { type: 'boolean', description: 'apply to the global config instead of the project' }
+      },
+      required: ['directory', 'server', 'mode']
+    }
+  },
+  {
+    name: 'set_tool_mode',
+    description: 'Set a single tool (id like server_tool) to off, ask, auto or inherit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string' },
+        tool: { type: 'string' },
+        mode: { type: 'string', enum: ['off', 'ask', 'auto', 'inherit'] },
+        global: { type: 'boolean' }
+      },
+      required: ['directory', 'tool', 'mode']
+    }
+  },
+  {
+    name: 'fork_session',
+    description: 'Fork a chat session (optionally from a specific message id) and return the new session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string' },
+        session_id: { type: 'string' },
+        message_id: { type: 'string' }
+      },
+      required: ['directory', 'session_id']
+    }
+  },
+  {
+    name: 'create_project',
+    description: 'Register a directory as an opencode project (creates its first session).',
+    inputSchema: {
+      type: 'object',
+      properties: { directory: { type: 'string' }, title: { type: 'string' } },
+      required: ['directory']
+    }
   }
 ]
 
@@ -150,6 +212,62 @@ async function callTool(name: string, args: Record<string, any>) {
       return textResult(await opencodeFetch('/config/providers', { query: dir }))
     case 'mcp_status':
       return textResult(await opencodeFetch('/mcp', { query: dir }))
+    case 'list_mcp': {
+      const [status, config] = await Promise.all([
+        opencodeFetch<Record<string, { status?: string }>>('/mcp', { query: dir }).catch(() => ({} as Record<string, { status?: string }>)),
+        opencodeFetch<{ mcp?: Record<string, McpRemoteEntry> }>('/config', { query: dir }).catch(() => ({ mcp: {} as Record<string, McpRemoteEntry> }))
+      ])
+      const servers: Record<string, unknown> = {}
+      for (const [sname, entry] of Object.entries(config.mcp || {})) {
+        servers[sname] = {
+          status: status[sname]?.status || 'unknown',
+          type: entry.type,
+          url: entry.url,
+          enabled: entry.enabled !== false
+        }
+      }
+      return textResult(servers)
+    }
+    case 'set_mcp_mode': {
+      const path = args.global ? '/global/config' : '/config'
+      const query = args.global ? {} : dir
+      const body: Record<string, unknown> = args.mode === 'off'
+        ? { mcp: { [args.server]: { enabled: false } } }
+        : {
+            mcp: { [args.server]: { enabled: true } },
+            permission: { [`${args.server}_*`]: args.mode === 'ask' ? 'ask' : 'allow' }
+          }
+      await opencodeFetch(path, { method: 'PATCH', body, query })
+      return textResult(`${args.server} set to ${args.mode} (applies to new sessions)`)
+    }
+    case 'set_tool_mode': {
+      const path = args.global ? '/global/config' : '/config'
+      const query = args.global ? {} : dir
+      const body: Record<string, unknown> =
+        args.mode === 'off'
+          ? { tools: { [args.tool]: false } }
+          : args.mode === 'inherit'
+            ? { tools: { [args.tool]: true } }
+            : { tools: { [args.tool]: true }, permission: { [args.tool]: args.mode === 'ask' ? 'ask' : 'allow' } }
+      await opencodeFetch(path, { method: 'PATCH', body, query })
+      return textResult(`${args.tool} set to ${args.mode}`)
+    }
+    case 'fork_session':
+      return textResult(
+        await opencodeFetch(`/session/${args.session_id}/fork`, {
+          method: 'POST',
+          body: args.message_id ? { messageID: args.message_id } : {},
+          query: dir
+        })
+      )
+    case 'create_project':
+      return textResult(
+        await opencodeFetch('/session', {
+          method: 'POST',
+          body: args.title ? { title: args.title } : {},
+          query: dir
+        })
+      )
     default:
       throw createError({ statusCode: 400, message: `Unknown tool: ${name}` })
   }
