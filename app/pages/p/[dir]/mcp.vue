@@ -248,15 +248,23 @@ async function setToolMode(toolId: string, mode: ToolMode) {
   }
 }
 
-const TOOL_MODES = [
-  { label: 'inherit', value: 'inherit' },
-  { label: 'off', value: 'deny' },
-  { label: 'ask', value: 'ask' },
-  { label: 'auto', value: 'allow' }
-]
-
 onMounted(refresh)
 watch(directory, refresh)
+
+// filter across server names and tool names
+const filter = ref('')
+const filteredEntries = computed(() => {
+  const q = filter.value.trim().toLowerCase()
+  if (!q) return entries.value
+  return entries.value
+    .map((entry) => {
+      const serverHit = entry.name.toLowerCase().includes(q)
+      const tools = entry.tools.filter((t) => t.name.toLowerCase().includes(q))
+      if (!serverHit && !tools.length) return null
+      return { ...entry, tools: serverHit && !tools.length ? entry.tools : tools }
+    })
+    .filter(Boolean) as McpEntry[]
+})
 
 function statusColor(status: string) {
   if (['connected', 'running', 'ok', 'success'].includes(status)) return 'success'
@@ -522,6 +530,19 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         </UTooltip>
       </div>
 
+      <UInput
+        v-model="filter"
+        size="sm"
+        icon="i-lucide-search"
+        placeholder="Filter servers and tools…"
+        class="w-full mb-2"
+        :ui="{ trailing: 'pe-1' }"
+      >
+        <template v-if="filter" #trailing>
+          <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="filter = ''" />
+        </template>
+      </UInput>
+
       <div class="bg-muted rounded-sm divide-y divide-default">
         <div v-if="loading && !entries.length" class="p-4 space-y-3">
           <div v-for="i in 3" :key="i" class="flex items-center gap-3">
@@ -533,7 +554,10 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             <USkeleton class="h-5 w-9 rounded-full" />
           </div>
         </div>
-        <div v-for="entry in entries" :key="entry.name">
+        <div v-if="filter && !filteredEntries.length && entries.length" class="px-4 py-6 text-sm text-dimmed text-center">
+          Nothing matches “{{ filter }}”
+        </div>
+        <div v-for="entry in filteredEntries" :key="entry.name">
           <div class="flex items-center gap-3 px-4 py-3">
             <!-- expandable when the server's tool list is known -->
             <component
@@ -576,27 +600,15 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               v-if="entry.tools.length && expanded.includes(entry.name)"
               class="px-11 pb-3 space-y-1.5"
             >
-              <div
+              <McpToolRow
                 v-for="tool in entry.tools"
                 :key="tool.id"
-                class="flex items-center gap-2"
-              >
-                <div class="min-w-0 flex-1">
-                  <div class="font-mono text-xs" :class="toolMode(tool.id) === 'deny' ? 'text-dimmed line-through' : ''">
-                    {{ tool.name }}
-                  </div>
-                  <div v-if="tool.description" class="text-[10px] text-dimmed truncate">{{ tool.description }}</div>
-                </div>
-                <USelect
-                  :items="TOOL_MODES"
-                  value-key="value"
-                  :model-value="toolMode(tool.id)"
-                  :disabled="!entry.enabled || toggling === tool.id"
-                  size="xs"
-                  class="w-24 shrink-0"
-                  @update:model-value="(v) => setToolMode(tool.id, v as any)"
-                />
-              </div>
+                :name="tool.name"
+                :description="tool.description"
+                :model-value="toolMode(tool.id)"
+                :disabled="!entry.enabled || toggling === tool.id"
+                @update:model-value="(v) => setToolMode(tool.id, v)"
+              />
             </div>
           </CollapseTransition>
         </div>

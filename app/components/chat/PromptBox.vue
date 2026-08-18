@@ -44,6 +44,7 @@ const variant = ref<string>(DEFAULT)
 const mcpMode = ref<string>(DEFAULT)
 const disabledServers = ref<string[]>([])
 const disabledTools = ref<string[]>([])
+const forcedTools = ref<string[]>([])
 const optionsOpen = ref(false)
 const providersOpen = ref(false)
 const openServers = ref<string[]>([])
@@ -125,6 +126,21 @@ const enabledCount = computed(
   () => props.mcpInfo.filter((s) => !disabledServers.value.includes(s.name)).length
 )
 
+// filter across server names and tool names (long lists get unwieldy)
+const mcpFilter = ref('')
+const filteredMcpInfo = computed(() => {
+  const q = mcpFilter.value.trim().toLowerCase()
+  if (!q) return props.mcpInfo
+  return props.mcpInfo
+    .map((server) => {
+      const serverHit = server.name.toLowerCase().includes(q)
+      const tools = server.tools.filter((t) => t.name.toLowerCase().includes(q))
+      if (!serverHit && !tools.length) return null
+      return { ...server, tools: serverHit && !tools.length ? server.tools : tools }
+    })
+    .filter(Boolean) as typeof props.mcpInfo
+})
+
 function statusColor(status: string) {
   if (['connected', 'running', 'ok'].includes(status)) return 'success' as const
   if (['failed', 'error'].includes(status)) return 'error' as const
@@ -144,6 +160,7 @@ onMounted(() => {
     if (saved.mcpMode) mcpMode.value = saved.mcpMode
     if (Array.isArray(saved.disabledServers)) disabledServers.value = saved.disabledServers
     if (Array.isArray(saved.disabledTools)) disabledTools.value = saved.disabledTools
+    if (Array.isArray(saved.forcedTools)) forcedTools.value = saved.forcedTools
   } catch { /* ignore */ }
 })
 
@@ -155,14 +172,15 @@ watch(modelItems, (items) => {
   if (candidate) model.value = candidate
 }, { immediate: true })
 
-watch([model, agent, variant, mcpMode, disabledServers, disabledTools], () => {
+watch([model, agent, variant, mcpMode, disabledServers, disabledTools, forcedTools], () => {
   localStorage.setItem(prefsKey.value, JSON.stringify({
     model: model.value,
     agent: agent.value,
     variant: variant.value,
     mcpMode: mcpMode.value,
     disabledServers: disabledServers.value,
-    disabledTools: disabledTools.value
+    disabledTools: disabledTools.value,
+    forcedTools: forcedTools.value
   }))
 }, { deep: true })
 
@@ -174,6 +192,20 @@ function toggleServer(name: string, enabled: boolean) {
 
 function setAllServers(enabled: boolean) {
   disabledServers.value = enabled ? [] : props.mcpInfo.map((s) => s.name)
+}
+
+// per-prompt tool mode: inherit (project default) / deny / allow
+function toolChatMode(id: string): 'inherit' | 'deny' | 'ask' | 'allow' {
+  if (disabledTools.value.includes(id)) return 'deny'
+  if (forcedTools.value.includes(id)) return 'allow'
+  return 'inherit'
+}
+
+function setToolChatMode(id: string, mode: 'inherit' | 'deny' | 'ask' | 'allow') {
+  disabledTools.value = disabledTools.value.filter((t) => t !== id)
+  forcedTools.value = forcedTools.value.filter((t) => t !== id)
+  if (mode === 'deny') disabledTools.value = [...disabledTools.value, id]
+  else if (mode === 'allow') forcedTools.value = [...forcedTools.value, id]
 }
 
 function toggleTool(id: string, enabled: boolean) {
@@ -266,6 +298,7 @@ function send() {
       } else {
         for (const tool of server.tools) {
           if (disabledTools.value.includes(tool.id)) tools[tool.id] = false
+          else if (forcedTools.value.includes(tool.id)) tools[tool.id] = true
         }
       }
     }
@@ -380,7 +413,7 @@ function onKeydown(e: KeyboardEvent) {
       <!-- collapsible options; scrolls internally on small screens so the
            on-screen keyboard never pushes the selects out of reach -->
       <CollapseTransition>
-      <div v-if="optionsOpen" class="space-y-2 max-h-[45dvh] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible">
+      <div v-if="optionsOpen" class="space-y-2 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible">
         <!-- one row on wide screens: model / think / agent -->
         <div class="flex flex-col sm:flex-row gap-1.5">
           <UFormField label="Model" size="xs" class="flex-1 min-w-0">
@@ -516,6 +549,19 @@ function onKeydown(e: KeyboardEvent) {
             <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
           </div>
 
+          <UInput
+            v-model="mcpFilter"
+            size="xs"
+            icon="i-lucide-search"
+            placeholder="Filter servers and tools…"
+            class="w-full"
+            :ui="{ trailing: 'pe-1' }"
+          >
+            <template v-if="mcpFilter" #trailing>
+              <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="mcpFilter = ''" />
+            </template>
+          </UInput>
+
           <!-- saved groups: apply with one click, save the current selection -->
           <div class="flex flex-wrap items-center gap-1">
             <template v-for="g in groups" :key="g.name">
@@ -558,8 +604,11 @@ function onKeydown(e: KeyboardEvent) {
             />
           </div>
 
-          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-[35dvh] sm:max-h-96 overflow-y-auto overscroll-contain">
-              <div v-for="server in mcpInfo" :key="server.name">
+          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-[50dvh] sm:max-h-[60vh] overflow-y-auto overscroll-contain">
+              <div v-if="!filteredMcpInfo.length" class="px-3 py-4 text-xs text-dimmed text-center">
+                Nothing matches “{{ mcpFilter }}”
+              </div>
+              <div v-for="server in filteredMcpInfo" :key="server.name">
                 <!-- accordion header -->
                 <div class="flex items-center gap-2 px-2.5 py-2">
                   <!-- expandable only when the server's tool list is known -->
@@ -600,16 +649,15 @@ function onKeydown(e: KeyboardEvent) {
                     v-if="server.tools.length && openServers.includes(server.name)"
                     class="px-8 pb-2 space-y-1"
                   >
-                    <UCheckbox
+                    <McpToolRow
                       v-for="tool in server.tools"
                       :key="tool.id"
-                      size="sm"
-                      :label="tool.name"
+                      :name="tool.name"
                       :description="tool.description"
+                      :model-value="toolChatMode(tool.id)"
+                      ask-disabled
                       :disabled="disabledServers.includes(server.name)"
-                      :model-value="!disabledTools.includes(tool.id)"
-                      :ui="{ label: 'font-mono text-xs', description: 'text-[10px] text-dimmed' }"
-                      @update:model-value="(v) => toggleTool(tool.id, v === true)"
+                      @update:model-value="(v) => setToolChatMode(tool.id, v)"
                     />
                   </div>
                 </CollapseTransition>
