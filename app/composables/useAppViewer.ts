@@ -8,6 +8,8 @@ export interface McpAppResource {
   title?: string
   remoteDom?: boolean
   script?: string
+  app?: { html: string }
+  appData?: { toolInput?: unknown; toolResult?: unknown }
 }
 
 export function useAppRegistry() {

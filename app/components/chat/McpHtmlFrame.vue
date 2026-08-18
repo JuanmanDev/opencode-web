@@ -9,6 +9,9 @@ const props = defineProps<{
   html?: string
   url?: string
   script?: string
+  /** MCP Apps (SEP-1865) template: host speaks JSON-RPC over postMessage */
+  app?: { html: string }
+  appData?: { toolInput?: unknown; toolResult?: unknown }
   title?: string
   /** enables the open-in-sidebar / fullscreen actions + shareable URL state */
   appId?: string
@@ -95,11 +98,69 @@ addEventListener('load',post); new ResizeObserver(post).observe(document.documen
 
 const srcdoc = computed(() => {
   if (props.url) return undefined
+  if (props.app) return props.app.html
   if (props.script) {
     return REMOTE_DOM_SHELL_HEAD + props.script.replace(/<\/script>/gi, '<\\/script>') + REMOTE_DOM_SHELL_TAIL
   }
   return props.html
 })
+
+// ---- MCP Apps host protocol (JSON-RPC over postMessage) ----
+function postToFrame(message: Record<string, unknown>) {
+  frame.value?.contentWindow?.postMessage(message, '*')
+}
+
+function handleAppRpc(msg: { jsonrpc?: string; id?: number | string; method?: string; params?: any }): boolean {
+  if (!props.app || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return false
+  switch (msg.method) {
+    case 'ui/initialize':
+      postToFrame({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: {
+          protocolVersion: '2026-01-26',
+          hostCapabilities: {},
+          hostContext: { theme: 'dark', displayMode: props.viewer ? 'fullscreen' : 'inline' }
+        }
+      })
+      return true
+    case 'ui/notifications/initialized':
+      markReady()
+      postToFrame({
+        jsonrpc: '2.0',
+        method: 'ui/notifications/tool-input',
+        params: { arguments: props.appData?.toolInput || {} }
+      })
+      postToFrame({
+        jsonrpc: '2.0',
+        method: 'ui/notifications/tool-result',
+        params: props.appData?.toolResult || {}
+      })
+      return true
+    case 'ui/notifications/size-changed': {
+      const h = msg.params?.height
+      if (typeof h === 'number' && h > 40 && h < 6000) {
+        markReady()
+        height.value = Math.max(h, props.viewer ? 400 : 60)
+      }
+      return true
+    }
+    case 'ui/open-link':
+      if (typeof msg.params?.url === 'string') window.open(msg.params.url, '_blank', 'noopener')
+      if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: {} })
+      return true
+    case 'ui/message':
+    case 'ui/request-display-mode':
+    case 'ui/update-model-context':
+      if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: {} })
+      return true
+    default:
+      if (msg.id != null) {
+        postToFrame({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: `Unsupported: ${msg.method}` } })
+      }
+      return true
+  }
+}
 
 // Load lifecycle (mcp-ui spec): apps should post ui-lifecycle-iframe-ready.
 // loading -> ready (fade in, brief 'loaded' badge)
@@ -150,6 +211,7 @@ function onMessage(e: MessageEvent) {
   if (e.source !== frame.value?.contentWindow) return
   const data = e.data
   if (data && typeof data === 'object') {
+    if (handleAppRpc(data)) return
     if (typeof data.type === 'string' && /ready|lifecycle/i.test(data.type)) markReady()
     const h = data.payload?.height ?? data.height
     if (typeof h === 'number' && h > 40 && h < 6000) {

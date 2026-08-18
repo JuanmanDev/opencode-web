@@ -8,13 +8,13 @@ const open = ref(false)
 // opencode strips ui:// resources from MCP tool outputs, so for UI-looking
 // MCP tools we re-fetch the app from the remote server ourselves
 const route = useRoute()
-const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string }>>([])
+const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string; app?: { html: string }; appData?: { toolInput?: unknown; toolResult?: unknown } }>>([])
 const { register } = useAppRegistry()
 
 // every rendered app registers under a stable id -> shareable ?app= URLs
 watch(fetchedResources, () => {
   fetchedResources.value.forEach((res, i) => {
-    if (res.html || res.url || res.script) register(`${props.part.id}:f${i}`, res)
+    if (res.html || res.url || res.script || res.app) register(`${props.part.id}:f${i}`, res)
   })
 }, { deep: true, immediate: true })
 const fetchingUi = ref(false)
@@ -25,7 +25,12 @@ async function fetchUi() {
   fetchingUi.value = true
   try {
     const dirParam = route.params.dir as string | undefined
-    const res = await $fetch<{ resources: Array<{ html?: string; url?: string; title?: string }> }>(
+    const input = (props.part.state as { input?: Record<string, unknown> })?.input || {}
+    const res = await $fetch<{
+      resources: Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string }>
+      structuredContent?: unknown
+      app?: { resourceUri: string; html: string } | null
+    }>(
       '/api/v1/mcp-call',
       {
         method: 'POST',
@@ -33,11 +38,26 @@ async function fetchUi() {
         body: {
           directory: dirParam ? decodeDir(dirParam) : undefined,
           toolId: props.part.tool,
-          arguments: (props.part.state as { input?: Record<string, unknown> })?.input || {}
+          arguments: input
         }
       }
     )
-    fetchedResources.value = res.resources || []
+    if (res.app) {
+      // MCP Apps (SEP-1865): render the declared template, stream data via RPC
+      fetchedResources.value = [{
+        title: res.app.resourceUri,
+        app: { html: res.app.html },
+        appData: {
+          toolInput: input,
+          toolResult: {
+            content: [{ type: 'text', text: (props.part.state as { output?: string })?.output || '' }],
+            structuredContent: res.structuredContent
+          }
+        }
+      }]
+    } else {
+      fetchedResources.value = res.resources || []
+    }
   } catch {
     // local server, auth or non-MCP tool: nothing to render
   } finally {
@@ -222,6 +242,8 @@ watch(htmlResources, () => {
           :html="res.html"
           :url="res.url"
           :script="res.script"
+          :app="res.app"
+          :app-data="res.appData"
           :title="res.title || part.tool"
           :app-id="`${part.id}:f${i}`"
         />

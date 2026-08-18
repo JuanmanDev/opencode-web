@@ -30,12 +30,16 @@ const cachedCall = defineCachedFunction(
     if (selfOrigin && new URL(targetUrl).pathname.replace(/\/$/, '') === '/mcp-demo') {
       targetUrl = `${selfOrigin}/mcp-demo`
     }
-    return callRemoteMcpTool(
+    const result = await callRemoteMcpTool(
       targetUrl,
       resolved.entry.headers || {},
       resolved.tool,
       JSON.parse(argsJson)
     )
+    // MCP Apps (SEP-1865): fetch the tool's ui:// template when declared
+    const app = await fetchAppTemplate(targetUrl, resolved.entry.headers || {}, resolved.tool)
+      .catch(() => null)
+    return { ...result, app }
   },
   {
     name: 'mcp-call',

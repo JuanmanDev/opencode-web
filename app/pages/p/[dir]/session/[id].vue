@@ -397,7 +397,11 @@ function upsertMessage(info: MessageInfo) {
   } else {
     messages.value.push({ info, parts: [] })
   }
-  if (info.role === 'assistant' && !info.time?.completed && !info.error) busy.value = true
+  if (info.role === 'assistant') {
+    // completed message clears busy even when session.idle got lost in an
+    // SSE reconnect gap; a following incomplete message flips it back on
+    busy.value = !info.time?.completed && !info.error
+  }
   scrollToBottom()
 }
 
@@ -466,6 +470,19 @@ useOpencodeEvents(directory, (event) => {
       permissions.value = permissions.value.filter((p) => p.id !== id)
       break
     }
+    case 'server.connected':
+      // SSE (re)connected: events may have been missed while offline
+      if (!loading.value) {
+        api.messages(sessionId.value).then((msgs) => {
+          messages.value = msgs
+          const last = msgs[msgs.length - 1]
+          busy.value = Boolean(
+            last && last.info.role === 'assistant' && !last.info.time?.completed && !last.info.error
+          )
+        }).catch(() => {})
+        loadQuestions()
+      }
+      break
     default:
       if (event.type.startsWith('question')) loadQuestions()
   }
@@ -963,6 +980,8 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
           :html="viewerResource.html"
           :url="viewerResource.url"
           :script="viewerResource.script"
+          :app="viewerResource.app"
+          :app-data="viewerResource.appData"
           :title="viewerResource.title"
           viewer
           class="flex-1 min-h-0"

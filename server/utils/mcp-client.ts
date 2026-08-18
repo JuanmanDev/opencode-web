@@ -55,6 +55,34 @@ export interface McpUiResource {
 export interface McpCallResult {
   text: string
   resources: McpUiResource[]
+  structuredContent?: unknown
+}
+
+/**
+ * MCP Apps (SEP-1865): if the tool declares _meta.ui.resourceUri, read the
+ * ui:// template resource so the host can render it and stream data in.
+ */
+export async function fetchAppTemplate(
+  url: string,
+  headers: Record<string, string>,
+  toolName: string
+): Promise<{ resourceUri: string; html: string } | null> {
+  const init = await mcpRpc(url, headers, 'initialize', {
+    protocolVersion: '2026-01-26',
+    capabilities: {
+      extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } }
+    },
+    clientInfo: { name: 'opencode-web', version: '1' }
+  }, 1)
+  const list = await mcpRpc(url, headers, 'tools/list', {}, 2, init.sessionId)
+  const tool = (Array.isArray(list.result?.tools) ? list.result.tools : [])
+    .find((t: any) => t?.name === toolName)
+  const resourceUri = tool?._meta?.ui?.resourceUri
+  if (typeof resourceUri !== 'string' || !resourceUri.startsWith('ui://')) return null
+  const read = await mcpRpc(url, headers, 'resources/read', { uri: resourceUri }, 3, init.sessionId)
+  const content = (read.result?.contents || [])[0]
+  if (typeof content?.text !== 'string') return null
+  return { resourceUri, html: content.text }
 }
 
 /** Initialize + tools/call against a remote MCP server; extract UI resources. */
@@ -128,7 +156,7 @@ export async function callRemoteMcpTool(
       }
     }
   }
-  return { text: texts.join('\n\n'), resources }
+  return { text: texts.join('\n\n'), resources, structuredContent: call.result?.structuredContent }
 }
 
 /** Longest-prefix match of an opencode tool id (`server_tool`) to config entries. */

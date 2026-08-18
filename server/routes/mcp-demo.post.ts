@@ -23,10 +23,34 @@ h2{margin:0 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:.12em;c
 .dim{color:#6b6b74;font-size:11px}
 </style>`
 
+// MCP Apps (SEP-1865) template: one generic view that handshakes with the
+// host over JSON-RPC and renders structuredContent.html from tool results
+const APP_TEMPLATE_URI = 'ui://opencode-web-demo/app-template'
+const APP_TEMPLATE = `${BASE_CSS}<div id="root" class="dim">waiting for data…</div><script>
+function send(m){parent.postMessage(m,'*')}
+send({jsonrpc:'2.0',id:1,method:'ui/initialize',params:{appCapabilities:{availableDisplayModes:['inline','fullscreen']},clientInfo:{name:'opencode-web-demo',version:'1'}}});
+addEventListener('message',function(e){
+  var m=e.data; if(!m||m.jsonrpc!=='2.0')return;
+  if(m.id===1&&m.result){send({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}});return}
+  if(m.method==='ui/notifications/tool-result'){
+    var html=m.params&&m.params.structuredContent&&m.params.structuredContent.html;
+    if(html)render(html);
+  }
+});
+function render(html){
+  var r=document.getElementById('root');r.classList.remove('dim');r.innerHTML=html;
+  r.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.replaceWith(s)});
+  size();
+}
+function size(){send({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight}})}
+new ResizeObserver(size).observe(document.documentElement);
+<\/script>`
+
 function uiResource(name: string, html: string, textFallback: string) {
   return {
     content: [
       { type: 'text', text: textFallback },
+      // mcp-ui compatible embedded resource (rawHtml)
       {
         type: 'resource',
         resource: {
@@ -35,7 +59,9 @@ function uiResource(name: string, html: string, textFallback: string) {
           text: `${BASE_CSS}${html}${SIZER}`
         }
       }
-    ]
+    ],
+    // MCP Apps: the registered template renders this
+    structuredContent: { html }
   }
 }
 
@@ -233,14 +259,37 @@ export default defineEventHandler(async (event) => {
       case 'initialize':
         return respond({
           protocolVersion: '2025-06-18',
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            resources: {},
+            extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } }
+          },
           serverInfo: { name: 'opencode-web-demo-ui', version: '1' },
-          instructions: 'Demo MCP-UI server: tools render interactive cards (metric, background, forex chart, weather) directly in the chat.'
+          instructions: 'Demo MCP-UI / MCP Apps server: tools render interactive cards (metric, background, forex chart, weather) directly in the chat.'
         })
       case 'ping':
         return respond({})
       case 'tools/list':
-        return respond({ tools: TOOLS })
+        // MCP Apps: every tool renders through the shared ui:// template
+        return respond({
+          tools: TOOLS.map((t) => ({ ...t, _meta: { ui: { resourceUri: APP_TEMPLATE_URI } } }))
+        })
+      case 'resources/list':
+        return respond({
+          resources: [{
+            uri: APP_TEMPLATE_URI,
+            name: 'demo_app_template',
+            mimeType: 'text/html;profile=mcp-app'
+          }]
+        })
+      case 'resources/read': {
+        if (message.params?.uri !== APP_TEMPLATE_URI) {
+          return { jsonrpc: '2.0' as const, id: message.id, error: { code: -32002, message: 'Unknown resource' } }
+        }
+        return respond({
+          contents: [{ uri: APP_TEMPLATE_URI, mimeType: 'text/html;profile=mcp-app', text: APP_TEMPLATE }]
+        })
+      }
       case 'tools/call': {
         const { name, arguments: args } = message.params || {}
         try {
