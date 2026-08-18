@@ -47,8 +47,9 @@ export interface McpUiResource {
   html?: string
   url?: string
   title?: string
-  /** mcp-ui remote-dom component script — needs a framework host, not an iframe */
+  /** mcp-ui remote-dom component script, rendered in a generic host shell */
   remoteDom?: boolean
+  script?: string
 }
 
 export interface McpCallResult {
@@ -93,7 +94,7 @@ export async function callRemoteMcpTool(
       const uri = typeof r.uri === 'string' ? r.uri : undefined
       const mime = typeof r.mimeType === 'string' ? r.mimeType : ''
       if (mime.startsWith('application/vnd.mcp-ui.remote-dom')) {
-        resources.push({ remoteDom: true, title: uri })
+        resources.push({ remoteDom: true, title: uri, script: typeof r.text === 'string' ? r.text : undefined })
       } else if (mime === 'text/html' && typeof r.text === 'string') {
         resources.push({ html: r.text, title: uri })
       } else if (mime === 'text/uri-list' && typeof r.text === 'string') {
@@ -102,7 +103,7 @@ export async function callRemoteMcpTool(
       } else if (typeof r.text === 'string' && uri?.startsWith('ui://') && r.text.trim().startsWith('<')) {
         resources.push({ html: r.text, title: uri })
       } else if (uri?.startsWith('ui://')) {
-        resources.push({ remoteDom: true, title: uri })
+        resources.push({ remoteDom: true, title: uri, script: typeof r.text === 'string' ? r.text : undefined })
       }
     }
   }

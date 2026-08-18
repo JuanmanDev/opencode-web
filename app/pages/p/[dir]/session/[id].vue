@@ -39,6 +39,19 @@ const chime = useChime()
 const projectMeta = useProjectMeta()
 onMounted(projectMeta.load)
 
+// ---- MCP app viewer (URL-addressable: ?app=<id>&view=side|full) ----
+const { registry } = useAppRegistry()
+const viewer = useAppViewer()
+const viewerResource = computed(() =>
+  viewer.appId.value ? registry.value[viewer.appId.value] : undefined
+)
+const isSmallScreen = ref(false)
+onMounted(() => {
+  const mq = window.matchMedia('(max-width: 1023px)')
+  isSmallScreen.value = mq.matches
+  mq.addEventListener('change', (e) => { isSmallScreen.value = e.matches })
+})
+
 // ---- agent questions ----
 const questions = ref<Array<{ id: string; questions: any[] }>>([])
 
@@ -649,7 +662,8 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col min-h-0">
+  <div class="flex-1 flex min-h-0">
+  <div class="flex-1 flex flex-col min-h-0 min-w-0">
     <!-- session header -->
     <div class="hidden md:flex items-center gap-2 h-12 px-4 bg-muted/50 shrink-0">
       <UInput
@@ -866,6 +880,62 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       @abort="abort"
       @refresh-providers="loadMeta"
     />
+
+    </div>
+
+    <!-- MCP app side panel (?app=…&view=side) -->
+    <Transition name="oc-slide">
+      <aside
+        v-if="viewerResource && viewer.view.value === 'side'"
+        class="hidden lg:flex w-[42%] max-w-2xl shrink-0 flex-col border-l border-default bg-muted/40 p-2 gap-2"
+      >
+        <div class="flex items-center gap-1 shrink-0">
+          <span class="text-xs text-muted truncate flex-1 px-1">{{ viewerResource.title || 'MCP app' }}</span>
+          <UTooltip text="Fullscreen">
+            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" @click="viewer.open(viewer.appId.value, 'full')" />
+          </UTooltip>
+          <UTooltip text="Close panel">
+            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="viewer.close()" />
+          </UTooltip>
+        </div>
+        <ChatMcpHtmlFrame
+          :key="viewer.appId.value"
+          :html="viewerResource.html"
+          :url="viewerResource.url"
+          :script="viewerResource.script"
+          :title="viewerResource.title"
+          viewer
+          class="flex-1 min-h-0"
+        />
+      </aside>
+    </Transition>
+
+    <!-- MCP app fullscreen (?app=…&view=full) -->
+    <Teleport to="body">
+      <div
+        v-if="viewerResource && (viewer.view.value === 'full' || (viewer.view.value === 'side' && isSmallScreen))"
+        class="fixed inset-0 z-50 bg-default flex flex-col p-2 sm:p-4 gap-2"
+      >
+        <div class="flex items-center gap-1 shrink-0">
+          <span class="text-sm text-muted truncate flex-1 px-1">{{ viewerResource.title || 'MCP app' }}</span>
+          <UTooltip text="Dock to side panel">
+            <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="hidden lg:inline-flex" @click="viewer.open(viewer.appId.value, 'side')" />
+          </UTooltip>
+          <UTooltip text="Close">
+            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="viewer.close()" />
+          </UTooltip>
+        </div>
+        <ChatMcpHtmlFrame
+          :key="`full-${viewer.appId.value}`"
+          :html="viewerResource.html"
+          :url="viewerResource.url"
+          :script="viewerResource.script"
+          :title="viewerResource.title"
+          viewer
+          class="flex-1 min-h-0"
+        />
+      </div>
+    </Teleport>
 
     <!-- diff slideover -->
     <USlideover v-model:open="diffOpen" title="File changes" description="Everything this session edited.">

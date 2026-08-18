@@ -8,7 +8,15 @@ const open = ref(false)
 // opencode strips ui:// resources from MCP tool outputs, so for UI-looking
 // MCP tools we re-fetch the app from the remote server ourselves
 const route = useRoute()
-const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean }>>([])
+const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string }>>([])
+const { register } = useAppRegistry()
+
+// every rendered app registers under a stable id -> shareable ?app= URLs
+watch(fetchedResources, () => {
+  fetchedResources.value.forEach((res, i) => {
+    if (res.html || res.url || res.script) register(`${props.part.id}:f${i}`, res)
+  })
+}, { deep: true, immediate: true })
 const fetchingUi = ref(false)
 const UI_TOOL = /(^|_)(show|demo|ui|iframe|render|display|status)/i
 
@@ -119,6 +127,10 @@ const htmlResources = computed<HtmlResource[]>(() => {
   }
   return found.slice(0, 3)
 })
+
+watch(htmlResources, () => {
+  htmlResources.value.forEach((res, i) => register(`${props.part.id}:h${i}`, res))
+}, { immediate: true })
 </script>
 
 <template>
@@ -197,19 +209,21 @@ const htmlResources = computed<HtmlResource[]>(() => {
     <div v-if="fetchedResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open && !htmlResources.length }">
       <template v-for="(res, i) in fetchedResources" :key="`f${i}`">
         <div
-          v-if="res.remoteDom"
+          v-if="res.remoteDom && !res.script"
           class="flex items-center gap-2 rounded-md bg-elevated/70 px-3 py-2 text-xs text-muted"
         >
           <UIcon name="i-lucide-puzzle" class="size-3.5 shrink-0 text-dimmed" />
           <span class="min-w-0 truncate">
-            <span class="font-mono">{{ res.title }}</span> — remote-DOM component (framework-hosted mcp-ui type, not renderable in an iframe yet)
+            <span class="font-mono">{{ res.title }}</span> — remote-DOM component without content (nothing to render)
           </span>
         </div>
         <ChatMcpHtmlFrame
           v-else
           :html="res.html"
           :url="res.url"
+          :script="res.script"
           :title="res.title || part.tool"
+          :app-id="`${part.id}:f${i}`"
         />
       </template>
     </div>
@@ -220,6 +234,7 @@ const htmlResources = computed<HtmlResource[]>(() => {
         :html="res.html"
         :url="res.url"
         :title="res.title"
+        :app-id="`${part.id}:h${i}`"
       />
     </div>
   </div>
