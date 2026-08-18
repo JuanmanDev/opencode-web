@@ -9,6 +9,7 @@ const { remember, recents, load: loadRecents } = useRecentProjects()
 const busySessions = useBusySessions()
 const mobileMenuOpen = ref(false)
 const chime = useChime()
+const globalSearch = useGlobalSearch()
 
 // persisted so SSR renders the same state (no hydration flicker)
 const sidebarOpen = useCookie<boolean>('oc-sidebar', { default: () => true })
@@ -222,6 +223,15 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           variant="ghost"
           aria-label="Show sidebar"
           @click="sidebarOpen = true"
+        />
+      </UTooltip>
+      <UTooltip text="Search everything (Ctrl+K)" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-search"
+          color="neutral"
+          variant="ghost"
+          aria-label="Search everything"
+          @click="globalSearch.open.value = true"
         />
       </UTooltip>
       <UTooltip text="Sessions" :content="{ side: 'right' }">
