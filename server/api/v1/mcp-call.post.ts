@@ -9,7 +9,7 @@ const KNOWN_URLS: Record<string, string> = {
 }
 
 const cachedCall = defineCachedFunction(
-  async (directory: string | undefined, toolId: string, argsJson: string) => {
+  async (directory: string | undefined, toolId: string, argsJson: string, selfOrigin?: string) => {
     const [config, globalConfig] = await Promise.all([
       opencodeFetch<{ mcp?: Record<string, McpRemoteEntry> }>('/config', { query: { directory } }).catch(() => ({ mcp: {} })),
       opencodeFetch<{ mcp?: Record<string, McpRemoteEntry> }>('/global/config').catch(() => ({ mcp: {} }))
@@ -24,8 +24,14 @@ const cachedCall = defineCachedFunction(
     if (resolved.entry.type !== 'remote' || !resolved.entry.url) {
       throw createError({ statusCode: 400, message: `${resolved.server} is not a remote MCP server` })
     }
+    // the built-in demo server's stored URL may point at a stale origin
+    // (e.g. added while dev ran on another port) — always use the current one
+    let targetUrl = resolved.entry.url
+    if (selfOrigin && new URL(targetUrl).pathname.replace(/\/$/, '') === '/mcp-demo') {
+      targetUrl = `${selfOrigin}/mcp-demo`
+    }
     return callRemoteMcpTool(
-      resolved.entry.url,
+      targetUrl,
       resolved.entry.headers || {},
       resolved.tool,
       JSON.parse(argsJson)
@@ -34,7 +40,7 @@ const cachedCall = defineCachedFunction(
   {
     name: 'mcp-call',
     maxAge: 300,
-    getKey: (directory: string | undefined, toolId: string, argsJson: string) =>
+    getKey: (directory: string | undefined, toolId: string, argsJson: string, _selfOrigin?: string) =>
       encodeURIComponent(`${directory || ''}|${toolId}|${argsJson}`).slice(0, 200) +
       String(argsJson.length)
   }
@@ -44,5 +50,10 @@ export default defineEventHandler(async (event) => {
   requireApiToken(event)
   const body = await readBody<{ directory?: string; toolId: string; arguments?: Record<string, unknown> }>(event)
   if (!body?.toolId) throw createError({ statusCode: 400, message: 'toolId is required' })
-  return cachedCall(body.directory, body.toolId, JSON.stringify(body.arguments || {}))
+  return cachedCall(
+    body.directory,
+    body.toolId,
+    JSON.stringify(body.arguments || {}),
+    getRequestURL(event).origin
+  )
 })

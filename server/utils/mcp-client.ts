@@ -84,6 +84,20 @@ export async function callRemoteMcpTool(
   const call = await mcpRpc(url, headers, 'tools/call', { name: tool, arguments: args }, 2, init.sessionId)
   const content = Array.isArray(call.result?.content) ? call.result.content : []
 
+  // servers often return app links as http://localhost:PORT (their own host):
+  // rewrite to the MCP server's hostname so browsers elsewhere can reach them
+  const serverHost = new URL(url).hostname
+  const fixUrl = (link: string) => {
+    try {
+      const u = new URL(link)
+      if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(u.hostname) && !['localhost', '127.0.0.1'].includes(serverHost)) {
+        u.hostname = serverHost
+        return u.toString()
+      }
+    } catch { /* not a URL */ }
+    return link
+  }
+
   const resources: McpUiResource[] = []
   const texts: string[] = []
   for (const item of content) {
@@ -99,7 +113,7 @@ export async function callRemoteMcpTool(
         resources.push({ html: r.text, title: uri })
       } else if (mime === 'text/uri-list' && typeof r.text === 'string') {
         const link = r.text.split('\n').find((l: string) => l.trim() && !l.startsWith('#'))
-        if (link) resources.push({ url: link.trim(), title: uri })
+        if (link) resources.push({ url: fixUrl(link.trim()), title: uri })
       } else if (typeof r.text === 'string' && uri?.startsWith('ui://') && r.text.trim().startsWith('<')) {
         resources.push({ html: r.text, title: uri })
       } else if (uri?.startsWith('ui://')) {

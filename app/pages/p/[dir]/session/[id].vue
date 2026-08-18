@@ -51,6 +51,10 @@ onMounted(() => {
   isSmallScreen.value = mq.matches
   mq.addEventListener('change', (e) => { isSmallScreen.value = e.matches })
 })
+// small screens have no room for a side panel: promote to fullscreen
+const effectiveView = computed(() =>
+  viewer.view.value === 'side' && isSmallScreen.value ? 'full' : viewer.view.value
+)
 
 // ---- agent questions ----
 const questions = ref<Array<{ id: string; questions: any[] }>>([])
@@ -883,50 +887,46 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 
     </div>
 
-    <!-- MCP app side panel (?app=…&view=side) -->
-    <Transition name="oc-slide">
-      <aside
-        v-if="viewerResource && viewer.view.value === 'side'"
-        class="hidden lg:flex w-[42%] max-w-2xl shrink-0 flex-col border-l border-default bg-muted/40 p-2 gap-2"
-      >
-        <div class="flex items-center gap-1 shrink-0">
-          <span class="text-xs text-muted truncate flex-1 px-1">{{ viewerResource.title || 'MCP app' }}</span>
-          <UTooltip text="Fullscreen">
-            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" @click="viewer.open(viewer.appId.value, 'full')" />
-          </UTooltip>
-          <UTooltip text="Close panel">
-            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="viewer.close()" />
-          </UTooltip>
-        </div>
-        <ChatMcpHtmlFrame
-          :key="viewer.appId.value"
-          :html="viewerResource.html"
-          :url="viewerResource.url"
-          :script="viewerResource.script"
-          :title="viewerResource.title"
-          viewer
-          class="flex-1 min-h-0"
-        />
-      </aside>
-    </Transition>
-
-    <!-- MCP app fullscreen (?app=…&view=full) -->
+    <!-- MCP app viewer: ONE persistent container so the iframe survives
+         side <-> fullscreen moves without reloading -->
     <Teleport to="body">
       <div
-        v-if="viewerResource && (viewer.view.value === 'full' || (viewer.view.value === 'side' && isSmallScreen))"
-        class="fixed inset-0 z-50 bg-default flex flex-col p-2 sm:p-4 gap-2"
+        v-if="viewer.appId.value && viewer.view.value"
+        class="fixed z-50 bg-default flex flex-col gap-2 shadow-2xl"
+        :class="effectiveView === 'side'
+          ? 'right-0 inset-y-0 w-[42%] max-w-2xl border-l border-default p-2'
+          : 'inset-0 p-2 sm:p-4'"
       >
         <div class="flex items-center gap-1 shrink-0">
-          <span class="text-sm text-muted truncate flex-1 px-1">{{ viewerResource.title || 'MCP app' }}</span>
-          <UTooltip text="Dock to side panel">
+          <span class="text-xs text-muted truncate flex-1 px-1">
+            {{ viewerResource?.title || 'MCP app' }}
+          </span>
+          <UTooltip v-if="effectiveView === 'side'" text="Fullscreen">
+            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" @click="viewer.open(viewer.appId.value, 'full')" />
+          </UTooltip>
+          <UTooltip v-else text="Dock to side panel">
             <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="hidden lg:inline-flex" @click="viewer.open(viewer.appId.value, 'side')" />
           </UTooltip>
-          <UTooltip text="Close">
+          <UTooltip text="Move back to the chat">
             <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="viewer.close()" />
           </UTooltip>
         </div>
+
+        <!-- staged loading for deep links (?app=…&view=full on a fresh load) -->
+        <div
+          v-if="!viewerResource"
+          class="flex-1 flex flex-col items-center justify-center gap-3 text-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
+          <p class="text-sm oc-shimmer-text">
+            {{ loading ? 'Loading session…' : 'Loading UI component…' }}
+          </p>
+          <p class="text-xs text-dimmed max-w-xs text-center">
+            The conversation is being restored and the MCP app re-fetched from its server.
+          </p>
+        </div>
         <ChatMcpHtmlFrame
-          :key="`full-${viewer.appId.value}`"
+          v-else
           :html="viewerResource.html"
           :url="viewerResource.url"
           :script="viewerResource.script"

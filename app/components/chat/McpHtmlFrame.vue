@@ -20,6 +20,12 @@ const frame = ref<HTMLIFrameElement>()
 const height = ref(props.viewer ? 480 : 240)
 const appViewer = props.appId || props.viewer ? useAppViewer() : null
 
+// while this app is displayed in the side panel / fullscreen, the chat copy
+// becomes a placeholder (click to bring the app back into the chat)
+const shownElsewhere = computed(() =>
+  Boolean(!props.viewer && props.appId && appViewer && appViewer.appId.value === props.appId && appViewer.view.value)
+)
+
 // generic remote-dom host: defines any <x-*> custom element on the fly with
 // sensible defaults (buttons dispatch 'press', label/text attrs render, stacks
 // flex) and exposes `root` — enough for typical mcp-ui remote-dom demos.
@@ -138,7 +144,16 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
         </UTooltip>
       </template>
     </div>
+    <button
+      v-if="shownElsewhere"
+      class="oc-appear flex w-full items-center justify-center gap-2 py-8 text-xs text-muted hover:text-highlighted cursor-pointer"
+      @click="appViewer!.close()"
+    >
+      <UIcon :name="appViewer!.view.value === 'full' ? 'i-lucide-maximize-2' : 'i-lucide-panel-right'" class="size-4" />
+      Currently showing {{ appViewer!.view.value === 'full' ? 'in fullscreen' : 'in the side panel' }} — click to move back to the chat
+    </button>
     <iframe
+      v-else
       ref="frame"
       :srcdoc="srcdoc"
       :src="url"
