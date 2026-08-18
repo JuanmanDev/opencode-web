@@ -66,6 +66,8 @@ function fmtTime(ts?: number) {
         block
         color="primary"
         variant="soft"
+        class="justify-start"
+        :ui="{ leadingIcon: 'size-4' }"
         icon="i-lucide-plus"
         label="New chat"
         @click="newSession"
@@ -74,6 +76,8 @@ function fmtTime(ts?: number) {
         block
         color="neutral"
         variant="ghost"
+        class="justify-start"
+        :ui="{ leadingIcon: 'size-4' }"
         icon="i-lucide-server-cog"
         label="MCP servers"
         :to="`/p/${dirParam}/mcp`"
@@ -83,6 +87,8 @@ function fmtTime(ts?: number) {
         block
         color="neutral"
         variant="ghost"
+        class="justify-start"
+        :ui="{ leadingIcon: 'size-4' }"
         icon="i-lucide-chart-column"
         label="Usage & cost"
         :to="`/p/${dirParam}/stats`"
@@ -92,6 +98,8 @@ function fmtTime(ts?: number) {
         block
         color="neutral"
         variant="ghost"
+        class="justify-start"
+        :ui="{ leadingIcon: 'size-4' }"
         icon="i-lucide-search"
         label="Search everything"
         @click="globalSearch.open.value = true; emit('navigate')"
@@ -172,6 +180,8 @@ function fmtTime(ts?: number) {
         block
         color="neutral"
         variant="ghost"
+        class="justify-start"
+        :ui="{ leadingIcon: 'size-4' }"
         icon="i-lucide-arrow-left"
         label="All projects"
         to="/"
