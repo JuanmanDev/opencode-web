@@ -74,7 +74,7 @@ const errorMessage = computed(() => {
         </div>
       </template>
       <!-- user message actions -->
-      <div class="flex items-center gap-0.5 mt-1 -mb-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+      <div class="flex items-center justify-end gap-0.5 mt-1 -mb-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
         <UTooltip text="Copy">
           <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy message" @click="copyMessage" />
         </UTooltip>
@@ -147,7 +147,7 @@ const errorMessage = computed(() => {
           <span v-if="info.cost">${{ info.cost.toFixed(4) }}</span>
         </template>
         <!-- assistant message actions -->
-        <span v-if="messageText" class="flex items-center gap-0.5">
+        <span v-if="messageText" class="flex items-center gap-0.5 ml-auto">
           <UTooltip text="Copy">
             <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy reply" @click="copyMessage" />
           </UTooltip>
