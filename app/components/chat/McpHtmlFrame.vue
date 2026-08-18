@@ -107,7 +107,8 @@ const srcdoc = computed(() => {
 
 // ---- MCP Apps host protocol (JSON-RPC over postMessage) ----
 function postToFrame(message: Record<string, unknown>) {
-  frame.value?.contentWindow?.postMessage(message, '*')
+  // Vue reactive proxies are not structured-cloneable -> plain JSON only
+  frame.value?.contentWindow?.postMessage(JSON.parse(JSON.stringify(message)), '*')
 }
 
 function handleAppRpc(msg: { jsonrpc?: string; id?: number | string; method?: string; params?: any }): boolean {
