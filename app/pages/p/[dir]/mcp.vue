@@ -83,9 +83,8 @@ interface PageGroup {
   /** legacy on/off format */
   enabled?: Record<string, boolean>
 }
-const groupsKey = computed(() =>
-  `opencode-web.mcp-page-groups.${scope.value === 'global' ? 'GLOBAL' : directory.value}`
-)
+// one shared key: presets are usable from any project, any scope, any device
+const groupsKey = computed(() => 'opencode-web.mcp-presets.shared')
 const groups = ref<PageGroup[]>([])
 const groupName = ref('')
 const applyingGroup = ref('')
@@ -147,6 +146,19 @@ async function applyGroup(group: PageGroup) {
 
     const servers = group.servers
       || Object.fromEntries(Object.entries(group.enabled || {}).map(([n, on]) => [n, on ? 'allow' : 'off']))
+
+    // presets are shared across projects: warn about servers this scope lacks
+    const missing = Object.keys(servers).filter(
+      (name) => !entries.value.some((e) => e.name === name)
+    )
+    if (missing.length) {
+      toast.add({
+        title: `Preset "${group.name}": ${missing.length} server(s) not configured here`,
+        description: `Skipped: ${missing.join(', ')} — add them on this ${scope.value === 'global' ? 'global config' : 'project'} first.`,
+        color: 'warning'
+      })
+    }
+
     for (const entry of entries.value) {
       const want = servers[entry.name] as ServerMode | undefined
       if (!want) continue
@@ -253,6 +265,12 @@ watch(directory, refresh)
 
 // filter across server names and tool names
 const filter = ref('')
+const filterOpen = ref(false)
+
+function openFilter() {
+  filterOpen.value = true
+  nextTick(() => (document.getElementById('mcp-filter-input') as HTMLInputElement | null)?.focus())
+}
 const filteredEntries = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return entries.value
@@ -528,20 +546,34 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             @click="saveGroup"
           />
         </UTooltip>
+        <span class="flex-1" />
+        <!-- compact filter: magnifier expands into the search box -->
+        <UInput
+          v-if="filterOpen"
+          id="mcp-filter-input"
+          v-model="filter"
+          size="xs"
+          icon="i-lucide-search"
+          placeholder="Filter servers and tools…"
+          class="w-56"
+          :ui="{ trailing: 'pe-1' }"
+          @keydown.esc="filter = ''; filterOpen = false"
+        >
+          <template #trailing>
+            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="filter = ''; filterOpen = false" />
+          </template>
+        </UInput>
+        <UTooltip v-else text="Filter servers and tools">
+          <UButton
+            icon="i-lucide-search"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            aria-label="Filter servers and tools"
+            @click="openFilter"
+          />
+        </UTooltip>
       </div>
-
-      <UInput
-        v-model="filter"
-        size="sm"
-        icon="i-lucide-search"
-        placeholder="Filter servers and tools…"
-        class="w-full mb-2"
-        :ui="{ trailing: 'pe-1' }"
-      >
-        <template v-if="filter" #trailing>
-          <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="filter = ''" />
-        </template>
-      </UInput>
 
       <div class="bg-muted rounded-sm divide-y divide-default">
         <div v-if="loading && !entries.length" class="p-4 space-y-3">

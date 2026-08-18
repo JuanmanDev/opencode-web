@@ -10,13 +10,17 @@ const projectMeta = useProjectMeta()
 
 onMounted(projectMeta.load)
 
-// favorites pinned on top
+// favorites pinned on top; optional title filter
+const sessionFilter = ref('')
 const sortedSessions = computed(() => {
   const favs = projectMeta.of(props.directory).favorites
-  return [...sessions.value].sort((a, b) => {
-    const favDiff = Number(favs.includes(b.id)) - Number(favs.includes(a.id))
-    return favDiff || (b.time?.updated || 0) - (a.time?.updated || 0)
-  })
+  const q = sessionFilter.value.trim().toLowerCase()
+  return [...sessions.value]
+    .filter((s) => !q || (s.title || '').toLowerCase().includes(q))
+    .sort((a, b) => {
+      const favDiff = Number(favs.includes(b.id)) - Number(favs.includes(a.id))
+      return favDiff || (b.time?.updated || 0) - (a.time?.updated || 0)
+    })
 })
 const api = useOpencodeApi(() => props.directory)
 const toast = useToast()
@@ -88,6 +92,20 @@ function fmtTime(ts?: number) {
     <div class="flex items-center gap-1.5 px-3 pb-1 text-[10px] uppercase tracking-widest text-dimmed">
       Sessions
       <UIcon v-if="refreshing" name="i-lucide-loader-circle" class="size-3 animate-spin" />
+    </div>
+    <div class="px-2 pb-1.5">
+      <UInput
+        v-model="sessionFilter"
+        size="xs"
+        icon="i-lucide-search"
+        placeholder="Search sessions…"
+        class="w-full"
+        :ui="{ trailing: 'pe-1' }"
+      >
+        <template v-if="sessionFilter" #trailing>
+          <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="sessionFilter = ''" />
+        </template>
+      </UInput>
     </div>
     <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
       <div

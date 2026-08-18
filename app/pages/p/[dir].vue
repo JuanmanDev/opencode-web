@@ -36,6 +36,7 @@ async function loadProjects() {
 
 watch(projectsPanel, (open) => { if (open) loadProjects() }, { immediate: true })
 
+const projectFilter = ref('')
 const projectDirs = computed(() => {
   const seen = new Set<string>()
   const list: string[] = []
@@ -48,7 +49,8 @@ const projectDirs = computed(() => {
       list.push(p.worktree)
     }
   }
-  return list
+  const q = projectFilter.value.trim().toLowerCase()
+  return q ? list.filter((d) => d.toLowerCase().includes(q)) : list
 })
 
 // ---- sidebar resize (desktop) ----
@@ -118,6 +120,15 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
             @click="projectsPanel = false"
           />
         </UTooltip>
+      </div>
+      <div class="px-1.5 pb-1.5">
+        <UInput
+          v-model="projectFilter"
+          size="xs"
+          icon="i-lucide-search"
+          placeholder="Search projects…"
+          class="w-full"
+        />
       </div>
       <div class="flex-1 overflow-y-auto px-1.5 pb-2 space-y-0.5">
         <div v-if="projectsLoading && !projectDirs.length" class="px-2 space-y-2 pt-1">
