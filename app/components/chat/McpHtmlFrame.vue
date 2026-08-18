@@ -30,11 +30,15 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
       <UIcon name="i-lucide-app-window" class="size-3.5" />
       <span class="truncate">{{ title || 'MCP app' }}</span>
     </div>
+    <!-- external-URL apps keep their real origin (module scripts + storage need
+         it); inline srcdoc stays fully isolated -->
     <iframe
       ref="frame"
       :srcdoc="url ? undefined : html"
       :src="url"
-      sandbox="allow-scripts allow-forms"
+      :sandbox="url
+        ? 'allow-scripts allow-same-origin allow-forms allow-popups'
+        : 'allow-scripts allow-forms'"
       class="w-full bg-white dark:bg-neutral-950"
       :style="{ height: height + 'px' }"
       :title="title || 'MCP app'"

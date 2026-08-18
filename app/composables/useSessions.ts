@@ -33,10 +33,15 @@ export function useSessions(directory: MaybeRefOrGetter<string>) {
   const refreshing = useState<boolean>(`sessions-loading.${dir}`, () => false)
   const api = useOpencodeApi(directory)
 
-  // paint from cache immediately (client only, before the network answers)
-  if (import.meta.client && sessions.value.length === 0) {
-    const cached = readCache(dir)
-    if (cached.length) sessions.value = cached
+  // paint from cache after hydration (doing it during setup makes the client
+  // vdom diverge from the server-rendered empty list -> hydration mismatch)
+  if (import.meta.client && getCurrentInstance()) {
+    onMounted(() => {
+      if (sessions.value.length === 0) {
+        const cached = readCache(dir)
+        if (cached.length) sessions.value = cached
+      }
+    })
   }
 
   async function refresh() {

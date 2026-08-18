@@ -1,7 +1,9 @@
 // WebMCP (navigator.modelContext) — expose page tools to in-browser agents.
 // Progressive enhancement: no-op on browsers without the API.
 export default defineNuxtPlugin(() => {
-  const mc = (navigator as unknown as { modelContext?: any }).modelContext
+  const mc =
+    (document as unknown as { modelContext?: any }).modelContext ||
+    (navigator as unknown as { modelContext?: any }).modelContext
   if (!mc) return
 
   const text = (data: unknown) => ({
