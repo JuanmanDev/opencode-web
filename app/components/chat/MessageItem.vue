@@ -2,7 +2,7 @@
 import type { MessageWithParts, Part, TokenUsage } from '#shared/types/opencode'
 
 const props = defineProps<{ message: MessageWithParts }>()
-const emit = defineEmits<{ fork: [] }>()
+const emit = defineEmits<{ fork: []; retry: []; continue: [] }>()
 
 const info = computed(() => props.message.info)
 const isUser = computed(() => info.value.role === 'user')
@@ -103,6 +103,10 @@ const errorMessage = computed(() => {
         icon="i-lucide-triangle-alert"
         :title="errorMessage"
         class="mt-2"
+        :actions="[
+          { label: 'Retry', icon: 'i-lucide-rotate-ccw', color: 'error', variant: 'soft', size: 'xs', onClick: () => emit('retry') },
+          { label: 'Continue', icon: 'i-lucide-play', color: 'neutral', variant: 'soft', size: 'xs', onClick: () => emit('continue') }
+        ]"
       />
 
       <div v-if="info.modelID" class="flex items-center gap-2 text-[11px] text-dimmed font-mono pt-1">

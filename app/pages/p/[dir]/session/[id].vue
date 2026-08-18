@@ -442,7 +442,14 @@ useOpencodeEvents(directory, (event) => {
       if (!sid || sid === sessionId.value) {
         busy.value = false
         const message = props.error?.data?.message || props.error?.name || 'Session error'
-        toast.add({ title: message, color: 'error' })
+        toast.add({
+          title: message,
+          color: 'error',
+          actions: [
+            { label: 'Retry', icon: 'i-lucide-rotate-ccw', color: 'error', variant: 'soft', onClick: retryLast },
+            { label: 'Continue', icon: 'i-lucide-play', color: 'neutral', variant: 'soft', onClick: continueRun }
+          ]
+        })
       }
       break
     }
@@ -475,10 +482,31 @@ type PromptPayload = {
 
 // prompts sent while the agent is busy wait in a queue and fire on idle
 const queue = ref<PromptPayload[]>([])
+// last dispatched settings so error-retry keeps the same model/agent/tools
+const lastPayload = ref<PromptPayload | null>(null)
+
+function retryLast() {
+  const lastUser = [...messages.value].reverse().find((m) => m.info.role === 'user')
+  const text = (lastUser?.parts || [])
+    .filter((p) => p.type === 'text')
+    .map((p) => (p as { text?: string }).text || '')
+    .join('\n')
+    .trim()
+  if (!text) {
+    toast.add({ title: 'Nothing to retry', color: 'warning' })
+    return
+  }
+  dispatch({ ...(lastPayload.value || {} as PromptPayload), text })
+}
+
+function continueRun() {
+  dispatch({ ...(lastPayload.value || {} as PromptPayload), text: 'Continue.' })
+}
 
 function dispatch(payload: PromptPayload) {
   busy.value = true
   pinnedToBottom.value = true
+  lastPayload.value = payload
   const parts: Array<Record<string, unknown>> = [
     ...(payload.files || []).map((f) => ({ type: 'file', mime: f.mime, filename: f.filename, url: f.url })),
     ...(payload.text ? [{ type: 'text', text: payload.text }] : [])
@@ -812,6 +840,8 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             :key="message.info.id"
             :message="message"
             @fork="forkSession(message.info.id)"
+            @retry="retryLast"
+            @continue="continueRun"
           />
           <ChatPermissionPrompt
             v-for="perm in permissions"

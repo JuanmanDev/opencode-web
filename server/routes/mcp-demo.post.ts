@@ -10,6 +10,8 @@ interface JsonRpcRequest {
 }
 
 const SIZER = `<script>
+// mcp-ui lifecycle: announce readiness, then keep the host informed of size
+parent.postMessage({type:'ui-lifecycle-iframe-ready'},'*');
 const post=()=>parent.postMessage({type:'ui-size-change',payload:{height:document.documentElement.scrollHeight}},'*');
 addEventListener('load',post);new ResizeObserver(post).observe(document.documentElement);
 <\/script>`
