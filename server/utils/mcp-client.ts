@@ -1,0 +1,123 @@
+// Minimal MCP client (Streamable HTTP) used to call tools on remote servers
+// directly — opencode strips ui:// resources from tool outputs, so UI apps
+// are re-fetched from the source.
+
+export interface McpRemoteEntry {
+  type?: string
+  url?: string
+  headers?: Record<string, string>
+  enabled?: boolean
+}
+
+async function mcpRpc(
+  url: string,
+  headers: Record<string, string>,
+  method: string,
+  params: Record<string, unknown>,
+  id: number,
+  sessionId?: string
+): Promise<{ result?: any; sessionId?: string }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...(sessionId ? { 'mcp-session-id': sessionId } : {}),
+      ...headers
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const newSession = res.headers.get('mcp-session-id') || sessionId
+  const contentType = res.headers.get('content-type') || ''
+  let payload: any
+  if (contentType.includes('text/event-stream')) {
+    const body = await res.text()
+    const line = body.split('\n').find((l) => l.startsWith('data:'))
+    payload = line ? JSON.parse(line.slice(5).trim()) : undefined
+  } else {
+    payload = await res.json()
+  }
+  if (payload?.error) throw new Error(payload.error.message || 'MCP error')
+  return { result: payload?.result, sessionId: newSession }
+}
+
+export interface McpUiResource {
+  html?: string
+  url?: string
+  title?: string
+  /** mcp-ui remote-dom component script — needs a framework host, not an iframe */
+  remoteDom?: boolean
+}
+
+export interface McpCallResult {
+  text: string
+  resources: McpUiResource[]
+}
+
+/** Initialize + tools/call against a remote MCP server; extract UI resources. */
+export async function callRemoteMcpTool(
+  url: string,
+  headers: Record<string, string>,
+  tool: string,
+  args: Record<string, unknown>
+): Promise<McpCallResult> {
+  const init = await mcpRpc(url, headers, 'initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'opencode-web', version: '1' }
+  }, 1)
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...(init.sessionId ? { 'mcp-session-id': init.sessionId } : {}),
+      ...headers
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+    signal: AbortSignal.timeout(8000)
+  }).catch(() => {})
+
+  const call = await mcpRpc(url, headers, 'tools/call', { name: tool, arguments: args }, 2, init.sessionId)
+  const content = Array.isArray(call.result?.content) ? call.result.content : []
+
+  const resources: McpUiResource[] = []
+  const texts: string[] = []
+  for (const item of content) {
+    if (item?.type === 'text' && typeof item.text === 'string') {
+      texts.push(item.text)
+    } else if (item?.type === 'resource' && item.resource) {
+      const r = item.resource
+      const uri = typeof r.uri === 'string' ? r.uri : undefined
+      const mime = typeof r.mimeType === 'string' ? r.mimeType : ''
+      if (mime.startsWith('application/vnd.mcp-ui.remote-dom')) {
+        resources.push({ remoteDom: true, title: uri })
+      } else if (mime === 'text/html' && typeof r.text === 'string') {
+        resources.push({ html: r.text, title: uri })
+      } else if (mime === 'text/uri-list' && typeof r.text === 'string') {
+        const link = r.text.split('\n').find((l: string) => l.trim() && !l.startsWith('#'))
+        if (link) resources.push({ url: link.trim(), title: uri })
+      } else if (typeof r.text === 'string' && uri?.startsWith('ui://') && r.text.trim().startsWith('<')) {
+        resources.push({ html: r.text, title: uri })
+      } else if (uri?.startsWith('ui://')) {
+        resources.push({ remoteDom: true, title: uri })
+      }
+    }
+  }
+  return { text: texts.join('\n\n'), resources }
+}
+
+/** Longest-prefix match of an opencode tool id (`server_tool`) to config entries. */
+export function resolveMcpTool(
+  mcp: Record<string, McpRemoteEntry>,
+  toolId: string
+): { server: string; entry: McpRemoteEntry; tool: string } | null {
+  let best: string | null = null
+  for (const name of Object.keys(mcp)) {
+    if (toolId.startsWith(`${name}_`) && (!best || name.length > best.length)) best = name
+  }
+  if (!best) return null
+  return { server: best, entry: mcp[best]!, tool: toolId.slice(best.length + 1) }
+}

@@ -5,6 +5,48 @@ const props = defineProps<{ part: ToolPart }>()
 
 const open = ref(false)
 
+// opencode strips ui:// resources from MCP tool outputs, so for UI-looking
+// MCP tools we re-fetch the app from the remote server ourselves
+const route = useRoute()
+const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean }>>([])
+const fetchingUi = ref(false)
+const UI_TOOL = /(^|_)(show|demo|ui|iframe|render|display|status)/i
+
+async function fetchUi() {
+  if (fetchingUi.value || fetchedResources.value.length) return
+  fetchingUi.value = true
+  try {
+    const dirParam = route.params.dir as string | undefined
+    const res = await $fetch<{ resources: Array<{ html?: string; url?: string; title?: string }> }>(
+      '/api/v1/mcp-call',
+      {
+        method: 'POST',
+        timeout: 25000,
+        body: {
+          directory: dirParam ? decodeDir(dirParam) : undefined,
+          toolId: props.part.tool,
+          arguments: (props.part.state as { input?: Record<string, unknown> })?.input || {}
+        }
+      }
+    )
+    fetchedResources.value = res.resources || []
+  } catch {
+    // local server, auth or non-MCP tool: nothing to render
+  } finally {
+    fetchingUi.value = false
+  }
+}
+
+watch(
+  () => (props.part.state as { status?: string })?.status,
+  (status) => {
+    if (status === 'completed' && props.part.tool.includes('_') && UI_TOOL.test(props.part.tool)) {
+      fetchUi()
+    }
+  },
+  { immediate: true }
+)
+
 const state = computed(() => props.part.state || { status: 'pending' })
 const status = computed(() => state.value.status || 'pending')
 
@@ -148,6 +190,29 @@ const htmlResources = computed<HtmlResource[]>(() => {
     </div>
     </CollapseTransition>
 
+    <div v-if="fetchingUi" class="flex items-center gap-2 px-2.5 pb-2 text-xs text-dimmed" :class="{ 'pt-2': !open }">
+      <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />
+      Loading app UI…
+    </div>
+    <div v-if="fetchedResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open && !htmlResources.length }">
+      <template v-for="(res, i) in fetchedResources" :key="`f${i}`">
+        <div
+          v-if="res.remoteDom"
+          class="flex items-center gap-2 rounded-md bg-elevated/70 px-3 py-2 text-xs text-muted"
+        >
+          <UIcon name="i-lucide-puzzle" class="size-3.5 shrink-0 text-dimmed" />
+          <span class="min-w-0 truncate">
+            <span class="font-mono">{{ res.title }}</span> — remote-DOM component (framework-hosted mcp-ui type, not renderable in an iframe yet)
+          </span>
+        </div>
+        <ChatMcpHtmlFrame
+          v-else
+          :html="res.html"
+          :url="res.url"
+          :title="res.title || part.tool"
+        />
+      </template>
+    </div>
     <div v-if="htmlResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
       <ChatMcpHtmlFrame
         v-for="(res, i) in htmlResources"
