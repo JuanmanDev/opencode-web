@@ -24,7 +24,6 @@ const configTools = ref<Record<string, boolean>>({})
 const configPermission = ref<Record<string, string>>({})
 const loading = ref(true)
 const toggling = ref<string | null>(null)
-const expanded = ref<string[]>([])
 
 // scope: this project's config, or the global opencode config (all projects)
 const scope = ref<'project' | 'global'>('project')
@@ -72,7 +71,7 @@ async function refresh() {
   }
 }
 
-watch(scope, () => { expanded.value = []; refresh() })
+watch(scope, refresh)
 
 // ---- saved presets: tri-state per server + per-tool overrides, shared
 // server-side across devices (localStorage as offline fallback) ----
@@ -189,12 +188,6 @@ function deleteGroup(name: string) {
   persistGroups()
 }
 
-function toggleExpand(name: string) {
-  expanded.value = expanded.value.includes(name)
-    ? expanded.value.filter((n) => n !== name)
-    : [...expanded.value, name]
-}
-
 // ---- tri-state: off / ask / allow ----
 type ServerMode = 'off' | 'ask' | 'allow'
 type ToolMode = 'inherit' | 'deny' | 'ask' | 'allow'
@@ -260,36 +253,30 @@ async function setToolMode(toolId: string, mode: ToolMode) {
   }
 }
 
+// adapters for the shared McpServerList
+const listServers = computed(() => entries.value.map((e) => ({
+  name: e.name,
+  status: e.status,
+  error: e.error,
+  detail: typeof e.config?.url === 'string'
+    ? e.config.url as string
+    : Array.isArray(e.config?.command) ? (e.config!.command as string[]).join(' ') : undefined,
+  tools: e.tools
+})))
+
+function serverModeByName(name: string) {
+  const entry = entries.value.find((e) => e.name === name)
+  return entry ? serverMode(entry) : 'allow'
+}
+
+function onSetServer(name: string, mode: 'off' | 'ask' | 'allow') {
+  const entry = entries.value.find((e) => e.name === name)
+  if (entry) setServerMode(entry, mode)
+}
+
 onMounted(refresh)
 watch(directory, refresh)
 
-// filter across server names and tool names
-const filter = ref('')
-const filterOpen = ref(false)
-
-function openFilter() {
-  filterOpen.value = true
-  nextTick(() => (document.getElementById('mcp-filter-input') as HTMLInputElement | null)?.focus())
-}
-const filteredEntries = computed(() => {
-  const q = filter.value.trim().toLowerCase()
-  if (!q) return entries.value
-  return entries.value
-    .map((entry) => {
-      const serverHit = entry.name.toLowerCase().includes(q)
-      const tools = entry.tools.filter((t) => t.name.toLowerCase().includes(q))
-      if (!serverHit && !tools.length) return null
-      return { ...entry, tools: serverHit && !tools.length ? entry.tools : tools }
-    })
-    .filter(Boolean) as McpEntry[]
-})
-
-function statusColor(status: string) {
-  if (['connected', 'running', 'ok', 'success'].includes(status)) return 'success'
-  if (['failed', 'error'].includes(status)) return 'error'
-  if (status === 'disabled') return 'neutral'
-  return 'warning'
-}
 
 // ---- add servers ----
 const addOpen = ref(false)
@@ -549,112 +536,32 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             @click="saveGroup"
           />
         </UTooltip>
-        <span class="flex-1" />
-        <!-- compact filter: magnifier expands into the search box -->
-        <UInput
-          v-if="filterOpen"
-          id="mcp-filter-input"
-          v-model="filter"
-          size="xs"
-          icon="i-lucide-search"
-          placeholder="Filter servers and tools…"
-          class="w-56"
-          :ui="{ trailing: 'pe-1' }"
-          @keydown.esc="filter = ''; filterOpen = false"
-        >
-          <template #trailing>
-            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="filter = ''; filterOpen = false" />
-          </template>
-        </UInput>
-        <UTooltip v-else text="Filter servers and tools">
-          <UButton
-            icon="i-lucide-search"
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            aria-label="Filter servers and tools"
-            @click="openFilter"
-          />
-        </UTooltip>
       </div>
 
-      <div class="bg-muted rounded-sm divide-y divide-default">
-        <div v-if="loading && !entries.length" class="p-4 space-y-3">
-          <div v-for="i in 3" :key="i" class="flex items-center gap-3">
-            <USkeleton class="size-4 rounded-full" />
-            <div class="flex-1 space-y-1.5">
-              <USkeleton class="h-3.5 w-1/4" />
-              <USkeleton class="h-3 w-1/2" />
-            </div>
-            <USkeleton class="h-5 w-9 rounded-full" />
+      <div v-if="loading && !entries.length" class="bg-muted rounded-sm p-4 space-y-3">
+        <div v-for="i in 3" :key="i" class="flex items-center gap-3">
+          <USkeleton class="size-4 rounded-full" />
+          <div class="flex-1 space-y-1.5">
+            <USkeleton class="h-3.5 w-1/4" />
+            <USkeleton class="h-3 w-1/2" />
           </div>
-        </div>
-        <div v-if="filter && !filteredEntries.length && entries.length" class="px-4 py-6 text-sm text-dimmed text-center">
-          Nothing matches “{{ filter }}”
-        </div>
-        <div v-for="entry in filteredEntries" :key="entry.name">
-          <div class="flex items-center gap-3 px-4 py-3">
-            <!-- expandable when the server's tool list is known -->
-            <component
-              :is="entry.tools.length ? 'button' : 'div'"
-              class="flex items-center gap-3 min-w-0 flex-1 text-left"
-              :class="entry.tools.length ? 'cursor-pointer' : ''"
-              @click="entry.tools.length && toggleExpand(entry.name)"
-            >
-              <UIcon
-                v-if="entry.tools.length"
-                name="i-lucide-chevron-down"
-                class="size-4 text-dimmed shrink-0 transition-transform duration-200"
-                :class="expanded.includes(entry.name) ? 'rotate-180' : ''"
-              />
-              <UIcon v-else name="i-lucide-server" class="size-4 text-muted shrink-0" />
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium font-mono truncate">{{ entry.name }}</span>
-                  <UBadge :color="statusColor(entry.status)" variant="subtle" size="sm">{{ entry.status }}</UBadge>
-                  <span v-if="entry.tools.length" class="text-[10px] text-dimmed">{{ entry.tools.length }} tools</span>
-                </div>
-                <div v-if="entry.error" class="text-xs text-error truncate">{{ entry.error }}</div>
-                <div v-else-if="entry.config?.url" class="text-xs text-dimmed font-mono truncate">{{ entry.config.url }}</div>
-                <div v-else-if="entry.config?.command" class="text-xs text-dimmed font-mono truncate">
-                  {{ Array.isArray(entry.config.command) ? (entry.config.command as string[]).join(' ') : entry.config.command }}
-                </div>
-              </div>
-            </component>
-            <!-- tri-state: off / ask before using / auto (no ask) -->
-            <McpModeControl
-              :model-value="serverMode(entry)"
-              :loading="toggling === entry.name"
-              @update:model-value="(m) => setServerMode(entry, m)"
-            />
-          </div>
-
-          <!-- per-tool project-level toggles -->
-          <CollapseTransition>
-            <div
-              v-if="entry.tools.length && expanded.includes(entry.name)"
-              class="px-11 pb-3 space-y-1.5"
-            >
-              <McpToolRow
-                v-for="tool in entry.tools"
-                :key="tool.id"
-                :name="tool.name"
-                :description="tool.description"
-                :model-value="toolMode(tool.id)"
-                :disabled="!entry.enabled || toggling === tool.id"
-                @update:model-value="(v) => setToolMode(tool.id, v)"
-              />
-            </div>
-          </CollapseTransition>
-        </div>
-        <div v-if="!loading && !entries.length && serverDegraded" class="flex items-center justify-center gap-2 px-4 py-8 text-sm text-error">
-          <UIcon name="i-lucide-plug-zap" class="size-4" />
-          Server not responding — list unavailable.
-        </div>
-        <div v-else-if="!loading && !entries.length" class="px-4 py-8 text-center text-sm text-dimmed">
-          No MCP servers configured for this project.
+          <USkeleton class="h-5 w-24 rounded-sm" />
         </div>
       </div>
+      <div v-else-if="!entries.length && serverDegraded" class="flex items-center justify-center gap-2 rounded-sm bg-muted px-4 py-8 text-sm text-error">
+        <UIcon name="i-lucide-plug-zap" class="size-4" />
+        Server not responding — list unavailable.
+      </div>
+      <McpServerList
+        v-else
+        :servers="listServers"
+        :server-mode="serverModeByName"
+        :tool-mode="toolMode"
+        :toggling-name="toggling"
+        list-class="max-h-[70dvh]"
+        @set-server="onSetServer"
+        @set-tool="setToolMode"
+      />
     </div>
 
     <UModal

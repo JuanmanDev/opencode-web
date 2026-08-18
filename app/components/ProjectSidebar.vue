@@ -125,6 +125,16 @@ function fmtTime(ts?: number) {
       </UInput>
     </div>
     <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+      <!-- first load (e.g. opening the mobile menu): skeleton rows -->
+      <div v-if="refreshing && !sessions.length" class="px-1 pt-1 space-y-2.5">
+        <div v-for="i in 6" :key="i" class="flex items-start gap-2">
+          <USkeleton class="size-3.5 rounded-full mt-0.5" />
+          <div class="flex-1 space-y-1.5">
+            <USkeleton class="h-3.5" :class="['w-3/4', 'w-1/2', 'w-2/3'][i % 3]" />
+            <USkeleton class="h-2.5 w-16" />
+          </div>
+        </div>
+      </div>
       <div
         v-for="s in sortedSessions"
         :key="s.id"
@@ -168,11 +178,11 @@ function fmtTime(ts?: number) {
           @click.stop.prevent="deleteSession(s.id)"
         />
       </div>
-      <div v-if="!sessions.length && serverDegraded" class="flex items-center gap-1.5 px-2.5 py-4 text-xs text-error">
+      <div v-if="!sessions.length && !refreshing && serverDegraded" class="flex items-center gap-1.5 px-2.5 py-4 text-xs text-error">
         <UIcon name="i-lucide-plug-zap" class="size-3.5 shrink-0" />
         Server not responding
       </div>
-      <div v-else-if="!sessions.length" class="px-2.5 py-4 text-xs text-dimmed">No sessions yet</div>
+      <div v-else-if="!sessions.length && !refreshing" class="px-2.5 py-4 text-xs text-dimmed">No sessions yet</div>
     </div>
 
     <div class="p-3">

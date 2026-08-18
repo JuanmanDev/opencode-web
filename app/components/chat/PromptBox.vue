@@ -49,7 +49,6 @@ const disabledTools = ref<string[]>([])
 const forcedTools = ref<string[]>([])
 const optionsOpen = ref(false)
 const providersOpen = ref(false)
-const openServers = ref<string[]>([])
 
 interface ModelItem {
   label: string
@@ -127,28 +126,6 @@ const variantLabel = computed(
 const enabledCount = computed(
   () => props.mcpInfo.filter((s) => !disabledServers.value.includes(s.name)).length
 )
-
-// filter across server names and tool names (long lists get unwieldy)
-const mcpFilter = ref('')
-const filteredMcpInfo = computed(() => {
-  const q = mcpFilter.value.trim().toLowerCase()
-  if (!q) return props.mcpInfo
-  return props.mcpInfo
-    .map((server) => {
-      const serverHit = server.name.toLowerCase().includes(q)
-      const tools = server.tools.filter((t) => t.name.toLowerCase().includes(q))
-      if (!serverHit && !tools.length) return null
-      return { ...server, tools: serverHit && !tools.length ? server.tools : tools }
-    })
-    .filter(Boolean) as typeof props.mcpInfo
-})
-
-function statusColor(status: string) {
-  if (['connected', 'running', 'ok'].includes(status)) return 'success' as const
-  if (['failed', 'error'].includes(status)) return 'error' as const
-  if (status === 'disabled') return 'neutral' as const
-  return 'warning' as const
-}
 
 // remember last used settings per project
 const prefsKey = computed(() => `opencode-web.prefs.${props.directory}`)
@@ -272,12 +249,6 @@ watch([disabledServers, disabledTools], () => {
     JSON.stringify([...group.disabledTools].sort()) === JSON.stringify([...disabledTools.value].sort())
   if (!same) activeGroup.value = ''
 }, { deep: true })
-
-function toggleAccordion(name: string) {
-  openServers.value = openServers.value.includes(name)
-    ? openServers.value.filter((s) => s !== name)
-    : [...openServers.value, name]
-}
 
 function send() {
   const value = text.value.trim()
@@ -558,19 +529,6 @@ function onKeydown(e: KeyboardEvent) {
             <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
           </div>
 
-          <UInput
-            v-model="mcpFilter"
-            size="xs"
-            icon="i-lucide-search"
-            placeholder="Filter servers and tools…"
-            class="w-full"
-            :ui="{ trailing: 'pe-1' }"
-          >
-            <template v-if="mcpFilter" #trailing>
-              <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="mcpFilter = ''" />
-            </template>
-          </UInput>
-
           <!-- saved groups: apply with one click, save the current selection -->
           <div class="flex flex-wrap items-center gap-1">
             <template v-for="g in groups" :key="g.name">
@@ -613,65 +571,14 @@ function onKeydown(e: KeyboardEvent) {
             />
           </div>
 
-          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-[50dvh] sm:max-h-[60vh] overflow-y-auto overscroll-contain">
-              <div v-if="!filteredMcpInfo.length" class="px-3 py-4 text-xs text-dimmed text-center">
-                Nothing matches “{{ mcpFilter }}”
-              </div>
-              <div v-for="server in filteredMcpInfo" :key="server.name">
-                <!-- accordion header -->
-                <div class="flex items-center gap-2 px-2.5 py-2">
-                  <!-- expandable only when the server's tool list is known -->
-                  <component
-                    :is="server.tools.length ? 'button' : 'div'"
-                    class="flex items-center gap-2 flex-1 min-w-0 text-left"
-                    :class="server.tools.length ? 'cursor-pointer' : ''"
-                    @click="server.tools.length && toggleAccordion(server.name)"
-                  >
-                    <UIcon
-                      v-if="server.tools.length"
-                      name="i-lucide-chevron-down"
-                      class="size-3.5 shrink-0 text-dimmed transition-transform duration-200"
-                      :class="openServers.includes(server.name) ? 'rotate-180' : ''"
-                    />
-                    <UIcon v-else name="i-lucide-server" class="size-3.5 shrink-0 text-dimmed" />
-                    <span class="text-sm font-mono truncate">{{ server.name }}</span>
-                    <UBadge :color="statusColor(server.status)" variant="subtle" size="sm">
-                      {{ server.status }}
-                    </UBadge>
-                    <span v-if="server.tools.length" class="text-[10px] text-dimmed">
-                      {{ server.tools.length }} tools
-                    </span>
-                  </component>
-                  <McpModeControl
-                    :model-value="disabledServers.includes(server.name) ? 'off' : 'allow'"
-                    ask-disabled
-                    @update:model-value="(m) => toggleServer(server.name, m !== 'off')"
-                  />
-                </div>
-                <p v-if="server.error" class="px-8 pb-2 text-xs text-error break-words -mt-1">
-                  {{ server.error }}
-                </p>
-
-                <!-- accordion body: per-tool toggles -->
-                <CollapseTransition>
-                  <div
-                    v-if="server.tools.length && openServers.includes(server.name)"
-                    class="px-8 pb-2 space-y-1"
-                  >
-                    <McpToolRow
-                      v-for="tool in server.tools"
-                      :key="tool.id"
-                      :name="tool.name"
-                      :description="tool.description"
-                      :model-value="toolChatMode(tool.id)"
-                      ask-disabled
-                      :disabled="disabledServers.includes(server.name)"
-                      @update:model-value="(v) => setToolChatMode(tool.id, v)"
-                    />
-                  </div>
-                </CollapseTransition>
-              </div>
-            </div>
+          <McpServerList
+            :servers="mcpInfo"
+            :server-mode="(n) => disabledServers.includes(n) ? 'off' : 'allow'"
+            :tool-mode="toolChatMode"
+            ask-disabled
+            @set-server="(n, m) => toggleServer(n, m !== 'off')"
+            @set-tool="setToolChatMode"
+          />
         </div>
         </CollapseTransition>
       </div>

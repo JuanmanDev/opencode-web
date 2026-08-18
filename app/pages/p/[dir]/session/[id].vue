@@ -268,10 +268,18 @@ function diffLineClass(line: string) {
   if (line.startsWith('@@')) return 'text-info'
   return 'text-muted'
 }
-// ring when a reply finishes (busy -> idle), not on initial load
+// ring only when the agent is REALLY done: busy flickers between steps
+// (message completes -> next tool/message starts), so require a quiet period
+let chimeTimer: ReturnType<typeof setTimeout> | undefined
 watch(busy, (now, before) => {
-  if (before && !now && !loading.value) chime.play()
+  clearTimeout(chimeTimer)
+  if (before && !now && !loading.value) {
+    chimeTimer = setTimeout(() => {
+      if (!busy.value && queue.value.length === 0) chime.play()
+    }, 1800)
+  }
 })
+onBeforeUnmount(() => clearTimeout(chimeTimer))
 
 function onScroll() {
   const el = scroller.value
