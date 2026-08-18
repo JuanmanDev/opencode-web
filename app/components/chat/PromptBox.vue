@@ -377,9 +377,10 @@ function onKeydown(e: KeyboardEvent) {
         @keydown="onKeydown"
       />
 
-      <!-- collapsible options -->
+      <!-- collapsible options; scrolls internally on small screens so the
+           on-screen keyboard never pushes the selects out of reach -->
       <CollapseTransition>
-      <div v-if="optionsOpen" class="space-y-2">
+      <div v-if="optionsOpen" class="space-y-2 max-h-[45dvh] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible">
         <!-- one row on wide screens: model / think / agent -->
         <div class="flex flex-col sm:flex-row gap-1.5">
           <UFormField label="Model" size="xs" class="flex-1 min-w-0">
@@ -557,7 +558,7 @@ function onKeydown(e: KeyboardEvent) {
             />
           </div>
 
-          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-96 overflow-y-auto">
+          <div class="rounded-sm bg-elevated/60 divide-y divide-default max-h-[35dvh] sm:max-h-96 overflow-y-auto overscroll-contain">
               <div v-for="server in mcpInfo" :key="server.name">
                 <!-- accordion header -->
                 <div class="flex items-center gap-2 px-2.5 py-2">

@@ -188,10 +188,9 @@ async function fetchToolsSse(url: string, headers: Record<string, string>): Prom
   }
 }
 
-export default defineEventHandler(async (event) => {
-  requireApiToken(event)
-  const { directory, scope } = getQuery(event) as { directory?: string; scope?: string }
-
+// tool discovery is slow (talks to every remote MCP server) -> cached with SWR
+const getAllTools = defineCachedFunction(
+  async (directory?: string, scope?: string) => {
   const config = await opencodeFetch<{ mcp?: Record<string, McpConfigEntry> }>(
     scope === 'global' ? '/global/config' : '/config',
     { query: scope === 'global' ? {} : { directory } }
@@ -227,4 +226,18 @@ export default defineEventHandler(async (event) => {
   }))
 
   return results
+  },
+  {
+    name: 'mcp-tools',
+    maxAge: 120,
+    swr: true,
+    getKey: (directory?: string, scope?: string) =>
+      `${scope || 'project'}:${encodeURIComponent(directory || '')}`
+  }
+)
+
+export default defineEventHandler(async (event) => {
+  requireApiToken(event) // auth on every request; only discovery work is cached
+  const { directory, scope } = getQuery(event) as { directory?: string; scope?: string }
+  return getAllTools(directory, scope)
 })

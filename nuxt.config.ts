@@ -16,7 +16,9 @@ export default defineNuxtConfig({
     pageTransition: { name: 'oc-page', mode: 'out-in' },
     head: {
       title: 'opencode web',
-      viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
+      // interactive-widget makes the on-screen keyboard resize the layout
+      // instead of covering it (Chrome/Android)
+      viewport: 'width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content',
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'manifest', href: '/manifest.webmanifest' },
