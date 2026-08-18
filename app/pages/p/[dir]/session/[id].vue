@@ -501,6 +501,7 @@ type PromptPayload = {
 const queue = ref<PromptPayload[]>([])
 // last dispatched settings so error-retry keeps the same model/agent/tools
 const lastPayload = ref<PromptPayload | null>(null)
+const promptSeed = ref<{ text: string; ts: number } | null>(null)
 
 function retryLast() {
   const lastUser = [...messages.value].reverse().find((m) => m.info.role === 'user')
@@ -859,6 +860,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             @fork="forkSession(message.info.id)"
             @retry="retryLast"
             @continue="continueRun"
+            @edit="(text) => { promptSeed = { text, ts: Date.now() } }"
           />
           <ChatPermissionPrompt
             v-for="perm in permissions"
@@ -928,6 +930,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       :meta-loading="metaLoading"
       :queue-length="queue.length"
       :commands="allCommands"
+      :seed="promptSeed"
       :busy="busy"
       :directory="directory"
       @send="send"

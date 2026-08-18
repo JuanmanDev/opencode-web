@@ -2,7 +2,29 @@
 import type { MessageWithParts, Part, TokenUsage } from '#shared/types/opencode'
 
 const props = defineProps<{ message: MessageWithParts }>()
-const emit = defineEmits<{ fork: []; retry: []; continue: [] }>()
+const emit = defineEmits<{ fork: []; retry: []; continue: []; edit: [text: string] }>()
+
+const toast = useToast()
+const speech = useSpeech()
+
+const messageText = computed(() =>
+  (props.message.parts || [])
+    .filter((p) => p.type === 'text')
+    .map((p) => (p as { text?: string }).text || '')
+    .join('\n\n')
+    .trim()
+)
+
+async function copyMessage() {
+  const ok = await copyText(messageText.value)
+  toast.add({ title: ok ? 'Copied to clipboard' : 'Copy failed', color: ok ? 'success' : 'error' })
+}
+
+function readAloud() {
+  if (!speech.toggle(props.message.info.id, messageText.value)) {
+    toast.add({ title: 'Speech is not supported in this browser', color: 'warning' })
+  }
+}
 
 const info = computed(() => props.message.info)
 const isUser = computed(() => info.value.role === 'user')
@@ -51,6 +73,15 @@ const errorMessage = computed(() => {
           {{ (part as any).filename || (part as any).url }}
         </div>
       </template>
+      <!-- user message actions -->
+      <div class="flex items-center gap-0.5 mt-1 -mb-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+        <UTooltip text="Copy">
+          <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy message" @click="copyMessage" />
+        </UTooltip>
+        <UTooltip text="Edit and resend">
+          <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit and resend" @click="emit('edit', messageText)" />
+        </UTooltip>
+      </div>
     </div>
 
     <!-- assistant message -->
@@ -109,10 +140,31 @@ const errorMessage = computed(() => {
         ]"
       />
 
-      <div v-if="info.modelID" class="flex items-center gap-2 text-[11px] text-dimmed font-mono pt-1">
-        <span>{{ info.modelID }}</span>
-        <span v-if="info.variant" class="text-muted">{{ info.variant }}</span>
-        <span v-if="info.cost">${{ info.cost.toFixed(4) }}</span>
+      <div class="group/actions flex items-center gap-2 text-[11px] text-dimmed font-mono pt-1">
+        <template v-if="info.modelID">
+          <span>{{ info.modelID }}</span>
+          <span v-if="info.variant" class="text-muted">{{ info.variant }}</span>
+          <span v-if="info.cost">${{ info.cost.toFixed(4) }}</span>
+        </template>
+        <!-- assistant message actions -->
+        <span v-if="messageText" class="flex items-center gap-0.5">
+          <UTooltip text="Copy">
+            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy reply" @click="copyMessage" />
+          </UTooltip>
+          <UTooltip :text="speech.speakingId.value === info.id ? 'Stop reading' : 'Read aloud'">
+            <UButton
+              :icon="speech.speakingId.value === info.id ? 'i-lucide-square' : 'i-lucide-volume-2'"
+              size="xs"
+              :color="speech.speakingId.value === info.id ? 'primary' : 'neutral'"
+              variant="ghost"
+              aria-label="Read aloud"
+              @click="readAloud"
+            />
+          </UTooltip>
+          <UTooltip text="Fork from here">
+            <UButton icon="i-lucide-git-branch" size="xs" color="neutral" variant="ghost" aria-label="Fork from here" @click="emit('fork')" />
+          </UTooltip>
+        </span>
       </div>
     </div>
   </div>

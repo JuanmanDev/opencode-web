@@ -18,6 +18,8 @@ const props = defineProps<{
   mcpLoading?: boolean
   queueLength?: number
   commands?: Array<{ name: string; description?: string }>
+  /** put text into the input (edit-and-resend) */
+  seed?: { text: string; ts: number } | null
 }>()
 
 const emit = defineEmits<{
@@ -363,6 +365,13 @@ function pickCommand(name: string) {
   text.value = `/${name} `
   ;(document.activeElement as HTMLElement)?.blur?.()
 }
+
+watch(() => props.seed, (seed) => {
+  if (seed?.text) {
+    text.value = seed.text
+    nextTick(() => (document.querySelector('textarea') as HTMLTextAreaElement | null)?.focus())
+  }
+})
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Tab' && slashMatches.value.length) {
