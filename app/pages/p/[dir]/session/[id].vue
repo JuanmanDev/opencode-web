@@ -666,7 +666,10 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 </script>
 
 <template>
-  <div class="flex-1 flex min-h-0">
+  <div
+    class="flex-1 flex min-h-0 transition-[margin] duration-300"
+    :style="effectiveView === 'side' && !isSmallScreen ? { marginRight: 'min(42vw, 42rem)' } : {}"
+  >
   <div class="flex-1 flex flex-col min-h-0 min-w-0">
     <!-- session header -->
     <div class="hidden md:flex items-center gap-2 h-12 px-4 bg-muted/50 shrink-0">

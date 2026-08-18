@@ -133,6 +133,17 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
       <UIcon :name="script ? 'i-lucide-puzzle' : 'i-lucide-app-window'" class="size-3.5" />
       <span class="truncate flex-1">{{ title || 'MCP app' }}</span>
       <UBadge v-if="script" size="sm" variant="subtle" color="neutral">remote-dom</UBadge>
+      <UTooltip v-if="url" text="Open in a new tab (e.g. to log in)">
+        <UButton
+          icon="i-lucide-external-link"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :href="url"
+          target="_blank"
+          aria-label="Open in a new tab"
+        />
+      </UTooltip>
       <template v-if="appId && !viewer">
         <UTooltip text="Open in side panel">
           <UButton

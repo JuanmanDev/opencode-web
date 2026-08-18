@@ -563,19 +563,11 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               </div>
             </component>
             <!-- tri-state: off / ask before using / auto (no ask) -->
-            <div class="flex items-center rounded-sm overflow-hidden shrink-0">
-              <UButton
-                v-for="mode in (['off', 'ask', 'allow'] as const)"
-                :key="mode"
-                size="xs"
-                :label="mode === 'allow' ? 'auto' : mode"
-                :color="serverMode(entry) === mode ? (mode === 'off' ? 'neutral' : 'primary') : 'neutral'"
-                :variant="serverMode(entry) === mode ? 'solid' : 'soft'"
-                :loading="toggling === entry.name && serverMode(entry) !== mode"
-                class="rounded-none"
-                @click="setServerMode(entry, mode)"
-              />
-            </div>
+            <McpModeControl
+              :model-value="serverMode(entry)"
+              :loading="toggling === entry.name"
+              @update:model-value="(m) => setServerMode(entry, m)"
+            />
           </div>
 
           <!-- per-tool project-level toggles -->

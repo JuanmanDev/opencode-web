@@ -584,10 +584,10 @@ function onKeydown(e: KeyboardEvent) {
                       {{ server.tools.length }} tools
                     </span>
                   </component>
-                  <USwitch
-                    size="sm"
-                    :model-value="!disabledServers.includes(server.name)"
-                    @update:model-value="(v: boolean) => toggleServer(server.name, v)"
+                  <McpModeControl
+                    :model-value="disabledServers.includes(server.name) ? 'off' : 'allow'"
+                    ask-disabled
+                    @update:model-value="(m) => toggleServer(server.name, m !== 'off')"
                   />
                 </div>
                 <p v-if="server.error" class="px-8 pb-2 text-xs text-error break-words -mt-1">
