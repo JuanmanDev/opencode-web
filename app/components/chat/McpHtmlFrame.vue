@@ -22,6 +22,11 @@ const props = defineProps<{
 const frame = ref<HTMLIFrameElement>()
 const height = ref(props.viewer ? 480 : 240)
 const appViewer = props.appId || props.viewer ? useAppViewer() : null
+const colorMode = useColorMode()
+const theme = computed(() => (colorMode.value === 'light' ? 'light' : 'dark'))
+const displayMode = computed(() =>
+  props.viewer ? (appViewer?.view.value === 'side' ? 'inline' : 'fullscreen') : 'inline'
+)
 
 // while this app is displayed in the side panel / fullscreen, the chat copy
 // becomes a placeholder (click to bring the app back into the chat)
@@ -120,8 +125,8 @@ function handleAppRpc(msg: { jsonrpc?: string; id?: number | string; method?: st
         id: msg.id,
         result: {
           protocolVersion: '2026-01-26',
-          hostCapabilities: {},
-          hostContext: { theme: 'dark', displayMode: props.viewer ? 'fullscreen' : 'inline' }
+          hostCapabilities: { openLinks: {}, availableDisplayModes: ['inline', 'fullscreen'] },
+          hostContext: { theme: theme.value, displayMode: displayMode.value }
         }
       })
       return true
@@ -150,8 +155,19 @@ function handleAppRpc(msg: { jsonrpc?: string; id?: number | string; method?: st
       if (typeof msg.params?.url === 'string') window.open(msg.params.url, '_blank', 'noopener')
       if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: {} })
       return true
+    case 'ui/request-display-mode': {
+      // honored when the app can move: fullscreen <-> back into the chat
+      const wanted = msg.params?.mode
+      if (props.appId && appViewer && !props.viewer) {
+        if (wanted === 'fullscreen') appViewer.open(props.appId, 'full')
+      } else if (props.viewer && appViewer && wanted === 'inline') {
+        appViewer.close()
+      }
+      const granted = wanted === 'fullscreen' && (props.appId || props.viewer) ? 'fullscreen' : 'inline'
+      if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: { mode: granted } })
+      return true
+    }
     case 'ui/message':
-    case 'ui/request-display-mode':
     case 'ui/update-model-context':
       if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: {} })
       return true
@@ -192,7 +208,14 @@ function startLifecycle() {
   }, 15000)
 }
 
-watch(() => [props.url, props.html, props.script], startLifecycle)
+watch(() => [props.url, props.html, props.script, props.app?.html], startLifecycle)
+
+// MCP Apps: keep the app informed when the host theme changes
+watch(theme, (t) => {
+  if (props.app && state.value === 'ready') {
+    postToFrame({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: t } })
+  }
+})
 onMounted(startLifecycle)
 
 function onFrameLoad() {

@@ -1,18 +1,44 @@
-// Fetch the tool lists of a project's remote MCP servers by speaking MCP
-// (Streamable HTTP JSON-RPC) to them directly — opencode itself does not
-// expose MCP tool ids. Local (stdio) servers cannot be queried this way.
+// Fetch the tool lists of a project's MCP servers by speaking MCP to them
+// directly — opencode exposes no MCP tool ids at all (`/experimental/tool[/ids]`
+// only returns built-in and plugin tools). Remote servers are queried over
+// Streamable HTTP (with a legacy SSE fallback), local ones are spawned and
+// spoken to over stdio.
+
+import { fetchToolsStdio } from '../../utils/mcp-stdio'
+import { parseRpcBody, resolveDemoUrl, toToolInfo, type McpToolInfo } from '../../utils/mcp-client'
 
 interface McpConfigEntry {
   type?: string
   url?: string
   headers?: Record<string, string>
+  command?: string[]
+  environment?: Record<string, string>
   enabled?: boolean
 }
 
-interface ToolInfo {
-  name: string
-  description?: string
+export interface McpToolsResult {
+  tools: ToolInfo[]
+  error?: string
+  /** disabled in the config: never probed, so neither tools nor errors */
+  disabled?: boolean
+  transport?: 'remote' | 'local'
+  /** local server spawned here while opencode runs elsewhere: names only */
+  approx?: boolean
+  /** local discovery is switched off for this deployment */
+  skipped?: boolean
 }
+
+/** Does opencode run on this very host? Only then is a local spawn exact. */
+function opencodeIsLocal() {
+  try {
+    const { hostname } = new URL(useRuntimeConfig().opencodeUrl)
+    return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)
+  } catch {
+    return false
+  }
+}
+
+type ToolInfo = McpToolInfo
 
 async function rpc(
   url: string,
@@ -35,16 +61,7 @@ async function rpc(
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const newSession = res.headers.get('mcp-session-id') || sessionId
-  const contentType = res.headers.get('content-type') || ''
-  let payload: any
-  if (contentType.includes('text/event-stream')) {
-    // parse the first data: line of the SSE body
-    const body = await res.text()
-    const line = body.split('\n').find((l) => l.startsWith('data:'))
-    payload = line ? JSON.parse(line.slice(5).trim()) : undefined
-  } else {
-    payload = await res.json()
-  }
+  const payload = parseRpcBody(await res.text(), res.headers.get('content-type') || '', id)
   if (payload?.error) throw new Error(payload.error.message || 'MCP error')
   return { result: payload?.result, sessionId: newSession }
 }
@@ -55,8 +72,8 @@ async function fetchTools(url: string, headers: Record<string, string>): Promise
     capabilities: {},
     clientInfo: { name: 'opencode-web', version: '1' }
   }, 1)
-  // fire-and-forget initialized notification (some servers require it)
-  fetch(url, {
+  // stateful servers reject requests that arrive before this notification
+  await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -71,12 +88,7 @@ async function fetchTools(url: string, headers: Record<string, string>): Promise
   const list = await rpc(url, headers, 'tools/list', {}, 2, init.sessionId)
   const tools = Array.isArray(list.result?.tools) ? list.result.tools : []
   return tools
-    .map((t: any) => ({
-      name: String(t?.name || ''),
-      description: typeof t?.description === 'string'
-        ? t.description.split('\n')[0]!.slice(0, 140)
-        : undefined
-    }))
+    .map(toToolInfo)
     .filter((t: ToolInfo) => t.name)
 }
 
@@ -175,12 +187,7 @@ async function fetchToolsSse(url: string, headers: Record<string, string>): Prom
     if (list?.error) throw new Error(list.error.message || 'tools/list failed')
     const tools = Array.isArray(list?.result?.tools) ? list.result.tools : []
     return tools
-      .map((t: any) => ({
-        name: String(t?.name || ''),
-        description: typeof t?.description === 'string'
-          ? t.description.split('\n')[0]!.slice(0, 140)
-          : undefined
-      }))
+      .map(toToolInfo)
       .filter((t: ToolInfo) => t.name)
   } finally {
     clearTimeout(kill)
@@ -188,56 +195,97 @@ async function fetchToolsSse(url: string, headers: Record<string, string>): Prom
   }
 }
 
-// tool discovery is slow (talks to every remote MCP server) -> cached with SWR
-const getAllTools = defineCachedFunction(
-  async (directory?: string, scope?: string) => {
+/** Discover one server's tools; never throws — failures land in `error`. */
+async function probe(entry: McpConfigEntry, selfOrigin?: string): Promise<McpToolsResult> {
+  // disabled servers are never contacted: probing them produced phantom
+  // errors in the UI (e.g. 401 from a server the user deliberately turned off)
+  if (entry?.enabled === false) return { tools: [], disabled: true }
+
+  if (entry?.type === 'remote' && entry.url) {
+    const url = resolveDemoUrl(entry.url, selfOrigin)
+    try {
+      return { tools: await fetchTools(url, entry.headers || {}), transport: 'remote' }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      // 404/405 usually means a legacy SSE-only server: try the old transport
+      if (/40[45]/.test(message)) {
+        try {
+          return { tools: await fetchToolsSse(url, entry.headers || {}), transport: 'remote' }
+        } catch (sseError) {
+          return {
+            tools: [],
+            transport: 'remote',
+            error: `${message}; SSE fallback: ${sseError instanceof Error ? sseError.message : sseError}`
+          }
+        }
+      }
+      return { tools: [], transport: 'remote', error: message }
+    }
+  }
+
+  if (entry?.type === 'local' && entry.command?.length) {
+    // stdio servers can only be listed by running them: that happens here, in
+    // this app, so the result is exact only when opencode is on this host
+    const policy = String(useRuntimeConfig().mcpLocalDiscovery || 'always')
+    const local = opencodeIsLocal()
+    if (policy === 'never' || (policy === 'same-host' && !local)) {
+      return { tools: [], transport: 'local', skipped: true }
+    }
+    try {
+      return {
+        tools: await fetchToolsStdio(entry.command, entry.environment),
+        transport: 'local',
+        ...(local ? {} : { approx: true })
+      }
+    } catch (error) {
+      return {
+        tools: [],
+        transport: 'local',
+        ...(local ? {} : { approx: true }),
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+
+  // neither shape: opencode itself ignores such entries
+  return {
+    tools: [],
+    error: entry?.type ? undefined : 'config entry has no "type" — opencode ignores it'
+  }
+}
+
+// discovery is slow (every server is contacted, local ones are spawned)
+// -> cached with stale-while-revalidate
+const getAllTools = defineCachedFunction(discoverAll, {
+  name: 'mcp-tools',
+  maxAge: 300,
+  swr: true,
+  getKey: (directory?: string, scope?: string, _selfOrigin?: string) =>
+    `${scope || 'project'}:${encodeURIComponent(directory || '')}`
+})
+
+async function discoverAll(directory?: string, scope?: string, selfOrigin?: string) {
   const config = await opencodeFetch<{ mcp?: Record<string, McpConfigEntry> }>(
     scope === 'global' ? '/global/config' : '/config',
     { query: scope === 'global' ? {} : { directory } }
   ).catch(() => ({ mcp: {} as Record<string, McpConfigEntry> }))
 
   const entries = Object.entries(config.mcp || {})
-  const results: Record<string, { tools: ToolInfo[]; error?: string }> = {}
-
+  const results: Record<string, McpToolsResult> = {}
   await Promise.all(entries.map(async ([name, entry]) => {
-    if (entry?.type !== 'remote' || !entry.url) {
-      results[name] = { tools: [] }
-      return
-    }
-    try {
-      results[name] = { tools: await fetchTools(entry.url, entry.headers || {}) }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      // 404/405 usually means a legacy SSE-only server: try the old transport
-      if (/40[45]/.test(message)) {
-        try {
-          results[name] = { tools: await fetchToolsSse(entry.url, entry.headers || {}) }
-          return
-        } catch (sseError) {
-          results[name] = {
-            tools: [],
-            error: `${message}; SSE fallback: ${sseError instanceof Error ? sseError.message : sseError}`
-          }
-          return
-        }
-      }
-      results[name] = { tools: [], error: message }
-    }
+    results[name] = await probe(entry, selfOrigin)
   }))
-
   return results
-  },
-  {
-    name: 'mcp-tools',
-    maxAge: 120,
-    swr: true,
-    getKey: (directory?: string, scope?: string) =>
-      `${scope || 'project'}:${encodeURIComponent(directory || '')}`
-  }
-)
+}
 
 export default defineEventHandler(async (event) => {
   requireApiToken(event) // auth on every request; only discovery work is cached
-  const { directory, scope } = getQuery(event) as { directory?: string; scope?: string }
-  return getAllTools(directory, scope)
+  const { directory, scope, refresh } = getQuery(event) as {
+    directory?: string
+    scope?: string
+    refresh?: string
+  }
+  // the MCP page's refresh button must re-probe, not replay the cache
+  const selfOrigin = getRequestURL(event).origin
+  return refresh ? discoverAll(directory, scope, selfOrigin) : getAllTools(directory, scope, selfOrigin)
 })

@@ -6,7 +6,7 @@ const directory = computed(() => decodeDir(route.params.dir as string))
 const api = useOpencodeApi(directory)
 const toast = useToast()
 
-interface McpTool { id: string; name: string; description?: string }
+interface McpTool { id: string; name: string; description?: string; ui?: boolean }
 
 interface McpEntry {
   name: string
@@ -14,6 +14,8 @@ interface McpEntry {
   error?: string
   config?: Record<string, unknown>
   enabled: boolean
+  approx?: boolean
+  skipped?: boolean
   tools: McpTool[]
 }
 
@@ -32,17 +34,44 @@ function patchScoped(body: Record<string, unknown>) {
   return scope.value === 'global' ? api.patchGlobalConfig(body) : api.patchConfig(body)
 }
 
-async function refresh() {
+interface DiscoveredTools {
+  tools: Array<{ name: string; description?: string; ui?: boolean }>
+  error?: string
+  disabled?: boolean
+  approx?: boolean
+  skipped?: boolean
+}
+
+// opencode may run on another machine (docker on the LAN): a Windows project
+// path then cannot exist there, and every local MCP server dies with ENOENT
+const hostHome = ref('')
+const isWindowsPath = (p: string) => /^[A-Za-z]:[\\/]/.test(p)
+const dirMismatch = computed(() => {
+  if (!hostHome.value || !directory.value) return false
+  return isWindowsPath(directory.value) !== isWindowsPath(hostHome.value)
+})
+onMounted(() => {
+  api.paths().then((p) => { hostHome.value = p?.home || '' }).catch(() => { /* older server */ })
+})
+
+async function refresh(rediscover = false) {
   loading.value = true
   try {
-    const [status, config, remoteTools] = await Promise.all([
+    const [status, config, discovered] = await Promise.all([
       api.mcpStatus().catch(() => ({} as Record<string, McpStatus>)),
       (scope.value === 'global' ? api.globalConfig() : api.config()).catch(() => ({} as Record<string, unknown>)),
-      $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
-        '/api/v1/mcp-tools',
-        { query: { directory: directory.value, scope: scope.value }, timeout: 20000 }
-      ).catch(() => ({} as Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>))
+      // tools come from the servers themselves (HTTP or stdio) - opencode
+      // exposes no MCP tool ids at all
+      $fetch<Record<string, DiscoveredTools>>('/api/v1/mcp-tools', {
+        query: {
+          directory: directory.value,
+          scope: scope.value,
+          ...(rediscover ? { refresh: '1' } : {})
+        },
+        timeout: 90000
+      }).catch(() => ({} as Record<string, DiscoveredTools>))
     ])
+    useMcpUiTools().learn(discovered)
     const mcpConfig = (config.mcp || {}) as Record<string, Record<string, unknown>>
     configTools.value = (config.tools || {}) as Record<string, boolean>
     configPermission.value = Object.fromEntries(
@@ -53,16 +82,18 @@ async function refresh() {
     entries.value = [...names].sort().map((name) => {
       const s = (status[name] || {}) as Record<string, unknown>
       const cfg = mcpConfig[name]
-      const remote = remoteTools[name]
+      const found = discovered[name]
       const statusText = String(s.status || s.state || (cfg?.enabled === false ? 'disabled' : 'unknown'))
       return {
         name,
         status: statusText,
-        error: typeof s.error === 'string' ? s.error : remote?.error,
+        error: typeof s.error === 'string' ? s.error : found?.error,
         config: cfg,
         enabled: cfg?.enabled !== false && statusText !== 'disabled',
-        tools: (remote?.tools || [])
-          .map((t) => ({ id: `${name}_${t.name}`, name: t.name, description: t.description }))
+        approx: found?.approx,
+        skipped: found?.skipped,
+        tools: (found?.tools || [])
+          .map((t) => ({ id: `${name}_${t.name}`, name: t.name, description: t.description, ui: t.ui }))
           .sort((a, b) => a.name.localeCompare(b.name))
       }
     })
@@ -71,7 +102,7 @@ async function refresh() {
   }
 }
 
-watch(scope, refresh)
+watch(scope, () => refresh())
 
 // ---- saved presets: tri-state per server + per-tool overrides, shared
 // server-side across devices (localStorage as offline fallback) ----
@@ -258,6 +289,8 @@ const listServers = computed(() => entries.value.map((e) => ({
   name: e.name,
   status: e.status,
   error: e.error,
+  approx: e.approx,
+  skipped: e.skipped,
   detail: typeof e.config?.url === 'string'
     ? e.config.url as string
     : Array.isArray(e.config?.command) ? (e.config!.command as string[]).join(' ') : undefined,
@@ -274,8 +307,72 @@ function onSetServer(name: string, mode: 'off' | 'ask' | 'allow') {
   if (entry) setServerMode(entry, mode)
 }
 
+// ---- repairing broken servers ----
+
+/** Reconnect a failed server in place; no opencode restart needed. */
+async function retryServer(name: string) {
+  toggling.value = name
+  try {
+    await api.mcpConnect(name)
+    await refresh(true)
+    const status = entries.value.find((e) => e.name === name)?.status
+    toast.add({
+      title: `${name}: ${status || 'reconnected'}`,
+      color: status === 'connected' ? 'success' : 'warning'
+    })
+  } catch (e) {
+    toast.add({ title: `Could not connect ${name}`, description: String(e), color: 'error' })
+  } finally {
+    toggling.value = null
+  }
+}
+
+// OAuth for servers reporting needs_auth: opencode hands back a consent URL,
+// the user pastes the resulting code here (the browser may be on another device)
+const authName = ref('')
+const authUrl = ref('')
+const authCode = ref('')
+const authBusy = ref(false)
+
+async function startAuth(name: string) {
+  authName.value = name
+  authUrl.value = ''
+  authCode.value = ''
+  authBusy.value = true
+  try {
+    const { authorizationUrl } = await api.mcpAuthStart(name)
+    authUrl.value = authorizationUrl
+    window.open(authorizationUrl, '_blank', 'noopener')
+  } catch (e) {
+    toast.add({
+      title: `${name} does not support OAuth sign-in`,
+      description: String(e),
+      color: 'error'
+    })
+    authName.value = ''
+  } finally {
+    authBusy.value = false
+  }
+}
+
+async function completeAuth() {
+  const code = authCode.value.trim()
+  if (!code || !authName.value) return
+  authBusy.value = true
+  try {
+    await api.mcpAuthCallback(authName.value, code)
+    toast.add({ title: `${authName.value}: signed in`, color: 'success' })
+    authName.value = ''
+    await refresh(true)
+  } catch (e) {
+    toast.add({ title: 'Sign-in failed', description: String(e), color: 'error' })
+  } finally {
+    authBusy.value = false
+  }
+}
+
 onMounted(refresh)
-watch(directory, refresh)
+watch(directory, () => refresh())
 
 
 // ---- add servers ----
@@ -464,7 +561,14 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       <div class="flex items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">MCP servers</h1>
         <span class="flex-1" />
-        <UButton size="xs" variant="soft" icon="i-lucide-refresh-cw" :loading="loading" @click="refresh" />
+        <UButton
+          size="xs"
+          variant="soft"
+          icon="i-lucide-refresh-cw"
+          :loading="loading"
+          aria-label="Rescan servers and tools"
+          @click="refresh(true)"
+        />
         <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" @click="addOpen = true" />
       </div>
       <p class="text-sm text-muted mb-4">
@@ -493,50 +597,17 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         />
       </div>
 
-      <!-- saved enable/disable sets -->
-      <div class="flex flex-wrap items-center gap-1 mb-3">
-        <template v-for="g in groups" :key="g.name">
-          <div class="flex items-center rounded-sm overflow-hidden">
-            <UButton
-              size="xs"
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-layers"
-              :label="g.name"
-              :loading="applyingGroup === g.name"
-              class="rounded-r-none"
-              @click="applyGroup(g)"
-            />
-            <UButton
-              size="xs"
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-x"
-              class="rounded-l-none"
-              :aria-label="`Delete set ${g.name}`"
-              @click="deleteGroup(g.name)"
-            />
-          </div>
-        </template>
-        <UInput
-          v-model="groupName"
-          size="xs"
-          placeholder="Save current set as…"
-          class="w-40 font-mono"
-          @keydown.enter="saveGroup"
-        />
-        <UTooltip text="Save the current enabled/disabled selection">
-          <UButton
-            size="xs"
-            variant="soft"
-            color="neutral"
-            icon="i-lucide-save"
-            :disabled="!groupName.trim()"
-            aria-label="Save set"
-            @click="saveGroup"
-          />
-        </UTooltip>
-      </div>
+      <UAlert
+        v-if="dirMismatch"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        class="mb-3"
+        title="This project path does not exist on the opencode host"
+        :description="`opencode runs with home ${hostHome}, but this project is ${directory}. `
+          + 'Remote MCP servers still work; local (stdio) ones fail to spawn because their working '
+          + 'directory is missing. Open a project path that exists on the opencode host.'"
+      />
 
       <div v-if="loading && !entries.length" class="bg-muted rounded-sm p-4 space-y-3">
         <div v-for="i in 3" :key="i" class="flex items-center gap-3">
@@ -558,10 +629,95 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         :server-mode="serverModeByName"
         :tool-mode="toolMode"
         :toggling-name="toggling"
+        :loading="loading"
+        repairable
         list-class="max-h-[70dvh]"
         @set-server="onSetServer"
         @set-tool="setToolMode"
-      />
+        @retry="retryServer"
+        @authenticate="startAuth"
+      >
+        <!-- saved presets share the filter row -->
+        <template #actions>
+          <div v-for="g in groups" :key="g.name" class="flex items-center rounded-sm overflow-hidden">
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-layers"
+              :label="g.name"
+              :loading="applyingGroup === g.name"
+              class="rounded-r-none"
+              @click="applyGroup(g)"
+            />
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-x"
+              class="rounded-l-none"
+              :aria-label="`Delete preset ${g.name}`"
+              @click="deleteGroup(g.name)"
+            />
+          </div>
+          <UInput
+            v-model="groupName"
+            size="xs"
+            placeholder="Save as…"
+            class="w-28 font-mono"
+            @keydown.enter="saveGroup"
+          />
+          <UTooltip text="Save the current enabled/disabled selection">
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-save"
+              :disabled="!groupName.trim()"
+              aria-label="Save preset"
+              @click="saveGroup"
+            />
+          </UTooltip>
+        </template>
+      </McpServerList>
+
+      <!-- OAuth: paste back the code from the consent screen -->
+      <div v-if="authName" class="mt-3 rounded-sm bg-muted p-3 space-y-2">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-key-round" class="size-4 text-muted shrink-0" />
+          <span class="text-sm font-medium flex-1">Sign in to {{ authName }}</span>
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-x"
+            aria-label="Cancel sign-in"
+            @click="authName = ''"
+          />
+        </div>
+        <p class="text-xs text-muted">
+          A consent page was opened.
+          <ULink v-if="authUrl" :to="authUrl" target="_blank" class="underline">Open it again</ULink>
+          — then paste the authorization code below.
+        </p>
+        <div class="flex gap-1.5">
+          <UInput
+            v-model="authCode"
+            size="sm"
+            placeholder="authorization code"
+            class="flex-1 font-mono"
+            @keydown.enter="completeAuth"
+          />
+          <UButton
+            size="sm"
+            color="primary"
+            label="Finish"
+            :loading="authBusy"
+            :disabled="!authCode.trim()"
+            @click="completeAuth"
+          />
+        </div>
+      </div>
     </div>
 
     <UModal

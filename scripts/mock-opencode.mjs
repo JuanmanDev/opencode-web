@@ -55,6 +55,38 @@ const messages = [
   }
 ]
 
+// Session 2: every MCP UI flavour the chat can render.
+// - ui-demo_*      -> MCP Apps / mcp-ui via this app's own /mcp-demo server
+//                     (the URL's stale port is rewritten to the current origin)
+// - widgets_card   -> inline ui:// text/html resource kept in the tool metadata
+const uiMessages = [
+  {
+    info: { id: 'msg_u2', sessionID: 'ses_mock2', role: 'user', time: { created: now - 500000 } },
+    parts: [
+      { id: 'prt_u2', messageID: 'msg_u2', sessionID: 'ses_mock2', type: 'text', text: 'Show me the revenue metric, a remote-dom approval widget and the deploy card.' }
+    ]
+  },
+  {
+    info: {
+      id: 'msg_a2', sessionID: 'ses_mock2', role: 'assistant',
+      time: { created: now - 490000, completed: now - 480000 },
+      modelID: 'claude-sonnet-5', providerID: 'anthropic',
+      cost: 0.011, tokens: { input: 2100, output: 300 }
+    },
+    parts: [
+      { id: 'prt_ui1', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'tool', callID: 'c3', tool: 'ui-demo_show_metric',
+        state: { status: 'completed', title: 'Revenue', input: { label: 'Revenue', value: '42', unit: 'k€', change: 12.5 }, output: 'Revenue: 42k€ (12.5%)', time: { start: now - 489000, end: now - 488000 }, metadata: {} } },
+      { id: 'prt_ui2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'tool', callID: 'c4', tool: 'ui-demo_show_remote_dom',
+        state: { status: 'completed', title: 'Approval', input: { title: 'Deploy to production?', actions: ['Ship it', 'Hold'] }, output: 'Deploy to production?: Ship it / Hold', time: { start: now - 487000, end: now - 486000 }, metadata: {} } },
+      { id: 'prt_ui3', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'tool', callID: 'c5', tool: 'widgets_card',
+        state: { status: 'completed', title: 'Deploy card', input: { service: 'api' }, output: 'api deployed', time: { start: now - 485000, end: now - 484000 },
+          metadata: { content: [{ type: 'resource', resource: { uri: 'ui://widgets/card', mimeType: 'text/html', text: '<!doctype html><body style="font-family:monospace;background:#17171a;color:#d4d4dc;margin:0;padding:12px"><h3 id="t" style="margin:0">api deployed to production</h3><p>build #1234 · 2 min ago</p><script>parent.postMessage({type:"ui-lifecycle-iframe-ready"},"*")</script></body>' } }] } } },
+      { id: 'prt_x2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'text', text: 'Rendered the three widgets above.' },
+      { id: 'prt_s2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'step-finish', cost: 0.011, tokens: { input: 2100, output: 300 } }
+    ]
+  }
+]
+
 const providers = {
   default: { anthropic: 'claude-sonnet-5' },
   providers: [
@@ -82,6 +114,7 @@ const agents = [
 const mcp = {
   context7: { status: 'connected' },
   playwright: { status: 'connected' },
+  'ui-demo': { status: 'connected' },
   'home-assistant': { status: 'disabled' }
 }
 
@@ -109,7 +142,14 @@ createServer((req, res) => {
 
   if (p === '/project') return json(res, projects)
   if (p === '/config/providers') return json(res, providers)
-  if (p === '/config') return json(res, { mcp: { context7: { type: 'remote', url: `http://127.0.0.1:${PORT}/fake-mcp` }, playwright: { type: 'local', command: ['npx', '@playwright/mcp'] }, 'home-assistant': { type: 'remote', url: 'http://127.0.0.1:1/unreachable', enabled: false } } })
+  if (p === '/config') return json(res, { mcp: {
+    context7: { type: 'remote', url: `http://127.0.0.1:${PORT}/fake-mcp` },
+    playwright: { type: 'local', command: ['node', 'scripts/mock-stdio-mcp.mjs'] },
+    // the web app's own demo server, registered from another port on purpose:
+    // the app must rewrite /mcp-demo URLs to its current origin
+    'ui-demo': { type: 'remote', url: 'http://127.0.0.1:1/mcp-demo' },
+    'home-assistant': { type: 'remote', url: 'http://127.0.0.1:1/unreachable', enabled: false }
+  } })
 
   // minimal MCP server (Streamable HTTP) so tool discovery is testable offline
   if (p === '/fake-mcp' && req.method === 'POST') {
@@ -160,7 +200,9 @@ createServer((req, res) => {
   }
 
   const msgMatch = p.match(/^\/session\/([^/]+)\/message$/)
-  if (msgMatch && req.method === 'GET') return json(res, msgMatch[1] === 'ses_mock1' ? messages : [])
+  if (msgMatch && req.method === 'GET') {
+    return json(res, msgMatch[1] === 'ses_mock1' ? messages : msgMatch[1] === 'ses_mock2' ? uiMessages : [])
+  }
   if (msgMatch && req.method === 'POST') return json(res, { info: {}, parts: [] })
 
   const sesMatch = p.match(/^\/session\/([^/]+)$/)

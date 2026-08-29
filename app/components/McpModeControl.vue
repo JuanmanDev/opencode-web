@@ -32,7 +32,7 @@ function labelFor(mode: string) {
           :color="props.modelValue === mode ? (mode === 'off' ? 'neutral' : 'primary') : 'neutral'"
           :variant="props.modelValue === mode ? 'solid' : 'soft'"
           :disabled="(mode === 'ask' && askDisabled) || loading"
-          class="rounded-none"
+          class="rounded-none w-10 sm:w-11 px-0 justify-center"
           @click="emit('update:modelValue', mode)"
         />
       </UTooltip>

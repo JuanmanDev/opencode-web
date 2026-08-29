@@ -124,6 +124,17 @@ const TOOLS = [
     }
   },
   {
+    name: 'show_remote_dom',
+    description: 'Show a small mcp-ui remote-dom component (buttons + badge) instead of raw HTML.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        actions: { type: 'array', items: { type: 'string' }, description: 'button labels' }
+      }
+    }
+  },
+  {
     name: 'show_weather',
     description: 'Show a weather card (demo).',
     inputSchema: {
@@ -220,6 +231,40 @@ function callTool(name: string, args: Record<string, any>) {
         <\/script>`,
         `${pair}: ${last.toFixed(4)} (${pct}% over demo window)`)
     }
+    case 'show_remote_dom': {
+      // mcp-ui remote-dom: a script that builds the tree against the host's
+      // `root` with web-component tags — no HTML, no template
+      const title = String(args.title || 'Remote DOM demo')
+      const actions: string[] = Array.isArray(args.actions) && args.actions.length
+        ? args.actions.map(String)
+        : ['Approve', 'Reject']
+      const script = `
+        const stack = document.createElement('ui-stack');
+        const heading = document.createElement('ui-heading'); heading.setAttribute('text', ${JSON.stringify(title)});
+        const badge = document.createElement('ui-badge'); badge.setAttribute('label', 'remote-dom');
+        const row = document.createElement('ui-row');
+        const status = document.createElement('ui-text'); status.setAttribute('text', 'Pick an action');
+        for (const label of ${JSON.stringify(actions)}) {
+          const b = document.createElement('ui-button'); b.setAttribute('label', label);
+          b.addEventListener('press', () => status.setAttribute('text', 'You pressed: ' + label));
+          row.appendChild(b);
+        }
+        stack.appendChild(heading); stack.appendChild(badge); stack.appendChild(row); stack.appendChild(status);
+        root.appendChild(stack);`
+      return {
+        content: [
+          { type: 'text', text: `${title}: ${actions.join(' / ')}` },
+          {
+            type: 'resource',
+            resource: {
+              uri: 'ui://opencode-web-demo/remote-dom',
+              mimeType: 'application/vnd.mcp-ui.remote-dom+javascript; framework=webcomponents',
+              text: script
+            }
+          }
+        ]
+      }
+    }
     case 'show_weather': {
       const condition = String(args.condition || 'sunny')
       const icons: Record<string, string> = { sunny: '☀️', cloudy: '☁️', rain: '🌧️', storm: '⛈️', snow: '❄️' }
@@ -272,7 +317,9 @@ export default defineEventHandler(async (event) => {
       case 'tools/list':
         // MCP Apps: every tool renders through the shared ui:// template
         return respond({
-          tools: TOOLS.map((t) => ({ ...t, _meta: { ui: { resourceUri: APP_TEMPLATE_URI } } }))
+          tools: TOOLS.map((t) =>
+            t.name === 'show_remote_dom' ? t : { ...t, _meta: { ui: { resourceUri: APP_TEMPLATE_URI } } }
+          )
         })
       case 'resources/list':
         return respond({

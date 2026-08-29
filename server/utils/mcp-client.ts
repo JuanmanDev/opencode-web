@@ -2,6 +2,59 @@
 // directly — opencode strips ui:// resources from tool outputs, so UI apps
 // are re-fetched from the source.
 
+/** Tool as listed by an MCP server, trimmed for the UI. */
+export interface McpToolInfo {
+  name: string
+  description?: string
+  /** MCP Apps (SEP-1865): the tool declares a ui:// template -> it renders a UI */
+  ui?: boolean
+}
+
+/** Normalize one `tools/list` entry; first description line only. */
+export function toToolInfo(t: any): McpToolInfo {
+  const meta = t?._meta || {}
+  const resourceUri = meta?.ui?.resourceUri ?? meta?.['ui/resourceUri']
+  return {
+    name: String(t?.name || ''),
+    description: typeof t?.description === 'string'
+      ? t.description.split('\n')[0]!.slice(0, 140)
+      : undefined,
+    ...(typeof resourceUri === 'string' && resourceUri.startsWith('ui://') ? { ui: true } : {})
+  }
+}
+
+/**
+ * The built-in demo server is registered with whatever origin the browser had
+ * at the time (dev port, LAN IP…). Always talk to the current one instead.
+ */
+export function resolveDemoUrl(url: string, selfOrigin?: string) {
+  if (!selfOrigin) return url
+  try {
+    if (new URL(url).pathname.replace(/\/$/, '') === '/mcp-demo') return `${selfOrigin}/mcp-demo`
+  } catch { /* not a URL */ }
+  return url
+}
+
+/**
+ * Pick the JSON-RPC payload out of a Streamable HTTP response body: plain JSON,
+ * or an SSE stream where the matching response may not be the first event
+ * (servers can emit progress notifications first).
+ */
+export function parseRpcBody(body: string, contentType: string, id: number | string) {
+  if (!contentType.includes('text/event-stream')) return JSON.parse(body)
+  let fallback: any
+  for (const chunk of body.split(/\r?\n\r?\n/)) {
+    const data = chunk.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n')
+    if (!data) continue
+    try {
+      const msg = JSON.parse(data)
+      if (msg?.id === id) return msg
+      fallback ??= msg
+    } catch { /* keepalive or partial */ }
+  }
+  return fallback
+}
+
 export interface McpRemoteEntry {
   type?: string
   url?: string
@@ -30,15 +83,7 @@ async function mcpRpc(
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const newSession = res.headers.get('mcp-session-id') || sessionId
-  const contentType = res.headers.get('content-type') || ''
-  let payload: any
-  if (contentType.includes('text/event-stream')) {
-    const body = await res.text()
-    const line = body.split('\n').find((l) => l.startsWith('data:'))
-    payload = line ? JSON.parse(line.slice(5).trim()) : undefined
-  } else {
-    payload = await res.json()
-  }
+  const payload = parseRpcBody(await res.text(), res.headers.get('content-type') || '', id)
   if (payload?.error) throw new Error(payload.error.message || 'MCP error')
   return { result: payload?.result, sessionId: newSession }
 }
@@ -97,7 +142,8 @@ export async function callRemoteMcpTool(
     capabilities: {},
     clientInfo: { name: 'opencode-web', version: '1' }
   }, 1)
-  fetch(url, {
+  // stateful servers reject requests that arrive before this notification
+  await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

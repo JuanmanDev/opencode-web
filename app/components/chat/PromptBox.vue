@@ -5,6 +5,8 @@ export interface McpServerInfo {
   name: string
   status: string
   error?: string
+  approx?: boolean
+  skipped?: boolean
   tools: Array<{ id: string; name: string; description?: string }>
 }
 
@@ -395,8 +397,9 @@ function onKeydown(e: KeyboardEvent) {
       <CollapseTransition>
       <div v-if="optionsOpen" class="space-y-2 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible">
         <!-- one row on wide screens: model / think / agent -->
-        <div class="flex flex-col sm:flex-row gap-1.5">
-          <UFormField label="Model" size="xs" class="flex-1 min-w-0">
+        <!-- phones pair think level + agent so the panel stays short -->
+        <div class="grid grid-cols-2 sm:flex sm:flex-row gap-1.5">
+          <UFormField label="Model" size="xs" class="col-span-2 flex-1 min-w-0">
             <div class="flex gap-1">
               <USelectMenu
                 v-model="model"
@@ -404,6 +407,7 @@ function onKeydown(e: KeyboardEvent) {
                 value-key="value"
                 :filter-fields="['label', 'provider']"
                 :search-input="{ placeholder: 'Search models or providers…' }"
+                :virtualize="{ estimateSize: () => 44 }"
                 :loading="metaLoading"
                 :placeholder="metaLoading ? 'Loading models…' : 'Select model'"
                 size="sm"
@@ -458,7 +462,7 @@ function onKeydown(e: KeyboardEvent) {
               </UTooltip>
             </div>
           </UFormField>
-          <UFormField label="Think level" size="xs" class="sm:w-36 shrink-0">
+          <UFormField label="Think level" size="xs" class="min-w-0 sm:w-36 shrink-0">
             <UTooltip
               :text="selectedModel && !selectedModel.reasoning ? 'This model has no thinking support' : undefined"
               :disabled="!selectedModel || selectedModel.reasoning"
@@ -474,7 +478,7 @@ function onKeydown(e: KeyboardEvent) {
               />
             </UTooltip>
           </UFormField>
-          <UFormField label="Agent" size="xs" class="sm:w-40 shrink-0">
+          <UFormField label="Agent" size="xs" class="min-w-0 sm:w-40 shrink-0">
             <USelect
               v-model="agent"
               :items="agentItems"
@@ -487,7 +491,7 @@ function onKeydown(e: KeyboardEvent) {
           </UFormField>
 
           <!-- MCP shares the same row -->
-          <UFormField label="MCP" size="xs" class="sm:w-44 shrink-0">
+          <UFormField label="MCP" size="xs" class="col-span-2 sm:w-44 shrink-0">
             <USelect
               v-if="mcpLoading"
               disabled
@@ -520,19 +524,43 @@ function onKeydown(e: KeyboardEvent) {
           </UFormField>
         </div>
 
-        <!-- custom MCP selection: full-width accordion, scrollable -->
+        <!-- custom MCP selection: one compact header row (filter + presets),
+             then the table-like server list -->
         <CollapseTransition>
-        <div v-if="mcpInfo.length && mcpMode === 'custom'" class="space-y-1.5">
-          <div class="flex items-center gap-1.5">
-            <span class="text-[10px] uppercase tracking-widest text-dimmed flex-1">MCP servers & tools</span>
-            <UButton size="xs" variant="soft" color="neutral" label="All on" @click="setAllServers(true)" />
-            <UButton size="xs" variant="soft" color="neutral" label="All off" @click="setAllServers(false)" />
-          </div>
-
-          <!-- saved groups: apply with one click, save the current selection -->
-          <div class="flex flex-wrap items-center gap-1">
-            <template v-for="g in groups" :key="g.name">
-              <div class="flex items-center rounded-sm overflow-hidden">
+        <div v-if="(mcpInfo.length || mcpLoading) && mcpMode === 'custom'">
+          <McpServerList
+            :servers="mcpInfo"
+            :loading="mcpLoading"
+            :server-mode="(n) => disabledServers.includes(n) ? 'off' : 'allow'"
+            :tool-mode="toolChatMode"
+            :settings-to="`/p/${encodeDir(directory)}/mcp`"
+            ask-disabled
+            @set-server="(n, m) => toggleServer(n, m !== 'off')"
+            @set-tool="setToolChatMode"
+          >
+            <template #actions>
+              <UTooltip text="Enable every server">
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  icon="i-lucide-circle-check"
+                  aria-label="Enable every server"
+                  @click="setAllServers(true)"
+                />
+              </UTooltip>
+              <UTooltip text="Disable every server">
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  icon="i-lucide-circle-slash"
+                  aria-label="Disable every server"
+                  @click="setAllServers(false)"
+                />
+              </UTooltip>
+              <!-- saved presets: apply with one click, save the current selection -->
+              <div v-for="g in groups" :key="g.name" class="flex items-center rounded-sm overflow-hidden">
                 <UButton
                   size="xs"
                   :variant="activeGroup === g.name ? 'solid' : 'soft'"
@@ -548,37 +576,28 @@ function onKeydown(e: KeyboardEvent) {
                   color="neutral"
                   icon="i-lucide-x"
                   class="rounded-l-none"
-                  :aria-label="`Delete group ${g.name}`"
+                  :aria-label="`Delete preset ${g.name}`"
                   @click="deleteGroup(g.name)"
                 />
               </div>
+              <UInput
+                v-model="groupName"
+                size="xs"
+                placeholder="Save as…"
+                class="w-24 font-mono"
+                @keydown.enter="saveGroup"
+              />
+              <UButton
+                size="xs"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-save"
+                :disabled="!groupName.trim()"
+                aria-label="Save preset"
+                @click="saveGroup"
+              />
             </template>
-            <UInput
-              v-model="groupName"
-              size="xs"
-              placeholder="Save selection as…"
-              class="w-36 font-mono"
-              @keydown.enter="saveGroup"
-            />
-            <UButton
-              size="xs"
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-save"
-              :disabled="!groupName.trim()"
-              aria-label="Save MCP group"
-              @click="saveGroup"
-            />
-          </div>
-
-          <McpServerList
-            :servers="mcpInfo"
-            :server-mode="(n) => disabledServers.includes(n) ? 'off' : 'allow'"
-            :tool-mode="toolChatMode"
-            ask-disabled
-            @set-server="(n, m) => toggleServer(n, m !== 'off')"
-            @set-tool="setToolChatMode"
-          />
+          </McpServerList>
         </div>
         </CollapseTransition>
       </div>

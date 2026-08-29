@@ -18,7 +18,11 @@ watch(fetchedResources, () => {
   })
 }, { deep: true, immediate: true })
 const fetchingUi = ref(false)
+// name heuristic for servers that predate MCP Apps metadata; tools that
+// declare a ui:// template are known exactly via discovery
 const UI_TOOL = /(^|_)(show|demo|ui|iframe|render|display|status)/i
+const uiTools = useMcpUiTools()
+const looksLikeUi = (tool: string) => tool.includes('_') && (uiTools.has(tool) || UI_TOOL.test(tool))
 
 async function fetchUi() {
   if (fetchingUi.value || fetchedResources.value.length) return
@@ -68,12 +72,14 @@ async function fetchUi() {
 watch(
   () => (props.part.state as { status?: string })?.status,
   (status) => {
-    if (status === 'completed' && props.part.tool.includes('_') && UI_TOOL.test(props.part.tool)) {
-      fetchUi()
-    }
+    if (status === 'completed' && looksLikeUi(props.part.tool)) fetchUi()
   },
   { immediate: true }
 )
+// discovery may finish after the part rendered: pick the app up then
+watch(() => uiTools.has(props.part.tool), (known) => {
+  if (known && (props.part.state as { status?: string })?.status === 'completed') fetchUi()
+})
 
 const state = computed(() => props.part.state || { status: 'pending' })
 const status = computed(() => state.value.status || 'pending')

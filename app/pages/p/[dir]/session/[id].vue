@@ -26,6 +26,8 @@ const mcpInfo = ref<Array<{
   name: string
   status: string
   error?: string
+  approx?: boolean
+  skipped?: boolean
   tools: Array<{ id: string; name: string; description?: string }>
 }>>([])
 const permissions = ref<PermissionRequest[]>([])
@@ -337,7 +339,6 @@ const providersCacheKey = computed(() => `opencode-web.providers.${directory.val
 
 async function loadMeta() {
   metaLoading.value = true
-  mcpLoading.value = true
   // stale-while-revalidate: paint the model list instantly from cache so a
   // slow or flaky connection never leaves the selector empty
   try {
@@ -348,49 +349,71 @@ async function loadMeta() {
     }
   } catch { /* ignore */ }
 
-  try {
-    const [prov, ag, mcp, toolIds, cmds, remoteTools] = await Promise.all([
-      api.providers().catch(() => null),
-      api.agents().catch(() => [] as AgentInfo[]),
-      api.mcpStatus().catch(() => ({} as Record<string, any>)),
-      api.toolIds(),
-      api.commands(),
-      // opencode doesn't expose MCP tool ids, so our server asks the remote
-      // MCP servers themselves for their tool lists
-      $fetch<Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>>(
-        '/api/v1/mcp-tools',
-        { query: { directory: directory.value }, timeout: 20000 }
-      ).catch(() => ({} as Record<string, { tools: Array<{ name: string; description?: string }>; error?: string }>))
-    ])
-    if (prov) {
-      providers.value = prov
-      try { localStorage.setItem(providersCacheKey.value, JSON.stringify(prov)) } catch { /* full */ }
+  // two independent passes: the model/agent selectors must never wait for MCP
+  // discovery, which spawns local servers and can take seconds
+  const fast = (async () => {
+    try {
+      const [prov, ag, cmds] = await Promise.all([
+        api.providers().catch(() => null),
+        api.agents().catch(() => [] as AgentInfo[]),
+        api.commands()
+      ])
+      if (prov) {
+        providers.value = prov
+        try { localStorage.setItem(providersCacheKey.value, JSON.stringify(prov)) } catch { /* full */ }
+      }
+      agents.value = ag
+      commands.value = cmds
+    } finally {
+      metaLoading.value = false
     }
-    agents.value = ag
-    commands.value = cmds
-    mcpInfo.value = Object.entries(mcp)
-      .map(([name, s]) => {
-        const remote = remoteTools[name]
-        const fromRemote = (remote?.tools || []).map((t) => ({
-          id: `${name}_${t.name}`,
-          name: t.name,
-          description: t.description
-        }))
-        const fromIds = toolIds
-          .filter((id) => id.startsWith(`${name}_`))
-          .filter((id) => !fromRemote.some((t) => t.id === id))
-          .map((id) => ({ id, name: id.slice(name.length + 1) }))
-        return {
-          name,
-          status: String((s as any)?.status || (s as any)?.state || 'unknown'),
-          error: typeof (s as any)?.error === 'string' ? (s as any).error : remote?.error,
-          tools: [...fromRemote, ...fromIds].sort((a, b) => a.name.localeCompare(b.name))
-        }
-      })
+  })()
+
+  await Promise.all([fast, loadMcp()])
+}
+
+/** MCP status first (fast), tool lists second (slow) - the list fills in. */
+async function loadMcp() {
+  mcpLoading.value = true
+  try {
+    const status = await api.mcpStatus().catch(() => ({} as Record<string, any>))
+    mcpInfo.value = Object.entries(status)
+      .map(([name, s]) => ({
+        name,
+        status: String((s as any)?.status || (s as any)?.state || 'unknown'),
+        error: typeof (s as any)?.error === 'string' ? (s as any).error : undefined,
+        tools: [] as Array<{ id: string; name: string; description?: string; ui?: boolean }>
+      }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    mcpLoading.value = false
+
+    // opencode exposes no MCP tool ids, so our server asks the MCP servers
+    // themselves - remote ones over HTTP, local ones over stdio
+    type Discovered = Record<string, {
+      tools: Array<{ name: string; description?: string; ui?: boolean }>
+      error?: string
+      disabled?: boolean
+      approx?: boolean
+      skipped?: boolean
+    }>
+    const discovered = await $fetch<Discovered>('/api/v1/mcp-tools', {
+      query: { directory: directory.value },
+      timeout: 60000
+    }).catch(() => ({} as Discovered))
+    useMcpUiTools().learn(discovered)
+
+    mcpInfo.value = mcpInfo.value.map((server) => {
+      const found = discovered[server.name]
+      return {
+        ...server,
+        error: server.error || found?.error,
+        approx: found?.approx,
+        skipped: found?.skipped,
+        tools: (found?.tools || [])
+          .map((t) => ({ id: `${server.name}_${t.name}`, name: t.name, description: t.description, ui: t.ui }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      }
+    })
   } finally {
-    metaLoading.value = false
     mcpLoading.value = false
   }
 }
@@ -963,13 +986,13 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             {{ viewerResource?.title || 'MCP app' }}
           </span>
           <UTooltip v-if="effectiveView === 'side'" text="Fullscreen">
-            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" @click="viewer.open(viewer.appId.value, 'full')" />
+            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" aria-label="Fullscreen" @click="viewer.open(viewer.appId.value, 'full')" />
           </UTooltip>
           <UTooltip v-else text="Dock to side panel">
-            <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="hidden lg:inline-flex" @click="viewer.open(viewer.appId.value, 'side')" />
+            <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="hidden lg:inline-flex" aria-label="Dock to side panel" @click="viewer.open(viewer.appId.value, 'side')" />
           </UTooltip>
           <UTooltip text="Move back to the chat">
-            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="viewer.close()" />
+            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" aria-label="Close app viewer" @click="viewer.close()" />
           </UTooltip>
         </div>
 

@@ -28,6 +28,12 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
     listFiles: (path: string) =>
       ocFetch<FileEntry[]>(`${BASE}/file`, { query: q({ path }) }),
 
+    /** opencode's own paths - reveals which OS/host it runs on. */
+    paths: () =>
+      ocFetch<{ home?: string; directory?: string; worktree?: string; config?: string }>(
+        `${BASE}/path`, { query: q() }
+      ),
+
     // ---- config / providers / agents ----
     config: () => ocFetch<Record<string, unknown>>(`${BASE}/config`, { query: q() }),
     patchConfig: (body: Record<string, unknown>) =>
@@ -41,18 +47,28 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
 
     // ---- MCP ----
     mcpStatus: () => ocFetch<Record<string, McpStatus>>(`${BASE}/mcp`, { query: q() }),
-    /** All tool ids (including MCP tools, prefixed with the server name). */
-    toolIds: () =>
-      ocFetch<unknown>(`${BASE}/experimental/tool/ids`, { query: q() })
-        .then((res) => {
-          const list = Array.isArray(res) ? res : []
-          return list
-            .map((t) => (typeof t === 'string' ? t : (t as { id?: string })?.id || ''))
-            .filter(Boolean)
-        })
-        .catch(() => [] as string[]),
     mcpAdd: (name: string, config: Record<string, unknown>) =>
       ocFetch(`${BASE}/mcp`, { method: 'POST', body: { name, config }, query: q() }),
+    /** Retry a failed server without restarting opencode. */
+    mcpConnect: (name: string) =>
+      ocFetch<boolean>(`${BASE}/mcp/${encodeURIComponent(name)}/connect`, {
+        method: 'POST', body: {}, query: q(), timeout: 1000 * 60
+      }),
+    mcpDisconnect: (name: string) =>
+      ocFetch<boolean>(`${BASE}/mcp/${encodeURIComponent(name)}/disconnect`, {
+        method: 'POST', body: {}, query: q()
+      }),
+    /** Begin OAuth for a server that reports `needs_auth`; returns the consent URL. */
+    mcpAuthStart: (name: string) =>
+      ocFetch<{ authorizationUrl: string; oauthState: string }>(
+        `${BASE}/mcp/${encodeURIComponent(name)}/auth`,
+        { method: 'POST', body: {}, query: q() }
+      ),
+    /** Finish OAuth with the code pasted back from the consent screen. */
+    mcpAuthCallback: (name: string, code: string) =>
+      ocFetch<Record<string, unknown>>(`${BASE}/mcp/${encodeURIComponent(name)}/auth/callback`, {
+        method: 'POST', body: { code }, query: q(), timeout: 1000 * 60
+      }),
 
     // ---- sessions ----
     sessions: () => ocFetch<SessionInfo[]>(`${BASE}/session`, { query: q() }),

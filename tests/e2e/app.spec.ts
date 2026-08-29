@@ -49,6 +49,26 @@ test('mcp page lists servers with toggles', async ({ page }) => {
   if (process.env.SCREENSHOTS) await page.screenshot({ path: 'docs/screenshots/mcp.png' })
 })
 
+test('mcp page discovers tools of local (stdio) servers', async ({ page }) => {
+  await page.goto(`/p/${DIR}/mcp`)
+  // opencode exposes no MCP tool ids: this list comes from spawning the server
+  await page.getByRole('button', { name: /^playwright/ }).click()
+  await expect(page.getByText('navigate', { exact: true })).toBeVisible()
+  await expect(page.getByText('Click an element')).toBeVisible()
+})
+
+test('mcp list filter collapses to an icon on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 })
+  await page.goto(`/p/${DIR}/mcp`)
+  const icon = page.getByRole('button', { name: 'Filter servers and tools' })
+  await expect(icon).toBeVisible()
+  await icon.click()
+  const input = page.getByPlaceholder('Filter servers & tools…')
+  await expect(input).toBeFocused()
+  await input.fill('context')
+  await expect(page.getByText('playwright', { exact: true })).toBeHidden()
+})
+
 test('add-mcp modal offers catalog suggestions and smart custom input', async ({ page }) => {
   await page.goto(`/p/${DIR}/mcp`)
   await page.getByRole('button', { name: 'Add server' }).click()

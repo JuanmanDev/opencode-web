@@ -37,7 +37,11 @@ export default defineEventHandler(async (event) => {
   // - prompt/shell/command POSTs may legitimately run for many minutes
   const isEvent = path === 'event' || path.endsWith('/event')
   const isLongRun = method === 'POST' && /\/(message|prompt_async|shell|command)$/.test(path)
-  const signal = isEvent ? undefined : AbortSignal.timeout(isLongRun ? 1000 * 60 * 30 : 15000)
+  // connecting/authenticating an MCP server can take up to its own 30s timeout
+  const isMcpAction = method === 'POST' && /^mcp\/[^/]+\/(connect|disconnect|auth)/.test(path)
+  const signal = isEvent
+    ? undefined
+    : AbortSignal.timeout(isLongRun ? 1000 * 60 * 30 : isMcpAction ? 1000 * 60 : 15000)
 
   let upstream: Response
   try {

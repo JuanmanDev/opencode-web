@@ -4,6 +4,8 @@
 const props = defineProps<{
   name: string
   description?: string
+  /** MCP Apps: renders an interactive UI in the chat */
+  ui?: boolean
   modelValue: 'inherit' | 'deny' | 'ask' | 'allow'
   /** per-prompt scope: opencode has no per-message ask */
   askDisabled?: boolean
@@ -27,10 +29,16 @@ const items = computed(() => [
 <template>
   <div class="flex items-center gap-2">
     <div class="min-w-0 flex-1">
-      <div class="font-mono text-xs" :class="modelValue === 'deny' ? 'text-dimmed line-through' : ''">
-        {{ name }}
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span
+          class="font-mono text-xs leading-tight truncate"
+          :class="modelValue === 'deny' ? 'text-dimmed line-through' : ''"
+        >{{ name }}</span>
+        <UTooltip v-if="ui" text="Renders an interactive app in the chat (MCP Apps)">
+          <UBadge size="sm" variant="subtle" color="primary" class="shrink-0 text-[9px] leading-none px-1 py-0.5">UI</UBadge>
+        </UTooltip>
       </div>
-      <div v-if="description" class="text-[10px] text-dimmed truncate">{{ description }}</div>
+      <div v-if="description" class="text-[10px] text-dimmed truncate leading-tight">{{ description }}</div>
     </div>
     <USelect
       :items="items"

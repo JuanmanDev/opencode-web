@@ -44,7 +44,13 @@ export default defineNuxtConfig({
     opencodeUsername: 'opencode',
     opencodePassword: '',
     // optional bearer token protecting /api/v1/* and /mcp (NUXT_API_TOKEN)
-    apiToken: ''
+    apiToken: '',
+    // Tool discovery for local (stdio) MCP servers spawns them here, in this
+    // app - which is only exactly right when opencode runs on the same host.
+    //   always    - always spawn (default; names match, opencode may differ)
+    //   same-host - only when opencodeUrl is localhost
+    //   never     - never spawn; local servers list no tools
+    mcpLocalDiscovery: 'always'
   },
   nitro: {
     // keep proxy responses unbuffered for SSE
