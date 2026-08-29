@@ -2,6 +2,16 @@
 
 # ⌨️ opencode web
 
+<br>
+
+## 💖 Support this project
+If you found this project helpful, please consider supporting it!
+
+[![GitHub Sponsor](https://img.shields.io/badge/Sponsor-JuanmanDev-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/JuanmanDev) [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/juanmandev) [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/juanmandev)
+
+<br>
+
+
 **A better self-hosted web UI for [opencode](https://opencode.ai)** — chat with your AI coding agent from any device, manage projects and MCP servers, behind your own reverse proxy.
 
 [![CI](https://github.com/JuanmanDev/opencode-web/actions/workflows/ci.yml/badge.svg)](https://github.com/JuanmanDev/opencode-web/actions/workflows/ci.yml)
@@ -172,3 +182,13 @@ Health endpoint: `GET /api/health` → `{ ok, opencode }` (used by the Docker he
 ## License
 
 [MIT](LICENSE) © Juan Manuel Bécares
+
+
+<br>
+
+## 💖 Support this project
+If you found this project helpful, please consider supporting it!
+
+[![GitHub Sponsor](https://img.shields.io/badge/Sponsor-JuanmanDev-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/JuanmanDev) [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/juanmandev) [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/juanmandev)
+
+<br>
