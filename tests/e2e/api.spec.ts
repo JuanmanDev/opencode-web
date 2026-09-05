@@ -20,6 +20,24 @@ test('REST: openapi spec, projects, sessions, models', async ({ request }) => {
   expect((await models.json()).providers.length).toBeGreaterThan(0)
 })
 
+test('provider API keys never reach the browser', async ({ request }) => {
+  for (const url of ['/api/opencode/config/providers', '/api/v1/models']) {
+    const res = await request.get(url)
+    expect(res.ok()).toBeTruthy()
+    const body = await res.text()
+    expect(body, url).not.toContain('sk-ant-mock-secret')
+    const anthropic = JSON.parse(body).providers.find((p: { id: string }) => p.id === 'anthropic')
+    expect(anthropic.key, url).toBe('***')
+    expect(Object.keys(anthropic.models).length).toBeGreaterThan(0)
+  }
+})
+
+test('malformed project url renders a 404, not a 500', async ({ page }) => {
+  const res = await page.goto('/p/C%3Acodeopencode-juanma')
+  expect(res?.status()).toBe(404)
+  await expect(page.getByText(/not valid|not found/i).first()).toBeVisible()
+})
+
 test('MCP: initialize, tools/list, tools/call', async ({ request }) => {
   const rpc = (method: string, params?: object, id = 1) =>
     request.post('/mcp', { data: { jsonrpc: '2.0', id, method, params } })

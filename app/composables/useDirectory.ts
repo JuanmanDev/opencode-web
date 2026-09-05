@@ -5,10 +5,19 @@ export function encodeDir(path: string): string {
   return b64.replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
+/**
+ * Inverse of encodeDir. Never throws: a malformed/tampered URL param yields ''
+ * so pages can show a "project not found" instead of a 500.
+ */
 export function decodeDir(param: string): string {
-  const b64 = param.replaceAll('-', '+').replaceAll('_', '/')
-  const pad = b64.length % 4 === 0 ? b64 : b64 + '='.repeat(4 - (b64.length % 4))
-  return decodeURIComponent(escape(atob(pad)))
+  if (typeof param !== 'string' || !param || !/^[A-Za-z0-9_-]+$/.test(param)) return ''
+  try {
+    const b64 = param.replaceAll('-', '+').replaceAll('_', '/')
+    const pad = b64.length % 4 === 0 ? b64 : b64 + '='.repeat(4 - (b64.length % 4))
+    return decodeURIComponent(escape(atob(pad)))
+  } catch {
+    return ''
+  }
 }
 
 export interface RecentProject {

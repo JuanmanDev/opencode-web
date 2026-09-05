@@ -19,6 +19,14 @@ describe('encodeDir / decodeDir', () => {
       expect(decodeDir(encoded)).toBe(path)
     })
   }
+
+  it('returns "" instead of throwing on malformed params', () => {
+    expect(decodeDir('')).toBe('')
+    expect(decodeDir('C%3Acodeopencode-juanma')).toBe('')
+    expect(decodeDir('not base64!')).toBe('')
+    expect(decodeDir('%%%')).toBe('')
+    expect(decodeDir(undefined as unknown as string)).toBe('')
+  })
 })
 
 describe('dirName', () => {

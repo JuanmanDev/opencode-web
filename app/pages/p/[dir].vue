@@ -3,6 +3,14 @@ import type { MessageInfo, Project, SessionInfo } from '#shared/types/opencode'
 
 const route = useRoute()
 const directory = computed(() => decodeDir(route.params.dir as string))
+if (!directory.value) {
+  throw createError({
+    statusCode: 404,
+    statusMessage: 'Project not found',
+    message: 'This project link is not valid. Go back to the project list and open it again.',
+    fatal: true
+  })
+}
 
 const { upsert, remove } = useSessions(directory)
 const { remember, recents, load: loadRecents } = useRecentProjects()
