@@ -2,7 +2,7 @@
   "name": "opencode-web",
   "private": true,
   "type": "module",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "A better web UI for opencode: chat, projects, MCP apps & UI. Traefik/tinyauth friendly.",
   "scripts": {
     "build": "nuxt build",

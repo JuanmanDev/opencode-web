@@ -1,3 +1,9 @@
+## [0.11.1](https://github.com/JuanmanDev/opencode-web/compare/0.11.0...0.11.1) (2026-09-05)
+
+### Bug Fixes
+
+* **docker:** opencode server volumes are writable by the node user ([8209c9d](https://github.com/JuanmanDev/opencode-web/commit/8209c9d0403185bda6ba155734d0d949a23a2e01))
+
 ## [0.11.0](https://github.com/JuanmanDev/opencode-web/compare/0.10.0...0.11.0) (2026-09-05)
 
 ### Features
