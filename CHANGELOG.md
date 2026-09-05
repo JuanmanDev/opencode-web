@@ -1,3 +1,15 @@
+## [0.11.0](https://github.com/JuanmanDev/opencode-web/compare/0.10.0...0.11.0) (2026-09-05)
+
+### Features
+
+* **chat:** message timestamps, real elapsed time and clearer tool errors ([24b5543](https://github.com/JuanmanDev/opencode-web/commit/24b5543d1b5eeb840514ca99cbf89cb0e3501f7c))
+
+### Bug Fixes
+
+* **chat:** never retry mutating requests, so a prompt is not sent twice ([aaf626a](https://github.com/JuanmanDev/opencode-web/commit/aaf626a0c01142fb99a608873643ce3ad42254a2))
+* **routing:** malformed project URL renders a 404 instead of a 500 ([58e4095](https://github.com/JuanmanDev/opencode-web/commit/58e4095d61363a9bac8884ab9b9baf6b4678cbfb))
+* **server:** redact provider API keys and stop caching failed MCP discovery ([54c459f](https://github.com/JuanmanDev/opencode-web/commit/54c459f94aeb33f717006be8e051cd6b27d4e65b))
+
 ## [0.10.0](https://github.com/JuanmanDev/opencode-web/compare/0.9.0...0.10.0) (2026-08-29)
 
 ### Features
