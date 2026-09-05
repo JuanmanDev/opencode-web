@@ -32,6 +32,15 @@ export function reportServerOk() {
 export const ocFetch = $fetch.create({
   retry: 1,
   retryDelay: 400,
+  onRequest({ options }) {
+    // An explicit `retry` makes ofetch retry POST/PUT/PATCH/DELETE too, and it
+    // also retries when the connection drops (no response = treated as 500).
+    // `POST /session/:id/message` stays open for the whole run, so a gateway
+    // hiccup re-sent the same prompt and the user saw it twice. Only GETs are
+    // safe to repeat.
+    const method = (options.method || 'GET').toUpperCase()
+    if (method !== 'GET' && method !== 'HEAD') options.retry = false
+  },
   onResponse({ response }) {
     if (response.ok) reportServerOk()
   },
