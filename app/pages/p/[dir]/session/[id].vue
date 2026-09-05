@@ -18,8 +18,23 @@ const api = useOpencodeApi(directory)
 const toast = useToast()
 
 const session = ref<SessionInfo | null>(null)
+// the shared list is kept live from SSE `session.updated` (auto-titles,
+// renames from other tabs...) - mirror it into this page's own copy
+const { sessions: liveSessions } = useSessions(directory)
+watch(
+  () => liveSessions.value.find((s) => s.id === sessionId.value),
+  (live) => {
+    if (!live) return
+    if (!session.value || session.value.id !== live.id) session.value = live
+    else if (live.title !== session.value.title || live.time?.updated !== session.value.time?.updated) {
+      session.value = { ...session.value, ...live }
+    }
+  },
+  { deep: true }
+)
 const messages = ref<MessageWithParts[]>([])
 const providers = ref<ProvidersResponse | null>(null)
+const serverDefaultModel = ref('')
 const agents = ref<AgentInfo[]>([])
 const commands = ref<Array<{ name: string; description?: string; source?: string }>>([])
 const mcpInfo = ref<Array<{
@@ -353,15 +368,17 @@ async function loadMeta() {
   // discovery, which spawns local servers and can take seconds
   const fast = (async () => {
     try {
-      const [prov, ag, cmds] = await Promise.all([
+      const [prov, ag, cmds, cfg] = await Promise.all([
         api.providers().catch(() => null),
         api.agents().catch(() => [] as AgentInfo[]),
-        api.commands()
+        api.commands(),
+        api.config().catch(() => null)
       ])
       if (prov) {
         providers.value = prov
         try { localStorage.setItem(providersCacheKey.value, JSON.stringify(prov)) } catch { /* full */ }
       }
+      if (typeof cfg?.model === 'string') serverDefaultModel.value = cfg.model
       agents.value = ag
       commands.value = cmds
     } finally {
@@ -730,6 +747,20 @@ const activity = computed(() => {
   return 'working…'
 })
 
+/**
+ * Server-side start of the current run: the user prompt that triggered it
+ * (the assistant reply may not exist yet). Used by the working indicator so
+ * its timer survives navigating away and back.
+ */
+const workingSince = computed(() => {
+  if (!busy.value) return 0
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const m = messages.value[i]
+    if (m?.info.role === 'user') return m.info.time?.created || 0
+  }
+  return 0
+})
+
 async function respondPermission(perm: PermissionRequest, response: 'once' | 'always' | 'reject') {
   try {
     await api.respondPermission(perm.sessionID, perm.id, response)
@@ -910,7 +941,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             </div>
             <Markdown :text="n.text" />
           </div>
-          <ChatWorking v-if="busy" :activity="activity" />
+          <ChatWorking v-if="busy" :activity="activity" :since="workingSince" />
 
           <!-- queued prompts -->
           <CollapseTransition>
@@ -955,6 +986,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     <ChatPromptBox
       v-else
       :providers="providers"
+      :default-model="serverDefaultModel"
       :agents="agents"
       :mcp-info="mcpInfo"
       :mcp-loading="mcpLoading"

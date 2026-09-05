@@ -197,10 +197,11 @@ function saveEdit() {
             />
           </div>
 
-          <!-- carousel breaks out to the full viewport width -->
+          <!-- carousel breaks out to the full viewport width, but its first card
+               stays aligned with the project row above (container = max-w-3xl + px-4) -->
           <HScroll
             v-if="index < CAROUSEL_PROJECTS && carouselSessions(item.directory).length"
-            class="relative left-1/2 -translate-x-1/2 w-screen px-4 sm:px-8 lg:px-16 xl:px-24 pt-2 pb-1"
+            class="relative left-1/2 -translate-x-1/2 w-screen px-[max(1rem,calc((100vw-48rem)/2+1rem))] pt-2 pb-1"
           >
             <NuxtLink
               v-for="s in carouselSessions(item.directory)"

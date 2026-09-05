@@ -41,6 +41,13 @@ function fmtTokens(n: number) {
   return String(n)
 }
 
+/** Costs: 2 decimals normally; sub-cent amounts keep 4 so they don't all read "$0.00". */
+function fmtCost(v: number | undefined) {
+  const n = v || 0
+  if (n === 0) return '$0.00'
+  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`
+}
+
 function fmtDate(ts?: number) {
   return ts ? new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''
 }
@@ -64,7 +71,7 @@ useHead(() => ({ title: `Stats · ${dirName(directory.value)} · opencode web` }
       <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
         <div class="bg-muted rounded-sm p-3">
           <div class="text-[10px] uppercase tracking-widest text-dimmed">Total cost</div>
-          <div class="text-xl font-semibold font-mono mt-1">${{ totals.cost.toFixed(2) }}</div>
+          <div class="text-xl font-semibold font-mono mt-1">{{ fmtCost(totals.cost) }}</div>
         </div>
         <div class="bg-muted rounded-sm p-3">
           <div class="text-[10px] uppercase tracking-widest text-dimmed">Sessions</div>
@@ -98,7 +105,7 @@ useHead(() => ({ title: `Stats · ${dirName(directory.value)} · opencode web` }
             </div>
           </div>
           <div class="text-right shrink-0">
-            <div class="text-sm font-mono">${{ (s.cost || 0).toFixed(3) }}</div>
+            <div class="text-sm font-mono">{{ fmtCost(s.cost) }}</div>
             <div class="text-[10px] text-dimmed font-mono">
               {{ fmtTokens((s.tokens?.input || 0) + (s.tokens?.output || 0)) }} tok · {{ fmtDate(s.time?.updated) }}
             </div>

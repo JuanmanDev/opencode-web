@@ -32,6 +32,8 @@ const props = defineProps<{
   repairable?: boolean
   /** height cap for the scrollable list */
   listClass?: string
+  /** extra classes for the filter/actions header row, e.g. 'justify-end' */
+  headerClass?: string
 }>()
 
 const emit = defineEmits<{
@@ -133,7 +135,7 @@ function toolsHint(server: McpListServer) {
 <template>
   <div class="space-y-1.5">
     <!-- one header row: filter (icon-only on mobile) + the page's own actions -->
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1" :class="headerClass">
       <UTooltip text="Filter servers and tools">
         <UButton
           :class="searchOpen ? 'hidden' : 'sm:hidden'"
@@ -173,9 +175,11 @@ function toolsHint(server: McpListServer) {
       </div>
     </div>
 
+    <!-- listClass overrides the capped inner scroller; pass 'grow' to let the
+         list take its natural height and scroll with the page instead -->
     <div
-      class="rounded-sm bg-elevated/60 divide-y divide-default overflow-y-auto overscroll-contain"
-      :class="listClass || 'max-h-[50dvh] sm:max-h-[60vh]'"
+      class="rounded-sm bg-elevated/60 divide-y divide-default"
+      :class="listClass === 'grow' ? '' : (listClass || 'max-h-[50dvh] sm:max-h-[60vh]') + ' overflow-y-auto overscroll-contain'"
     >
       <!-- discovery in flight: keep the height stable instead of popping in -->
       <template v-if="loading && !servers.length">

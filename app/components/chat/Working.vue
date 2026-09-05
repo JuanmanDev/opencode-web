@@ -1,14 +1,22 @@
 <script setup lang="ts">
-const props = defineProps<{ activity?: string }>()
+const props = defineProps<{
+  activity?: string
+  /** when the run actually started (server timestamp, ms). Falls back to mount time. */
+  since?: number
+}>()
 
-const startedAt = ref(Date.now())
-const elapsed = ref(0)
+// anchor on the server-side start so reopening a chat mid-run shows the real
+// elapsed time, not how long ago this component mounted
+const startedAt = computed(() => (props.since && props.since > 0 ? props.since : mountedAt))
+const mountedAt = Date.now()
+const tick = () => Math.max(0, Math.floor((Date.now() - startedAt.value) / 1000))
+const elapsed = ref(tick())
 let timer: ReturnType<typeof setInterval> | undefined
 
+watch(startedAt, () => { elapsed.value = tick() })
 onMounted(() => {
-  timer = setInterval(() => {
-    elapsed.value = Math.floor((Date.now() - startedAt.value) / 1000)
-  }, 1000)
+  elapsed.value = tick()
+  timer = setInterval(() => { elapsed.value = tick() }, 1000)
 })
 onBeforeUnmount(() => clearInterval(timer))
 

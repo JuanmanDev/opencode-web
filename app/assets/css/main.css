@@ -260,3 +260,10 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--ui-border-accented) transparent;
 }
+
+/* hover-revealed controls have no hover on touch screens: keep them visible there */
+@media (hover: none) {
+  .oc-hover-only {
+    opacity: 1;
+  }
+}

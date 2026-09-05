@@ -29,6 +29,30 @@ function readAloud() {
 const info = computed(() => props.message.info)
 const isUser = computed(() => info.value.role === 'user')
 
+// when the message was sent (server timestamp). Short label always visible,
+// full date/time on hover via the native title (works on touch via long-press)
+const sentAt = computed(() => info.value.time?.created || 0)
+const sentIso = computed(() => (sentAt.value ? new Date(sentAt.value).toISOString() : ''))
+const sentFull = computed(() =>
+  sentAt.value
+    ? new Date(sentAt.value).toLocaleString([], {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    })
+    : ''
+)
+const sentShort = computed(() => {
+  if (!sentAt.value) return ''
+  const d = new Date(sentAt.value)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (sameDay) return time
+  const sameYear = d.getFullYear() === now.getFullYear()
+  const day = d.toLocaleDateString([], sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${day} ${time}`
+})
+
 const visibleParts = computed<Part[]>(() =>
   (props.message.parts || []).filter((p) => {
     if (p.type === 'step-start' || p.type === 'snapshot') return false
@@ -54,7 +78,8 @@ const errorMessage = computed(() => {
 <template>
   <div class="px-3 sm:px-4 oc-appear">
     <!-- user message -->
-    <div v-if="isUser" class="oc-send group/msg relative border-l-2 border-accented bg-elevated rounded-r-sm px-3 py-2 my-3">
+    <!-- pr-8 keeps the absolutely-positioned fork button off the text -->
+    <div v-if="isUser" class="oc-send group/msg relative border-l-2 border-accented bg-elevated rounded-r-sm pl-3 pr-8 py-2 my-3">
       <UTooltip text="Fork the conversation from here">
         <UButton
           icon="i-lucide-git-branch"
@@ -73,14 +98,22 @@ const errorMessage = computed(() => {
           {{ (part as any).filename || (part as any).url }}
         </div>
       </template>
-      <!-- user message actions -->
-      <div class="flex items-center justify-end gap-0.5 mt-1 -mb-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
-        <UTooltip text="Copy">
-          <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy message" @click="copyMessage" />
-        </UTooltip>
-        <UTooltip text="Edit and resend">
-          <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit and resend" @click="emit('edit', messageText)" />
-        </UTooltip>
+      <!-- sent time + user message actions -->
+      <div class="flex items-center gap-2 mt-1 -mb-1 min-w-0">
+        <time
+          v-if="sentAt"
+          :datetime="sentIso"
+          :title="sentFull"
+          class="text-[10px] font-mono text-dimmed truncate cursor-default"
+        >{{ sentShort }}</time>
+        <span class="oc-hover-only ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+          <UTooltip text="Copy">
+            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy message" @click="copyMessage" />
+          </UTooltip>
+          <UTooltip text="Edit and resend">
+            <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit and resend" @click="emit('edit', messageText)" />
+          </UTooltip>
+        </span>
       </div>
     </div>
 
@@ -140,9 +173,15 @@ const errorMessage = computed(() => {
         ]"
       />
 
-      <div class="group/actions flex items-center gap-2 text-[11px] text-dimmed font-mono pt-1">
+      <div class="group/actions flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-dimmed font-mono pt-1 min-w-0">
+        <time
+          v-if="sentAt"
+          :datetime="sentIso"
+          :title="sentFull"
+          class="text-[10px] shrink-0 cursor-default"
+        >{{ sentShort }}</time>
         <template v-if="info.modelID">
-          <span>{{ info.modelID }}</span>
+          <span class="truncate max-w-[40vw] sm:max-w-none">{{ info.modelID }}</span>
           <span v-if="info.variant" class="text-muted">{{ info.variant }}</span>
           <span v-if="info.cost">${{ info.cost.toFixed(4) }}</span>
         </template>

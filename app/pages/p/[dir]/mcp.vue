@@ -631,7 +631,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         :toggling-name="toggling"
         :loading="loading"
         repairable
-        list-class="max-h-[70dvh]"
+        list-class="grow"
         @set-server="onSetServer"
         @set-tool="setToolMode"
         @retry="retryServer"

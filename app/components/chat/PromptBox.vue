@@ -16,6 +16,8 @@ const props = defineProps<{
   mcpInfo: McpServerInfo[]
   busy: boolean
   directory: string
+  /** opencode's own default ("providerID/modelID" from config.model) */
+  defaultModel?: string
   metaLoading?: boolean
   mcpLoading?: boolean
   queueLength?: number
@@ -145,11 +147,18 @@ onMounted(() => {
   } catch { /* ignore */ }
 })
 
-watch(modelItems, (items) => {
+// Pick the model opencode itself would use when none is sent (config.model);
+// `providers.default` only lists each provider's own default, and its first
+// entry is *not* the server default - showing it here while the server ran
+// another model was misleading.
+watch([modelItems, () => props.defaultModel], ([items, serverDefault]) => {
   if (model.value && items.some((i) => i.value === model.value)) return
   const defaults = props.providers?.default || {}
   const [providerID, modelID] = Object.entries(defaults)[0] || []
-  const candidate = providerID && modelID ? `${providerID}/${modelID}` : items[0]?.value
+  const candidate =
+    (serverDefault && items.some((i) => i.value === serverDefault) ? serverDefault : undefined)
+    || (providerID && modelID ? `${providerID}/${modelID}` : undefined)
+    || items[0]?.value
   if (candidate) model.value = candidate
 }, { immediate: true })
 
@@ -352,7 +361,8 @@ function onKeydown(e: KeyboardEvent) {
     pickCommand(slashMatches.value[0]!.name)
     return
   }
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  // `repeat`: a held Enter fires keydown again and again - one send is enough
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.repeat) {
     e.preventDefault()
     send()
   }
@@ -531,6 +541,7 @@ function onKeydown(e: KeyboardEvent) {
           <McpServerList
             :servers="mcpInfo"
             :loading="mcpLoading"
+            header-class="justify-end"
             :server-mode="(n) => disabledServers.includes(n) ? 'off' : 'allow'"
             :tool-mode="toolChatMode"
             :settings-to="`/p/${encodeDir(directory)}/mcp`"

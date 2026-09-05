@@ -86,6 +86,11 @@ const status = computed(() => state.value.status || 'pending')
 
 const title = computed(() => {
   const s = state.value as unknown as Record<string, unknown>
+  if (status.value === 'error') {
+    // surface *why* it failed without having to expand the row
+    const first = String(s.error || '').split('\n').find((l) => l.trim()) || ''
+    if (first) return first.trim().slice(0, 160)
+  }
   return (s.title as string) || props.part.tool
 })
 
