@@ -2,16 +2,6 @@
 
 # ⌨️ opencode web
 
-<br>
-
-## 💖 Support this project
-If you found this project helpful, please consider supporting it!
-
-[![GitHub Sponsor](https://img.shields.io/badge/Sponsor-JuanmanDev-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/JuanmanDev) [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/juanmandev) [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/juanmandev)
-
-<br>
-
-
 **A better self-hosted web UI for [opencode](https://opencode.ai)** — chat with your AI coding agent from any device, manage projects and MCP servers, behind your own reverse proxy.
 
 [![CI](https://github.com/JuanmanDev/opencode-web/actions/workflows/ci.yml/badge.svg)](https://github.com/JuanmanDev/opencode-web/actions/workflows/ci.yml)
@@ -19,6 +9,7 @@ If you found this project helpful, please consider supporting it!
 [![GitHub release](https://img.shields.io/github/v/release/JuanmanDev/opencode-web?display_name=tag&sort=semver)](https://github.com/JuanmanDev/opencode-web/releases)
 [![Docker](https://img.shields.io/badge/ghcr.io-opencode--web-blue?logo=docker)](https://github.com/JuanmanDev/opencode-web/pkgs/container/opencode-web)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/JuanmanDev)
 
 Built with **Nuxt 4 + Nuxt UI**, keeping the opencode look & feel.
 
@@ -179,16 +170,14 @@ Tools: `list_projects`, `list_sessions`, `create_session`, `send_prompt` (waits 
 
 Health endpoint: `GET /api/health` → `{ ok, opencode }` (used by the Docker healthcheck).
 
-## License
-
-[MIT](LICENSE) © Juan Manuel Bécares
-
-
-<br>
-
 ## 💖 Support this project
-If you found this project helpful, please consider supporting it!
+
+opencode web is free and MIT-licensed. If it saves you time, consider sponsoring — it keeps the releases, Docker images and opencode compatibility work going.
 
 [![GitHub Sponsor](https://img.shields.io/badge/Sponsor-JuanmanDev-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/JuanmanDev) [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/juanmandev) [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/juanmandev)
 
-<br>
+Bug reports and PRs are welcome too — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © Juan Manuel Bécares
