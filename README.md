@@ -71,6 +71,7 @@ services:
     volumes:
       - ./projects:/projects
       - opencode-data:/home/node/.local/share/opencode
+      - opencode-state:/home/node/.local/state/opencode
   web:
     image: ghcr.io/juanmandev/opencode-web:latest
     environment:
@@ -79,7 +80,10 @@ services:
     ports: ["3000:3000"]
 volumes:
   opencode-data:
+  opencode-state:
 ```
+
+> Upgrading from 0.10 or older with an existing `opencode-data` volume? It was created root-owned; run `docker compose run --user root opencode chown -R node:node /home/node/.local /home/node/.config` once.
 
 | service | role | exposure |
 | --- | --- | --- |

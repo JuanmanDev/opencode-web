@@ -7,8 +7,11 @@ RUN apt-get update \
 
 RUN npm install -g opencode-ai --no-audit --no-fund
 
-# non-root; state (auth, sessions) lives in /home/node/.local/share/opencode
-RUN mkdir -p /projects && chown node:node /projects
+# non-root; state (auth, sessions, logs) lives under /home/node/.local and
+# /home/node/.config. Pre-create those paths owned by node: a fresh named
+# volume copies the image's ownership, otherwise it is created root-owned
+# and opencode dies at startup with EACCES on mkdir.
+RUN mkdir -p /projects       /home/node/.local/share/opencode       /home/node/.local/state/opencode       /home/node/.config/opencode  && chown -R node:node /projects /home/node
 USER node
 WORKDIR /projects
 

@@ -15,8 +15,9 @@ services:
     volumes:
       # your code lives here; pick folders from the web UI under /projects/...
       - ${PROJECTS_DIR:-./projects}:/projects
-      # persistent opencode state: sessions, auth, config
+      # persistent opencode state: sessions, auth, logs, config
       - opencode-data:/home/node/.local/share/opencode
+      - opencode-state:/home/node/.local/state/opencode
       - opencode-config:/home/node/.config/opencode
     networks: [internal]
     # deliberately NOT exposed publicly — only the web service reaches it
@@ -49,6 +50,7 @@ services:
 
 volumes:
   opencode-data:
+  opencode-state:
   opencode-config:
 
 networks:
