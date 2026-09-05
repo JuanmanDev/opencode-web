@@ -1,5 +1,5 @@
 export default defineEventHandler(async (event) => {
   requireApiToken(event)
   const { directory } = getQuery(event) as { directory?: string }
-  return opencodeFetch('/config/providers', { query: { directory } })
+  return redactProviderKeys(await opencodeFetch('/config/providers', { query: { directory } }))
 })

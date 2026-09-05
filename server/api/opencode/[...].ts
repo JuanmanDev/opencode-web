@@ -39,9 +39,15 @@ export default defineEventHandler(async (event) => {
   const isLongRun = method === 'POST' && /\/(message|prompt_async|shell|command)$/.test(path)
   // connecting/authenticating an MCP server can take up to its own 30s timeout
   const isMcpAction = method === 'POST' && /^mcp\/[^/]+\/(connect|disconnect|auth)/.test(path)
+  // GET /mcp makes opencode (re)connect every configured server first; each
+  // broken local one burns its own 30s timeout, so the aggregate easily exceeds
+  // a minute on a box with several stale `npx` servers
+  const isMcpStatus = method === 'GET' && /^mcp\/?$/.test(path)
   const signal = isEvent
     ? undefined
-    : AbortSignal.timeout(isLongRun ? 1000 * 60 * 30 : isMcpAction ? 1000 * 60 : 15000)
+    : AbortSignal.timeout(
+      isLongRun ? 1000 * 60 * 30 : isMcpStatus ? 1000 * 120 : isMcpAction ? 1000 * 60 : 30000
+    )
 
   let upstream: Response
   try {
@@ -62,6 +68,17 @@ export default defineEventHandler(async (event) => {
   upstream.headers.forEach((value, key) => {
     if (!skip.has(key.toLowerCase())) setResponseHeader(event, key, value)
   })
+
+  // opencode returns every provider's raw API key in /config/providers. The UI
+  // only ever *writes* keys, so never let them reach the browser.
+  if (method === 'GET' && /^config\/providers\/?$/.test(path) && upstream.ok) {
+    try {
+      const data = await upstream.json()
+      return redactProviderKeys(data)
+    } catch {
+      throw createError({ statusCode: 502, statusMessage: 'Bad Gateway', message: 'invalid providers response' })
+    }
+  }
 
   return upstream.body
 })

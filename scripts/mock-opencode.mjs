@@ -92,6 +92,8 @@ const providers = {
   providers: [
     {
       id: 'anthropic', name: 'Anthropic',
+      // real opencode returns the configured API key here; the web proxy must redact it
+      key: 'sk-ant-mock-secret-should-never-reach-the-browser',
       models: {
         'claude-sonnet-5': { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', reasoning: true, cost: { input: 3, output: 15 }, limit: { context: 200000 } },
         'claude-haiku-4-5': { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', reasoning: false, cost: { input: 1, output: 5 }, limit: { context: 200000 } }

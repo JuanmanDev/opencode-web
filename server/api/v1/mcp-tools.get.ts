@@ -265,10 +265,19 @@ const getAllTools = defineCachedFunction(discoverAll, {
 })
 
 async function discoverAll(directory?: string, scope?: string, selfOrigin?: string) {
+  // no fallback here: swallowing a failed /config used to cache an empty
+  // result for 5 minutes, so the MCP page stayed blank long after opencode
+  // came back. Let the error propagate - the cache only stores successes.
   const config = await opencodeFetch<{ mcp?: Record<string, McpConfigEntry> }>(
     scope === 'global' ? '/global/config' : '/config',
-    { query: scope === 'global' ? {} : { directory } }
-  ).catch(() => ({ mcp: {} as Record<string, McpConfigEntry> }))
+    { query: scope === 'global' ? {} : { directory }, timeoutMs: 30000 }
+  ).catch((error) => {
+    throw createError({
+      statusCode: 502,
+      statusMessage: 'Bad Gateway',
+      message: `opencode config unavailable: ${error instanceof Error ? error.message : error}`
+    })
+  })
 
   const entries = Object.entries(config.mcp || {})
   const results: Record<string, McpToolsResult> = {}
