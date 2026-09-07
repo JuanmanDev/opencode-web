@@ -1,3 +1,9 @@
+## [0.12.0](https://github.com/JuanmanDev/opencode-web/compare/0.11.1...0.12.0) (2026-09-07)
+
+### Features
+
+* **api:** prompt endpoint accepts model as "provider/model" string ([627d4f2](https://github.com/JuanmanDev/opencode-web/commit/627d4f2b4af6e52cc0f26f6065223fb3b71db6de))
+
 ## [0.11.1](https://github.com/JuanmanDev/opencode-web/compare/0.11.0...0.11.1) (2026-09-05)
 
 ### Bug Fixes
