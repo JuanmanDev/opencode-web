@@ -146,8 +146,10 @@ The app is scriptable three ways — automate opencode from n8n, scripts, or any
 # send a prompt and wait for the reply
 curl -X POST https://opencode.example.com/api/v1/sessions/$SESSION/prompt \
   -H 'content-type: application/json' \
-  -d '{"directory": "/projects/my-app", "text": "Fix the failing tests", "variant": "high"}'
+  -d '{"directory": "/projects/my-app", "text": "Fix the failing tests", "model": "anthropic/claude-sonnet-5", "variant": "high"}'
 ```
+
+`model` takes `"provider/model"` or `{ "providerID", "modelID" }`; omit it to use opencode's configured default.
 
 Endpoints: projects, sessions (list/create/delete), messages, prompt (waits for the full reply), abort, models, agents, MCP status.
 
