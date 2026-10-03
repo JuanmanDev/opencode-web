@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { shot } from './shot'
 
 // dir param for '/projects/space-invaders' (base64url)
 const DIR = Buffer.from('/projects/space-invaders').toString('base64url')
@@ -8,7 +9,7 @@ test('home page lists projects from the server', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /opencode\s*web/i })).toBeVisible()
   await expect(page.getByText('space-invaders').first()).toBeVisible()
   await expect(page.getByText('home-dashboard').first()).toBeVisible()
-  if (process.env.SCREENSHOTS) await page.screenshot({ path: 'docs/screenshots/home.png' })
+  await shot(page, 'home')
 })
 
 test('project view shows sessions and chat with parts', async ({ page }) => {
@@ -28,7 +29,7 @@ test('project view shows sessions and chat with parts', async ({ page }) => {
   await expect(page.getByText('Think level')).toBeVisible()
   await expect(page.getByText('project default')).toBeVisible()
 
-  if (process.env.SCREENSHOTS) await page.screenshot({ path: 'docs/screenshots/chat.png' })
+  await shot(page, 'chat')
 })
 
 test('model selector shows providers, details and configure entry', async ({ page }) => {
@@ -46,7 +47,7 @@ test('mcp page lists servers with toggles', async ({ page }) => {
   await expect(page.getByText('context7', { exact: true })).toBeVisible()
   await expect(page.getByText('home-assistant', { exact: true })).toBeVisible()
   await expect(page.getByText('disabled').first()).toBeVisible()
-  if (process.env.SCREENSHOTS) await page.screenshot({ path: 'docs/screenshots/mcp.png' })
+  await shot(page, 'mcp')
 })
 
 test('mcp page discovers tools of local (stdio) servers', async ({ page }) => {
@@ -82,5 +83,5 @@ test('mobile viewport shows hamburger menu and prompt box', async ({ page }) => 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(`/p/${DIR}/session/ses_mock1`)
   await expect(page.getByPlaceholder(/Ask opencode/)).toBeVisible()
-  if (process.env.SCREENSHOTS) await page.screenshot({ path: 'docs/screenshots/mobile.png' })
+  await shot(page, 'mobile')
 })

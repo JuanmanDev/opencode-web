@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { shot } from './shot'
 
 // Every MCP UI flavour the chat renders, end to end against the mock opencode
 // server and this app's own /mcp-demo MCP server:
@@ -17,6 +18,8 @@ test('MCP Apps template handshakes and renders the tool result', async ({ page }
   await expect(app.getByText('+12.5%')).toBeVisible()
   // the host acknowledged the app: loaded badge + fade-in
   await expect(page.locator('iframe[title="ui://opencode-web-demo/app-template"]')).toHaveClass(/opacity-100/)
+  await expect(page.locator('iframe[title="ui://opencode-web-demo/remote-dom"]')).toHaveClass(/opacity-100/)
+  await shot(page, 'mcp-apps')
 })
 
 test('remote-dom component renders and reacts to presses', async ({ page }) => {
@@ -54,6 +57,7 @@ test('apps open fullscreen / in the side panel via URL state and come back', asy
   // the viewer copy handshakes again and renders the same data
   const viewer = page.frameLocator('iframe[title="ui://opencode-web-demo/app-template"]').last()
   await expect(viewer.getByText('Revenue')).toBeVisible()
+  await shot(page, 'app-fullscreen')
 
   // dock to the side panel: same persistent iframe, different frame
   await page.getByRole('button', { name: 'Dock to side panel' }).click()
@@ -98,4 +102,14 @@ test('mcp-call recovers the app template and structured content', async ({ reque
   expect(body.app.html).toContain('ui/initialize')
   expect(body.structuredContent.html).toContain('Salamanca')
   expect(body.resources[0].html).toContain('31')
+})
+
+test('apps render inline on a phone and fit the screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(SESSION)
+  const frame = page.frameLocator('iframe[title="ui://opencode-web-demo/app-template"]')
+  await expect(frame.getByText('Revenue')).toBeVisible()
+  const width = await page.evaluate(() => document.documentElement.scrollWidth)
+  expect(width).toBeLessThanOrEqual(390)
+  await shot(page, 'mobile-apps')
 })
