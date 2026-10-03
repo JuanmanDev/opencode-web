@@ -1,5 +1,5 @@
 # opencode server image: runs `opencode serve` for all projects mounted under /projects
-FROM node:24-slim
+FROM node:26-slim
 
 # git/ripgrep for the agent; python3 + uv so `uvx` MCP servers work next to
 # the `npx` ones

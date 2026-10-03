@@ -1,7 +1,7 @@
 # --- build stage ---
 # runs on the build host's own platform: the Nitro output is plain JavaScript,
 # so multi-arch images don't need to run npm under emulation
-FROM --platform=$BUILDPLATFORM node:24-alpine AS build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund
@@ -9,7 +9,7 @@ COPY . .
 RUN npm run build
 
 # --- runtime stage ---
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production \
     NITRO_PORT=3000 \
