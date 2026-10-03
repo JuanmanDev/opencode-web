@@ -44,5 +44,5 @@ docs: explain traefik + tinyauth setup
 ## Pull requests
 
 - Keep PRs focused; one topic per PR.
-- CI must pass: typecheck, unit, e2e, docker build, commitlint.
+- CI must pass: actionlint, typecheck, unit, e2e, docker build + smoke test, commitlint. Releases only happen after CI passed on `main`.
 - Screenshots for UI changes are appreciated (CI regenerates the official ones on release).
