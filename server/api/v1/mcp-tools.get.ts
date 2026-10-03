@@ -1,11 +1,11 @@
 // Fetch the tool lists of a project's MCP servers by speaking MCP to them
 // directly — opencode exposes no MCP tool ids at all (`/experimental/tool[/ids]`
 // only returns built-in and plugin tools). Remote servers are queried over
-// Streamable HTTP (with a legacy SSE fallback), local ones are spawned and
+// Streamable HTTP or legacy SSE (server/utils/mcp-client.ts), local ones are spawned and
 // spoken to over stdio.
 
 import { fetchToolsStdio } from '../../utils/mcp-stdio'
-import { parseRpcBody, resolveDemoUrl, toToolInfo, type McpToolInfo } from '../../utils/mcp-client'
+import { listRemoteTools, loopbackOrigin, resolveDemoUrl, type McpToolInfo } from '../../utils/mcp-client'
 
 interface McpConfigEntry {
   type?: string
@@ -40,161 +40,6 @@ function opencodeIsLocal() {
 
 type ToolInfo = McpToolInfo
 
-async function rpc(
-  url: string,
-  headers: Record<string, string>,
-  method: string,
-  params: Record<string, unknown>,
-  id: number,
-  sessionId?: string
-): Promise<{ result?: any; sessionId?: string }> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-      ...(sessionId ? { 'mcp-session-id': sessionId } : {}),
-      ...headers
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-    signal: AbortSignal.timeout(6000)
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const newSession = res.headers.get('mcp-session-id') || sessionId
-  const payload = parseRpcBody(await res.text(), res.headers.get('content-type') || '', id)
-  if (payload?.error) throw new Error(payload.error.message || 'MCP error')
-  return { result: payload?.result, sessionId: newSession }
-}
-
-async function fetchTools(url: string, headers: Record<string, string>): Promise<ToolInfo[]> {
-  const init = await rpc(url, headers, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'opencode-web', version: '1' }
-  }, 1)
-  // stateful servers reject requests that arrive before this notification
-  await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-      ...(init.sessionId ? { 'mcp-session-id': init.sessionId } : {}),
-      ...headers
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-    signal: AbortSignal.timeout(4000)
-  }).catch(() => {})
-
-  const list = await rpc(url, headers, 'tools/list', {}, 2, init.sessionId)
-  const tools = Array.isArray(list.result?.tools) ? list.result.tools : []
-  return tools
-    .map(toToolInfo)
-    .filter((t: ToolInfo) => t.name)
-}
-
-// Legacy HTTP+SSE transport (pre-2025 spec): GET opens a stream that first
-// announces a POST endpoint; JSON-RPC responses arrive back over the stream.
-async function fetchToolsSse(url: string, headers: Record<string, string>): Promise<ToolInfo[]> {
-  const controller = new AbortController()
-  const kill = setTimeout(() => controller.abort(), 12000)
-  try {
-    const res = await fetch(url, {
-      headers: { accept: 'text/event-stream', ...headers },
-      signal: controller.signal
-    })
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let endpoint: string | null = null
-    const pending = new Map<number, (msg: any) => void>()
-
-    const processBuffer = () => {
-      let idx: number
-      while ((idx = buffer.indexOf('\n\n')) >= 0) {
-        const chunk = buffer.slice(0, idx)
-        buffer = buffer.slice(idx + 2)
-        const eventName = chunk.match(/^event:\s*(.+)$/m)?.[1]?.trim() || 'message'
-        const data = chunk.split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice(5).trim())
-          .join('\n')
-        if (eventName === 'endpoint') {
-          endpoint = data
-        } else if (data) {
-          try {
-            const msg = JSON.parse(data)
-            if (msg.id != null && pending.has(msg.id)) {
-              pending.get(msg.id)!(msg)
-              pending.delete(msg.id)
-            }
-          } catch { /* non-JSON event */ }
-        }
-      }
-    }
-
-    ;(async () => {
-      try {
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          processBuffer()
-        }
-      } catch { /* aborted */ }
-    })()
-
-    const waitFor = <T>(check: () => T | null | undefined, ms: number) =>
-      new Promise<T>((resolve, reject) => {
-        const iv = setInterval(() => {
-          const value = check()
-          if (value != null) { clearInterval(iv); resolve(value) }
-        }, 50)
-        setTimeout(() => { clearInterval(iv); reject(new Error('SSE timeout')) }, ms)
-      })
-
-    await waitFor(() => endpoint, 6000)
-    const postUrl = new URL(endpoint!, url).toString()
-
-    const call = (id: number, method: string, params: Record<string, unknown>) => {
-      const reply = new Promise<any>((resolve) => pending.set(id, resolve))
-      return fetch(postUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...headers },
-        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-        signal: controller.signal
-      }).then(() => Promise.race([
-        reply,
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RPC timeout')), 6000))
-      ]))
-    }
-
-    const init = await call(1, 'initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: { name: 'opencode-web', version: '1' }
-    })
-    if (init?.error) throw new Error(init.error.message || 'initialize failed')
-    fetch(postUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-      signal: controller.signal
-    }).catch(() => {})
-
-    const list = await call(2, 'tools/list', {})
-    if (list?.error) throw new Error(list.error.message || 'tools/list failed')
-    const tools = Array.isArray(list?.result?.tools) ? list.result.tools : []
-    return tools
-      .map(toToolInfo)
-      .filter((t: ToolInfo) => t.name)
-  } finally {
-    clearTimeout(kill)
-    controller.abort()
-  }
-}
-
 /** Discover one server's tools; never throws — failures land in `error`. */
 async function probe(entry: McpConfigEntry, selfOrigin?: string): Promise<McpToolsResult> {
   // disabled servers are never contacted: probing them produced phantom
@@ -202,24 +47,13 @@ async function probe(entry: McpConfigEntry, selfOrigin?: string): Promise<McpToo
   if (entry?.enabled === false) return { tools: [], disabled: true }
 
   if (entry?.type === 'remote' && entry.url) {
-    const url = resolveDemoUrl(entry.url, selfOrigin)
     try {
-      return { tools: await fetchTools(url, entry.headers || {}), transport: 'remote' }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      // 404/405 usually means a legacy SSE-only server: try the old transport
-      if (/40[45]/.test(message)) {
-        try {
-          return { tools: await fetchToolsSse(url, entry.headers || {}), transport: 'remote' }
-        } catch (sseError) {
-          return {
-            tools: [],
-            transport: 'remote',
-            error: `${message}; SSE fallback: ${sseError instanceof Error ? sseError.message : sseError}`
-          }
-        }
+      return {
+        tools: await listRemoteTools(resolveDemoUrl(entry.url, selfOrigin), entry.headers || {}),
+        transport: 'remote'
       }
-      return { tools: [], transport: 'remote', error: message }
+    } catch (error) {
+      return { tools: [], transport: 'remote', error: error instanceof Error ? error.message : String(error) }
     }
   }
 
@@ -255,14 +89,35 @@ async function probe(entry: McpConfigEntry, selfOrigin?: string): Promise<McpToo
 }
 
 // discovery is slow (every server is contacted, local ones are spawned)
-// -> cached with stale-while-revalidate
-const getAllTools = defineCachedFunction(discoverAll, {
-  name: 'mcp-tools',
-  maxAge: 300,
-  swr: true,
-  getKey: (directory?: string, scope?: string, _selfOrigin?: string) =>
-    `${scope || 'project'}:${encodeURIComponent(directory || '')}`
-})
+// -> cached with stale-while-revalidate. Hand-rolled because the MCP page's
+// refresh button must wait for a fresh probe *and* store it for every other
+// page, which nitro's swr cache does not do on invalidation.
+const MAX_AGE_MS = 300_000
+const pending = new Map<string, Promise<Record<string, McpToolsResult>>>()
+
+async function getAllTools(directory: string | undefined, scope: string | undefined, selfOrigin: string, refresh: boolean) {
+  const key = `mcp-tools:${scope || 'project'}:${encodeURIComponent(directory || '')}`
+  const storage = useStorage('cache')
+  const probe = () => {
+    let run = pending.get(key)
+    if (!run) {
+      run = discoverAll(directory, scope, selfOrigin)
+        .then(async (value) => {
+          await storage.setItem(key, { value, mtime: Date.now() })
+          return value
+        })
+        .finally(() => pending.delete(key))
+      pending.set(key, run)
+    }
+    return run
+  }
+  const cached = refresh
+    ? null
+    : await storage.getItem<{ value: Record<string, McpToolsResult>; mtime: number }>(key).catch(() => null)
+  if (!cached?.value) return probe()
+  if (Date.now() - cached.mtime > MAX_AGE_MS) probe().catch(() => {})
+  return cached.value
+}
 
 async function discoverAll(directory?: string, scope?: string, selfOrigin?: string) {
   // no fallback here: swallowing a failed /config used to cache an empty
@@ -294,7 +149,6 @@ export default defineEventHandler(async (event) => {
     scope?: string
     refresh?: string
   }
-  // the MCP page's refresh button must re-probe, not replay the cache
-  const selfOrigin = getRequestURL(event).origin
-  return refresh ? discoverAll(directory, scope, selfOrigin) : getAllTools(directory, scope, selfOrigin)
+  const selfOrigin = loopbackOrigin(event.node.req.socket) ?? getRequestURL(event).origin
+  return getAllTools(directory, scope, selfOrigin, Boolean(refresh))
 })

@@ -1,6 +1,8 @@
-// Re-run an MCP tool against its remote server to recover the ui:// resources
-// opencode strips from tool outputs. Cached briefly so page reloads don't
-// re-trigger tools.
+// Recover the ui:// resources opencode strips from MCP tool outputs, straight
+// from the remote server. `mode: 'template'` only reads a declared MCP Apps
+// template and never executes anything; `mode: 'call'` re-runs the tool, which
+// the UI reserves for read-only tools or an explicit click. Cached briefly so
+// page reloads don't re-trigger tools.
 
 import { createHash } from 'node:crypto'
 
@@ -10,8 +12,8 @@ const KNOWN_URLS: Record<string, string> = {
   'mcp-ui-demo': 'https://remote-mcp-server-authless.idosalomon.workers.dev/mcp'
 }
 
-const cachedCall = defineCachedFunction(
-  async (directory: string | undefined, toolId: string, argsJson: string, selfOrigin?: string) => {
+const cachedRecover = defineCachedFunction(
+  async (directory: string | undefined, toolId: string, argsJson: string, mode: 'template' | 'call', selfOrigin?: string) => {
     const [config, globalConfig] = await Promise.all([
       opencodeFetch<{ mcp?: Record<string, McpRemoteEntry> }>('/config', { query: { directory } }).catch(() => ({ mcp: {} })),
       opencodeFetch<{ mcp?: Record<string, McpRemoteEntry> }>('/global/config').catch(() => ({ mcp: {} }))
@@ -26,35 +28,37 @@ const cachedCall = defineCachedFunction(
     if (resolved.entry.type !== 'remote' || !resolved.entry.url) {
       throw createError({ statusCode: 400, message: `${resolved.server} is not a remote MCP server` })
     }
-    const targetUrl = resolveDemoUrl(resolved.entry.url, selfOrigin)
-    const result = await callRemoteMcpTool(
-      targetUrl,
+    return recoverToolUi(
+      resolveDemoUrl(resolved.entry.url, selfOrigin),
       resolved.entry.headers || {},
       resolved.tool,
-      JSON.parse(argsJson)
+      JSON.parse(argsJson),
+      mode
     )
-    // MCP Apps (SEP-1865): fetch the tool's ui:// template when declared
-    const app = await fetchAppTemplate(targetUrl, resolved.entry.headers || {}, resolved.tool)
-      .catch(() => null)
-    return { ...result, app }
   },
   {
     name: 'mcp-call',
     maxAge: 300,
     // hashed: long argument payloads must not collide on a shared prefix
-    getKey: (directory: string | undefined, toolId: string, argsJson: string, _selfOrigin?: string) =>
-      createHash('sha1').update(`${directory || ''}|${toolId}|${argsJson}`).digest('hex')
+    getKey: (directory: string | undefined, toolId: string, argsJson: string, mode: string) =>
+      createHash('sha1').update(`${mode}|${directory || ''}|${toolId}|${argsJson}`).digest('hex')
   }
 )
 
 export default defineEventHandler(async (event) => {
   requireApiToken(event)
-  const body = await readBody<{ directory?: string; toolId: string; arguments?: Record<string, unknown> }>(event)
+  const body = await readBody<{
+    directory?: string
+    toolId: string
+    arguments?: Record<string, unknown>
+    mode?: 'template' | 'call'
+  }>(event)
   if (!body?.toolId) throw createError({ statusCode: 400, message: 'toolId is required' })
-  return cachedCall(
+  return cachedRecover(
     body.directory,
     body.toolId,
     JSON.stringify(body.arguments || {}),
-    getRequestURL(event).origin
+    body.mode === 'template' ? 'template' : 'call',
+    loopbackOrigin(event.node.req.socket) ?? getRequestURL(event).origin
   )
 })

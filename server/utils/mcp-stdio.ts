@@ -20,7 +20,11 @@ function quote(arg: string) {
   return IS_WINDOWS && /\s/.test(arg) ? `"${arg}"` : arg
 }
 
-/** Kill the whole process tree: `npx` spawns the real server as a child. */
+/**
+ * Kill the whole process tree: `npx`/`uvx` spawn the real server as a child.
+ * On POSIX the server leads its own process group (detached), so a negative
+ * pid reaches every descendant.
+ */
 function killTree(pid: number | undefined) {
   if (!pid) return
   if (IS_WINDOWS) {
@@ -28,8 +32,26 @@ function killTree(pid: number | undefined) {
       spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
       return
     } catch { /* fall through to plain kill */ }
+  } else {
+    try {
+      process.kill(-pid, 'SIGKILL')
+      return
+    } catch { /* not a group leader: plain kill */ }
   }
   try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ }
+}
+
+// Only what package runners need to work. This app's own environment holds
+// the opencode password and the API token: a server started from some
+// project's opencode.json must not see them.
+const PASSTHROUGH_ENV = /^(PATH|PATHEXT|HOME|USER|USERNAME|LOGNAME|SHELL|LANG|LC_\w+|TZ|TMPDIR|TEMP|TMP|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMDATA|PROGRAMFILES|HOMEDRIVE|HOMEPATH|XDG_\w+|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|HTTPS?_PROXY|NO_PROXY|NPM_CONFIG_\w+|UV_\w+|PYTHON\w*)$/i
+
+export function childEnv(environment?: Record<string, string>) {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && PASSTHROUGH_ENV.test(key)) env[key] = value
+  }
+  return { ...env, ...(environment || {}) }
 }
 
 /**
@@ -52,11 +74,12 @@ export function fetchToolsStdio(
           shell: true,
           windowsHide: true,
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, ...(environment || {}) }
+          env: childEnv(environment)
         })
       : spawn(bin, args, {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, ...(environment || {}) }
+          env: childEnv(environment),
+          detached: true
         })
 
     let settled = false

@@ -20,7 +20,22 @@ const props = defineProps<{
 }>()
 
 const frame = ref<HTMLIFrameElement>()
-const height = ref(props.viewer ? 480 : 240)
+// small until the app reports its real size: short cards stay short
+const height = ref(props.viewer ? 480 : 160)
+
+// External apps run with allow-same-origin (module scripts, storage). That is
+// only safe for http(s) pages on another origin: javascript:/data: URLs or a
+// page of this very app would run with full access to the opencode API.
+const isSafeUrl = (link: string) => {
+  try {
+    const u = new URL(link, window.location.href)
+    return (u.protocol === 'http:' || u.protocol === 'https:') && u.origin !== window.location.origin
+  } catch {
+    return false
+  }
+}
+const safeUrl = computed(() => (props.url && import.meta.client && isSafeUrl(props.url) ? props.url : undefined))
+const blockedUrl = computed(() => Boolean(props.url && import.meta.client && !safeUrl.value))
 const appViewer = props.appId || props.viewer ? useAppViewer() : null
 const colorMode = useColorMode()
 const theme = computed(() => (colorMode.value === 'light' ? 'light' : 'dark'))
@@ -97,7 +112,7 @@ try{
 const REMOTE_DOM_SHELL_TAIL = `
 }catch(e){ document.getElementById('root').textContent = 'remote-dom error: ' + e.message }
 <\/script><script>
-var post=function(){ parent.postMessage({type:'ui-size-change',payload:{height:document.documentElement.scrollHeight}},'*') };
+var post=function(){ parent.postMessage({type:'ui-size-change',payload:{height:Math.ceil(document.documentElement.getBoundingClientRect().height)}},'*') };
 addEventListener('load',post); new ResizeObserver(post).observe(document.documentElement);
 <\/script></body></html>`
 
@@ -152,7 +167,7 @@ function handleAppRpc(msg: { jsonrpc?: string; id?: number | string; method?: st
       return true
     }
     case 'ui/open-link':
-      if (typeof msg.params?.url === 'string') window.open(msg.params.url, '_blank', 'noopener')
+      if (typeof msg.params?.url === 'string' && isSafeUrl(msg.params.url)) window.open(msg.params.url, '_blank', 'noopener')
       if (msg.id != null) postToFrame({ jsonrpc: '2.0', id: msg.id, result: {} })
       return true
     case 'ui/request-display-mode': {
@@ -199,6 +214,10 @@ function markReady() {
 }
 
 function startLifecycle() {
+  if (blockedUrl.value) {
+    state.value = 'error'
+    return
+  }
   state.value = 'loading'
   clearTimeout(readyGrace)
   clearTimeout(hardTimeout)
@@ -260,13 +279,13 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
           <UIcon name="i-lucide-check" class="size-3 mr-0.5" /> loaded
         </UBadge>
       </Transition>
-      <UTooltip v-if="url" text="Open in a new tab (e.g. to log in)">
+      <UTooltip v-if="safeUrl" text="Open in a new tab (e.g. to log in)">
         <UButton
           icon="i-lucide-external-link"
           size="xs"
           color="neutral"
           variant="ghost"
-          :href="url"
+          :href="safeUrl"
           target="_blank"
           aria-label="Open in a new tab"
         />
@@ -307,7 +326,7 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
       <iframe
         ref="frame"
         :srcdoc="srcdoc"
-        :src="url"
+        :src="safeUrl"
         :sandbox="url
           ? 'allow-scripts allow-same-origin allow-forms allow-popups'
           : 'allow-scripts allow-forms'"
@@ -336,8 +355,12 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
           </template>
           <template v-else>
             <UIcon name="i-lucide-circle-x" class="size-5 text-error" />
-            <span class="text-xs text-error">Failed to load the app</span>
-            <UButton v-if="url" size="xs" color="neutral" variant="soft" icon="i-lucide-external-link" label="Open in a new tab" :href="url" target="_blank" />
+            <span v-if="blockedUrl" class="text-xs text-error max-w-xs">
+              Blocked: the app URL is not an http(s) page on another origin
+              (<span class="font-mono break-all">{{ url!.slice(0, 80) }}</span>)
+            </span>
+            <span v-else class="text-xs text-error">Failed to load the app</span>
+            <UButton v-if="safeUrl" size="xs" color="neutral" variant="soft" icon="i-lucide-external-link" label="Open in a new tab" :href="safeUrl" target="_blank" />
           </template>
         </div>
       </Transition>

@@ -12,7 +12,7 @@ interface JsonRpcRequest {
 const SIZER = `<script>
 // mcp-ui lifecycle: announce readiness, then keep the host informed of size
 parent.postMessage({type:'ui-lifecycle-iframe-ready'},'*');
-const post=()=>parent.postMessage({type:'ui-size-change',payload:{height:document.documentElement.scrollHeight}},'*');
+const post=()=>parent.postMessage({type:'ui-size-change',payload:{height:Math.ceil(document.documentElement.getBoundingClientRect().height)}},'*');
 addEventListener('load',post);new ResizeObserver(post).observe(document.documentElement);
 <\/script>`
 
@@ -42,7 +42,7 @@ function render(html){
   r.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.replaceWith(s)});
   size();
 }
-function size(){send({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight}})}
+function size(){send({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:document.documentElement.scrollWidth,height:Math.ceil(document.documentElement.getBoundingClientRect().height)}})}
 new ResizeObserver(size).observe(document.documentElement);
 <\/script>`
 
@@ -315,11 +315,14 @@ export default defineEventHandler(async (event) => {
       case 'ping':
         return respond({})
       case 'tools/list':
-        // MCP Apps: every tool renders through the shared ui:// template
+        // MCP Apps: every tool renders through the shared ui:// template.
+        // All of them are pure: hosts may re-run them to recover their UI.
         return respond({
-          tools: TOOLS.map((t) =>
-            t.name === 'show_remote_dom' ? t : { ...t, _meta: { ui: { resourceUri: APP_TEMPLATE_URI } } }
-          )
+          tools: TOOLS.map((t) => ({
+            ...t,
+            annotations: { readOnlyHint: true },
+            ...(t.name === 'show_remote_dom' ? {} : { _meta: { ui: { resourceUri: APP_TEMPLATE_URI } } })
+          }))
         })
       case 'resources/list':
         return respond({

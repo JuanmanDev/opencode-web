@@ -6,7 +6,9 @@ const props = defineProps<{ part: ToolPart }>()
 const open = ref(false)
 
 // opencode strips ui:// resources from MCP tool outputs, so for UI-looking
-// MCP tools we re-fetch the app from the remote server ourselves
+// MCP tools we recover the app from the remote server ourselves. Tools can
+// have side effects: only read-only ones are re-run automatically; MCP Apps
+// get their template without re-running, anything else waits for a click.
 const route = useRoute()
 const fetchedResources = ref<Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string; app?: { html: string }; appData?: { toolInput?: unknown; toolResult?: unknown } }>>([])
 const { register } = useAppRegistry()
@@ -20,11 +22,18 @@ watch(fetchedResources, () => {
 const fetchingUi = ref(false)
 // name heuristic for servers that predate MCP Apps metadata; tools that
 // declare a ui:// template are known exactly via discovery
-const UI_TOOL = /(^|_)(show|demo|ui|iframe|render|display|status)/i
+const UI_TOOL = /(^|_)(show|demo|ui|iframe|render|display)(_|$)/i
 const uiTools = useMcpUiTools()
 const looksLikeUi = (tool: string) => tool.includes('_') && (uiTools.has(tool) || UI_TOOL.test(tool))
+/** a re-run is safe without asking: the server says the tool has no side effects */
+const canRerun = (tool: string) => uiTools.isReadOnly(tool)
+// UI-looking tools that may have side effects are re-run on demand only
+const offerRerun = computed(() =>
+  status.value === 'completed' && looksLikeUi(props.part.tool) && !canRerun(props.part.tool) &&
+  !fetchingUi.value && !fetchedResources.value.length && !htmlResources.value.length
+)
 
-async function fetchUi() {
+async function fetchUi(mode: 'template' | 'call') {
   if (fetchingUi.value || fetchedResources.value.length) return
   fetchingUi.value = true
   try {
@@ -34,6 +43,7 @@ async function fetchUi() {
       resources: Array<{ html?: string; url?: string; title?: string; remoteDom?: boolean; script?: string }>
       structuredContent?: unknown
       app?: { resourceUri: string; html: string } | null
+      called?: boolean
     }>(
       '/api/v1/mcp-call',
       {
@@ -42,7 +52,8 @@ async function fetchUi() {
         body: {
           directory: dirParam ? decodeDir(dirParam) : undefined,
           toolId: props.part.tool,
-          arguments: input
+          arguments: input,
+          mode
         }
       }
     )
@@ -55,7 +66,8 @@ async function fetchUi() {
           toolInput: input,
           toolResult: {
             content: [{ type: 'text', text: (props.part.state as { output?: string })?.output || '' }],
-            structuredContent: res.structuredContent
+            // only a re-run yields it: opencode keeps the text content alone
+            ...(res.called ? { structuredContent: res.structuredContent } : {})
           }
         }
       }]
@@ -69,20 +81,18 @@ async function fetchUi() {
   }
 }
 
-watch(
-  () => (props.part.state as { status?: string })?.status,
-  (status) => {
-    if (status === 'completed' && looksLikeUi(props.part.tool)) fetchUi()
-  },
-  { immediate: true }
-)
-// discovery may finish after the part rendered: pick the app up then
-watch(() => uiTools.has(props.part.tool), (known) => {
-  if (known && (props.part.state as { status?: string })?.status === 'completed') fetchUi()
-})
-
 const state = computed(() => props.part.state || { status: 'pending' })
 const status = computed(() => state.value.status || 'pending')
+
+/** automatic recovery: never executes a tool that may have side effects */
+function autoFetchUi() {
+  if (status.value !== 'completed' || !looksLikeUi(props.part.tool)) return
+  if (canRerun(props.part.tool)) fetchUi('call')
+  else if (uiTools.has(props.part.tool)) fetchUi('template')
+}
+watch(status, autoFetchUi, { immediate: true })
+// discovery may finish after the part rendered: pick the app up then
+watch(() => [uiTools.has(props.part.tool), canRerun(props.part.tool)], autoFetchUi)
 
 const title = computed(() => {
   const s = state.value as unknown as Record<string, unknown>
@@ -126,6 +136,14 @@ const output = computed(() => {
 
 interface HtmlResource { html?: string; url?: string; title?: string }
 
+// opencode's own tools: their output is files, web pages or command output,
+// never an MCP resource - text in there that looks like one must not render
+const BUILTIN_TOOLS = /^(bash|read|write|edit|multiedit|patch|apply_patch|glob|grep|list|ls|webfetch|websearch|codesearch|task|todowrite|todoread|skill|question|batch|lsp\w*|invalid)$/
+
+const isSafeLink = (link: string) => {
+  try { return ['http:', 'https:'].includes(new URL(link).protocol) } catch { return false }
+}
+
 // MCP UI / MCP Apps: tools can return ui:// resources (text/html or external
 // URLs). Scan metadata + parseable output for them and render live.
 const htmlResources = computed<HtmlResource[]>(() => {
@@ -139,18 +157,22 @@ const htmlResources = computed<HtmlResource[]>(() => {
     const obj = node as Record<string, unknown>
     const uri = typeof obj.uri === 'string' ? obj.uri : undefined
     const mime = typeof obj.mimeType === 'string' ? obj.mimeType : undefined
-    if (uri?.startsWith('ui://') || mime === 'text/html') {
-      if (typeof obj.text === 'string' && obj.text.trim()) {
-        found.push({ html: obj.text, title: uri })
-        return
+    // mcp-ui external apps carry a ui:// uri too: the mime type decides first
+    if (mime === 'text/uri-list') {
+      if (typeof obj.text === 'string') {
+        const url = obj.text.split('\n').find((l) => l.trim() && !l.startsWith('#'))?.trim()
+        if (url && isSafeLink(url)) found.push({ url, title: uri })
       }
+      return
     }
-    if (mime === 'text/uri-list' && typeof obj.text === 'string') {
-      const url = obj.text.split('\n').find((l) => l.trim() && !l.startsWith('#'))
-      if (url) { found.push({ url: url.trim(), title: uri }); return }
+    const htmlLike = mime?.startsWith('text/html') || (!mime && uri?.startsWith('ui://'))
+    if (htmlLike && typeof obj.text === 'string' && obj.text.trim().startsWith('<')) {
+      found.push({ html: obj.text, title: uri })
+      return
     }
     for (const value of Object.values(obj)) visit(value, depth + 1)
   }
+  if (BUILTIN_TOOLS.test(props.part.tool)) return found
   const s = state.value as unknown as Record<string, unknown>
   visit(s.metadata, 0)
   if (found.length === 0 && typeof s.output === 'string' && s.output.startsWith('{')) {
@@ -194,7 +216,7 @@ watch(htmlResources, () => {
 
   <div v-else class="rounded-sm bg-muted text-sm my-1">
     <button
-      class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left cursor-pointer"
+      class="flex w-full items-center gap-2 px-2.5 py-1.5 pointer-coarse:py-2.5 text-left cursor-pointer"
       @click="open = !open"
     >
       <UIcon
@@ -233,6 +255,18 @@ watch(htmlResources, () => {
     </div>
     </CollapseTransition>
 
+    <div v-if="offerRerun" class="px-2.5 pb-2" :class="{ 'pt-1': !open }">
+      <UButton
+        size="xs"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-app-window"
+        title="opencode drops app UIs from tool results; running the tool again recovers it, with whatever effects the tool has"
+        @click="fetchUi('call')"
+      >
+        Render UI (runs the tool again)
+      </UButton>
+    </div>
     <div v-if="fetchingUi" class="flex items-center gap-2 px-2.5 pb-2 text-xs text-dimmed" :class="{ 'pt-2': !open }">
       <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />
       Loading app UI…
