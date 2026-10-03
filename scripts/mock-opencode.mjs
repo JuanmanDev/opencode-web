@@ -150,7 +150,7 @@ createServer((req, res) => {
     // the web app's own demo server, registered from another port on purpose:
     // the app must rewrite /mcp-demo URLs to its current origin
     'ui-demo': { type: 'remote', url: 'http://127.0.0.1:1/mcp-demo' },
-    'home-assistant': { type: 'remote', url: 'http://127.0.0.1:1/unreachable', enabled: false }
+    'home-assistant': { type: 'remote', url: 'http://127.0.0.1:1/unreachable', enabled: false, headers: { Authorization: 'Bearer mcp-mock-secret' } }
   } })
 
   // minimal MCP server (Streamable HTTP) so tool discovery is testable offline
@@ -184,6 +184,8 @@ createServer((req, res) => {
   if (/^\/session\/[^/]+\/(command|shell|share|summarize|revert|unrevert)$/.test(p) && req.method === 'POST') {
     return json(res, { ok: true })
   }
+  // pending permission requests (all sessions) - none in the mock
+  if (p === '/permission' && req.method === 'GET') return json(res, [])
   if (p === '/mcp') return json(res, mcp)
   if (p === '/experimental/tool/ids') {
     return json(res, [

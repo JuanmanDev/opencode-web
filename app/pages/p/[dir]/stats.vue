@@ -58,7 +58,7 @@ useHead(() => ({ title: `Stats · ${dirName(directory.value)} · opencode web` }
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-3xl mx-auto px-4 py-6">
       <h1 class="text-lg font-semibold mb-1">Usage & cost</h1>
       <p class="text-sm text-muted mb-6">

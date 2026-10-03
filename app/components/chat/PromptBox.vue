@@ -370,8 +370,11 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-    <div class="max-w-4xl mx-auto space-y-2 relative">
+  <!-- flex column that may shrink (min-h-0): when the keyboard leaves little
+       room only the options panel gives way and scrolls, so the input and
+       the Send row always stay on screen -->
+  <div class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col min-h-0">
+    <div class="max-w-4xl w-full mx-auto space-y-2 relative flex flex-col min-h-0">
       <!-- slash command autocomplete -->
       <CollapseTransition>
         <div
@@ -396,16 +399,16 @@ function onKeydown(e: KeyboardEvent) {
         autoresize
         :maxrows="10"
         placeholder="Ask opencode… (Enter to send, Shift+Enter for newline)"
-        class="w-full font-mono"
+        class="w-full font-mono shrink-0"
         variant="soft"
         size="lg"
         @keydown="onKeydown"
       />
 
-      <!-- collapsible options; scrolls internally on small screens so the
-           on-screen keyboard never pushes the selects out of reach -->
+      <!-- collapsible options; the only part of the box that shrinks and
+           scrolls, so the on-screen keyboard never pushes Send off-screen -->
       <CollapseTransition>
-      <div v-if="optionsOpen" class="space-y-2 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible">
+      <div v-if="optionsOpen" class="space-y-2 min-h-0 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none">
         <!-- one row on wide screens: model / think / agent -->
         <!-- phones pair think level + agent so the panel stays short -->
         <div class="grid grid-cols-2 sm:flex sm:flex-row gap-1.5">
@@ -466,6 +469,7 @@ function onKeydown(e: KeyboardEvent) {
                   variant="soft"
                   size="sm"
                   icon="i-lucide-plug"
+                  class="oc-tap"
                   aria-label="Configure providers"
                   @click="providersOpen = true"
                 />
@@ -556,6 +560,7 @@ function onKeydown(e: KeyboardEvent) {
                   variant="soft"
                   color="neutral"
                   icon="i-lucide-circle-check"
+                  class="oc-tap"
                   aria-label="Enable every server"
                   @click="setAllServers(true)"
                 />
@@ -566,6 +571,7 @@ function onKeydown(e: KeyboardEvent) {
                   variant="soft"
                   color="neutral"
                   icon="i-lucide-circle-slash"
+                  class="oc-tap"
                   aria-label="Disable every server"
                   @click="setAllServers(false)"
                 />
@@ -578,7 +584,7 @@ function onKeydown(e: KeyboardEvent) {
                   :color="activeGroup === g.name ? 'primary' : 'neutral'"
                   icon="i-lucide-layers"
                   :label="g.name"
-                  class="rounded-r-none"
+                  class="oc-tap rounded-r-none"
                   @click="applyGroup(g.name)"
                 />
                 <UButton
@@ -586,7 +592,7 @@ function onKeydown(e: KeyboardEvent) {
                   variant="soft"
                   color="neutral"
                   icon="i-lucide-x"
-                  class="rounded-l-none"
+                  class="oc-tap rounded-l-none"
                   :aria-label="`Delete preset ${g.name}`"
                   @click="deleteGroup(g.name)"
                 />
@@ -603,6 +609,7 @@ function onKeydown(e: KeyboardEvent) {
                 variant="soft"
                 color="neutral"
                 icon="i-lucide-save"
+                class="oc-tap"
                 :disabled="!groupName.trim()"
                 aria-label="Save preset"
                 @click="saveGroup"
@@ -616,7 +623,7 @@ function onKeydown(e: KeyboardEvent) {
 
       <!-- attachment chips -->
       <CollapseTransition>
-      <div v-if="attachments.length" class="flex flex-wrap gap-1">
+      <div v-if="attachments.length" class="flex flex-wrap gap-1 shrink-0">
         <UBadge
           v-for="(file, i) in attachments"
           :key="i"
@@ -627,14 +634,18 @@ function onKeydown(e: KeyboardEvent) {
         >
           <UIcon name="i-lucide-paperclip" class="size-3 mr-1" />
           {{ file.filename }}
-          <button class="ml-1 cursor-pointer hover:text-error" @click="attachments.splice(i, 1)">
+          <button
+            class="relative oc-tap-zone ml-1 cursor-pointer hover:text-error"
+            :aria-label="`Remove ${file.filename}`"
+            @click="attachments.splice(i, 1)"
+          >
             <UIcon name="i-lucide-x" class="size-3" />
           </button>
         </UBadge>
       </div>
       </CollapseTransition>
 
-      <div class="flex items-center gap-1.5 min-w-0">
+      <div class="flex items-center gap-1.5 min-w-0 shrink-0">
         <input
           ref="fileInput"
           type="file"
@@ -649,6 +660,7 @@ function onKeydown(e: KeyboardEvent) {
             variant="ghost"
             size="xs"
             icon="i-lucide-paperclip"
+            class="oc-tap"
             aria-label="Attach files"
             @click="pickFiles"
           />
@@ -659,12 +671,13 @@ function onKeydown(e: KeyboardEvent) {
             :variant="optionsOpen ? 'soft' : 'ghost'"
             size="xs"
             :icon="optionsOpen ? 'i-lucide-chevron-down' : 'i-lucide-sliders-horizontal'"
+            class="oc-tap"
             :aria-label="optionsOpen ? 'Hide options' : 'Show model, think level, agent and MCP options'"
             @click="optionsOpen = !optionsOpen"
           />
         </UTooltip>
         <button
-          class="flex items-center gap-2 min-w-0 text-[11px] font-mono text-dimmed hover:text-muted cursor-pointer"
+          class="flex items-center gap-2 min-w-0 text-[11px] font-mono text-dimmed hover:text-muted cursor-pointer pointer-coarse:min-h-10"
           @click="optionsOpen = !optionsOpen"
         >
           <span class="flex items-center gap-1 min-w-0">
@@ -705,6 +718,7 @@ function onKeydown(e: KeyboardEvent) {
             size="xs"
             icon="i-lucide-square"
             label="Stop"
+            class="oc-tap shrink-0"
             @click="emit('abort')"
           />
         </Transition>
@@ -716,6 +730,7 @@ function onKeydown(e: KeyboardEvent) {
             size="xs"
             :icon="busy ? 'i-lucide-list-plus' : 'i-lucide-send'"
             :label="busy ? 'Queue' : 'Send'"
+            class="oc-tap shrink-0 pointer-coarse:px-3"
             :disabled="!text.trim() && !attachments.length"
             @click="send"
           />

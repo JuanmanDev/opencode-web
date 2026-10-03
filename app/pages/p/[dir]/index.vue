@@ -76,22 +76,23 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-4xl mx-auto px-4 py-6 space-y-6">
-      <!-- header + quick actions -->
+      <!-- header + quick actions: the buttons wrap below the title on phones
+           instead of squeezing it to a few letters -->
       <div>
         <div class="flex flex-wrap items-center gap-3">
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0 flex-1 basis-full sm:basis-0">
             <h1 class="text-lg font-semibold truncate">{{ dirName(directory) }}</h1>
             <p class="text-xs text-dimmed font-mono truncate">{{ directory }}</p>
             <p v-if="projectMeta.of(directory).description" class="text-sm text-muted mt-1">
               {{ projectMeta.of(directory).description }}
             </p>
           </div>
-          <div class="flex gap-2">
-            <UButton color="primary" icon="i-lucide-plus" label="New chat" :loading="creating" @click="newSession" />
-            <UButton variant="soft" color="neutral" icon="i-lucide-server-cog" label="MCP" :to="`/p/${dirParam}/mcp`" />
-            <UButton variant="soft" color="neutral" icon="i-lucide-chart-column" label="Usage" :to="`/p/${dirParam}/stats`" />
+          <div class="flex flex-wrap gap-2">
+            <UButton color="primary" icon="i-lucide-plus" label="New chat" class="oc-tap" :loading="creating" @click="newSession" />
+            <UButton variant="soft" color="neutral" icon="i-lucide-server-cog" label="MCP" class="oc-tap" :to="`/p/${dirParam}/mcp`" />
+            <UButton variant="soft" color="neutral" icon="i-lucide-chart-column" label="Usage" class="oc-tap" :to="`/p/${dirParam}/stats`" />
           </div>
         </div>
       </div>
@@ -125,9 +126,11 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         </template>
       </div>
 
-      <div class="grid sm:grid-cols-5 gap-4">
+      <!-- explicit single column on phones: an implicit track sizes to the
+           longest session title and scrolls the whole page sideways -->
+      <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
         <!-- last conversations -->
-        <section class="sm:col-span-3">
+        <section class="sm:col-span-3 min-w-0">
           <h2 class="text-xs uppercase tracking-widest text-dimmed mb-2">Last conversations</h2>
           <div class="bg-muted rounded-sm divide-y divide-default">
             <NuxtLink
@@ -154,7 +157,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
         </section>
 
         <!-- mcp overview -->
-        <section class="sm:col-span-2">
+        <section class="sm:col-span-2 min-w-0">
           <h2 class="text-xs uppercase tracking-widest text-dimmed mb-2">MCP servers</h2>
           <div class="bg-muted rounded-sm divide-y divide-default">
             <NuxtLink

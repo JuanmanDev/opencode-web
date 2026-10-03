@@ -85,17 +85,22 @@ body {
   padding: 0;
   font-size: 0.8rem;
 }
+/* tables scroll sideways in their own box; the body's break-word must not
+   reach the cells or narrow screens split every word letter by letter */
 .oc-markdown table {
   border-collapse: collapse;
   margin: 0.5rem 0;
   display: block;
   overflow-x: auto;
   max-width: 100%;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 .oc-markdown th, .oc-markdown td {
   border: 1px solid var(--ui-border);
   padding: 0.3rem 0.6rem;
   text-align: left;
+  white-space: nowrap;
 }
 .oc-markdown hr { border-color: var(--ui-border); margin: 1rem 0; }
 
@@ -261,9 +266,46 @@ body {
   scrollbar-color: var(--ui-border-accented) transparent;
 }
 
-/* hover-revealed controls have no hover on touch screens: keep them visible there */
+/* hover-revealed controls have no hover on touch screens: keep them visible
+   there (and for keyboard users once focused) */
 @media (hover: none) {
   .oc-hover-only {
     opacity: 1;
   }
+}
+.oc-hover-only:focus-visible,
+.oc-hover-only:has(:focus-visible) {
+  opacity: 1;
+}
+
+/* touch screens: compact (xs) controls get a >= 40px hit area, desktop keeps
+   its density. `.oc-tap` grows the control itself (headers, toolbars);
+   `.oc-tap-zone` keeps the visual size and only extends the invisible hit box,
+   for dense rows that must not reflow - it needs a positioned element */
+@media (pointer: coarse) {
+  .oc-tap {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    justify-content: center;
+  }
+  .oc-tap-zone::after {
+    content: '';
+    position: absolute;
+    inset: -0.5rem;
+  }
+  /* < 16px makes iOS zoom the page on focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* full-bleed overlays: keep content clear of notches and the home indicator.
+   Base padding via --oc-pad (e.g. `[--oc-pad:1rem]`) */
+.oc-safe-pad {
+  padding-top: max(var(--oc-pad, 0.5rem), env(safe-area-inset-top));
+  padding-right: max(var(--oc-pad, 0.5rem), env(safe-area-inset-right));
+  padding-bottom: max(var(--oc-pad, 0.5rem), env(safe-area-inset-bottom));
+  padding-left: max(var(--oc-pad, 0.5rem), env(safe-area-inset-left));
 }

@@ -71,7 +71,7 @@ onBeforeUnmount(() => observer?.disconnect())
       color="neutral"
       variant="solid"
       size="lg"
-      class="absolute left-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/scroll:opacity-90 shadow-lg z-10"
+      class="absolute left-1 top-1/2 -translate-y-1/2 opacity-0 pointer-events-none group-hover/scroll:opacity-90 group-hover/scroll:pointer-events-auto focus-visible:opacity-90 pointer-coarse:hidden shadow-lg z-10"
       aria-label="Scroll left"
       @click="scrollBy(-1)"
     />
@@ -81,7 +81,7 @@ onBeforeUnmount(() => observer?.disconnect())
       color="neutral"
       variant="solid"
       size="lg"
-      class="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/scroll:opacity-90 shadow-lg z-10"
+      class="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 pointer-events-none group-hover/scroll:opacity-90 group-hover/scroll:pointer-events-auto focus-visible:opacity-90 pointer-coarse:hidden shadow-lg z-10"
       aria-label="Scroll right"
       @click="scrollBy(1)"
     />

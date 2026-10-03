@@ -113,7 +113,9 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
 </script>
 
 <template>
-  <div class="flex-1 flex min-h-0">
+  <!-- md+: clear the status bar of an installed iPad app; phones handle it in
+       the mobile header so its background reaches the top edge -->
+  <div class="flex-1 flex min-h-0 md:pt-[env(safe-area-inset-top)]">
     <!-- projects panel (desktop, toggleable) -->
     <Transition name="oc-slide">
     <aside v-if="projectsPanel" class="hidden md:flex w-48 shrink-0 flex-col bg-elevated/60">
@@ -282,20 +284,30 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
     </aside>
     </Transition>
 
-    <!-- mobile slideover -->
-    <USlideover v-model:open="mobileMenuOpen" side="left" :title="dirName(directory)">
+    <!-- mobile slideover (header clears the status bar / notch) -->
+    <USlideover
+      v-model:open="mobileMenuOpen"
+      side="left"
+      :title="dirName(directory)"
+      :ui="{
+        header: 'pt-[max(1rem,env(safe-area-inset-top))]',
+        close: 'top-[max(1rem,env(safe-area-inset-top))] oc-tap-zone'
+      }"
+    >
       <template #body>
         <ProjectSidebar :directory="directory" class="-m-4 h-[calc(100%+2rem)]" @navigate="mobileMenuOpen = false" />
       </template>
     </USlideover>
 
     <div class="flex-1 flex flex-col min-w-0 min-h-0">
-      <!-- mobile header -->
-      <header class="md:hidden flex items-center gap-2 h-12 px-2 bg-muted shrink-0">
+      <!-- mobile header: its background extends under the status bar / notch -->
+      <header class="md:hidden flex items-center gap-2 box-content h-12 pt-[env(safe-area-inset-top)] px-2 bg-muted shrink-0">
         <UButton
           icon="i-lucide-menu"
           color="neutral"
           variant="ghost"
+          class="oc-tap"
+          aria-label="Open menu"
           @click="mobileMenuOpen = true"
         />
         <UIcon name="i-lucide-terminal" class="size-4 text-primary" />
@@ -305,6 +317,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           color="neutral"
           variant="ghost"
           size="xs"
+          class="oc-tap"
           aria-label="All projects"
           to="/"
         />
@@ -313,6 +326,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           color="neutral"
           variant="ghost"
           size="xs"
+          class="oc-tap"
           :aria-label="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'"
           @click="chime.toggle()"
         />

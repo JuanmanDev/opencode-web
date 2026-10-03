@@ -46,7 +46,7 @@ const items = computed(() => [
       :model-value="modelValue"
       :disabled="disabled"
       size="xs"
-      class="w-24 shrink-0"
+      class="w-24 shrink-0 pointer-coarse:min-h-10"
       @update:model-value="(v) => emit('update:modelValue', v as any)"
     />
   </div>

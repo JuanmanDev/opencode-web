@@ -102,7 +102,7 @@ async function save() {
                 <span class="font-medium">{{ p.name }}</span>
                 <span class="ml-2 font-mono text-xs text-dimmed">{{ p.id }}</span>
               </div>
-              <UBadge variant="subtle" color="neutral" size="sm">{{ p.models }} models</UBadge>
+              <UBadge variant="subtle" color="neutral" size="sm">{{ p.models }} {{ p.models === 1 ? 'model' : 'models' }}</UBadge>
             </div>
             <div v-if="!configured.length" class="px-3 py-4 text-sm text-dimmed">
               No providers configured yet — add a key below.

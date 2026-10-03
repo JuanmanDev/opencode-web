@@ -126,10 +126,12 @@ function onSelect(item: unknown) {
 <template>
   <UModal v-model:open="open" :ui="{ content: 'p-0' }" title="Search" description="Search everything">
     <template #content>
+      <!-- keep the placeholder clear of the close button; ellipsis on phones -->
       <UCommandPalette
         :groups="groups"
         placeholder="Search projects, sessions, MCP servers, tools, presets…"
         class="h-96"
+        :ui="{ input: '[&>input]:pe-12 [&>input]:text-ellipsis', close: 'oc-tap' }"
         close
         @update:model-value="onSelect"
         @update:open="(v: boolean) => { if (!v) open = false }"

@@ -447,12 +447,15 @@ const CATALOG: CatalogEntry[] = [
 
 const installed = computed(() => new Set(entries.value.map((e) => e.name)))
 
+const demoMcpUrl = useRuntimeConfig().public.demoMcpUrl as string
+
 async function addEntry(name: string, config: Record<string, unknown>) {
   addingName.value = name
   try {
-    // 'SELF' -> this web app's own demo MCP server
+    // 'SELF' -> this web app's own demo MCP server, at an address *opencode*
+    // can reach (in compose: the web service name, not the browser's origin)
     if (config.url === 'SELF') {
-      config = { ...config, url: `${window.location.origin}/mcp-demo` }
+      config = { ...config, url: demoMcpUrl || `${window.location.origin}/mcp-demo` }
     }
     await api.mcpAdd(name, config)
     // POST /mcp only registers in memory; persist so it survives restarts
@@ -556,7 +559,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-2xl mx-auto px-4 py-6">
       <div class="flex items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">MCP servers</h1>
@@ -565,11 +568,12 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
           size="xs"
           variant="soft"
           icon="i-lucide-refresh-cw"
+          class="oc-tap"
           :loading="loading"
           aria-label="Rescan servers and tools"
           @click="refresh(true)"
         />
-        <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" @click="addOpen = true" />
+        <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" class="oc-tap" @click="addOpen = true" />
       </div>
       <p class="text-sm text-muted mb-4">
         {{ scope === 'global'
@@ -585,6 +589,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
           :color="scope === 'project' ? 'primary' : 'neutral'"
           icon="i-lucide-folder-git-2"
           :label="dirName(directory)"
+          class="oc-tap"
           @click="scope = 'project'"
         />
         <UButton
@@ -593,6 +598,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
           :color="scope === 'global' ? 'primary' : 'neutral'"
           icon="i-lucide-globe"
           label="Global"
+          class="oc-tap"
           @click="scope = 'global'"
         />
       </div>
@@ -647,7 +653,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               icon="i-lucide-layers"
               :label="g.name"
               :loading="applyingGroup === g.name"
-              class="rounded-r-none"
+              class="oc-tap rounded-r-none"
               @click="applyGroup(g)"
             />
             <UButton
@@ -655,7 +661,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               variant="soft"
               color="neutral"
               icon="i-lucide-x"
-              class="rounded-l-none"
+              class="oc-tap rounded-l-none"
               :aria-label="`Delete preset ${g.name}`"
               @click="deleteGroup(g.name)"
             />
@@ -673,6 +679,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
               variant="soft"
               color="neutral"
               icon="i-lucide-save"
+              class="oc-tap"
               :disabled="!groupName.trim()"
               aria-label="Save preset"
               @click="saveGroup"
@@ -691,6 +698,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             variant="ghost"
             color="neutral"
             icon="i-lucide-x"
+            class="oc-tap"
             aria-label="Cancel sign-in"
             @click="authName = ''"
           />
@@ -761,6 +769,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
                   variant="soft"
                   icon="i-lucide-plus"
                   label="Add"
+                  class="oc-tap"
                   :loading="addingName === entry.name"
                   @click="addEntry(entry.name, entry.config)"
                 />

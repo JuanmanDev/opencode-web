@@ -39,6 +39,24 @@ async function newSession() {
   }
 }
 
+// two-step delete: the first tap arms the button ("Delete?"), a second tap
+// within a few seconds deletes. On touch the button is always visible, so a
+// stray tap near a row's edge must never destroy a session on its own.
+const confirmingDelete = ref<string | null>(null)
+let confirmTimer: ReturnType<typeof setTimeout> | undefined
+
+function requestDelete(id: string) {
+  clearTimeout(confirmTimer)
+  if (confirmingDelete.value === id) {
+    confirmingDelete.value = null
+    deleteSession(id)
+    return
+  }
+  confirmingDelete.value = id
+  confirmTimer = setTimeout(() => { confirmingDelete.value = null }, 3500)
+}
+onBeforeUnmount(() => clearTimeout(confirmTimer))
+
 async function deleteSession(id: string) {
   try {
     await api.deleteSession(id)
@@ -120,7 +138,7 @@ function fmtTime(ts?: number) {
         :ui="{ trailing: 'pe-1' }"
       >
         <template v-if="sessionFilter" #trailing>
-          <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="sessionFilter = ''" />
+          <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Clear search" @click="sessionFilter = ''" />
         </template>
       </UInput>
     </div>
@@ -153,29 +171,44 @@ function fmtTime(ts?: number) {
             :class="busySessions[s.id] ? 'animate-spin text-highlighted' : 'text-dimmed'"
           />
           <div class="min-w-0 flex-1">
-            <div class="truncate pr-11">{{ s.title || 'Untitled session' }}</div>
+            <div class="truncate pr-11 pointer-coarse:pr-20">{{ s.title || 'Untitled session' }}</div>
             <div class="text-[10px] text-dimmed font-mono">
               {{ busySessions[s.id] ? 'working…' : fmtTime(s.time?.updated || s.time?.created) }}
             </div>
           </div>
         </NuxtLink>
+        <!-- hover-revealed on desktop, always visible on touch (oc-hover-only) -->
         <UButton
+          v-if="confirmingDelete !== s.id"
           icon="i-lucide-star"
           size="xs"
           :color="projectMeta.isFavorite(directory, s.id) ? 'primary' : 'neutral'"
           variant="ghost"
-          class="absolute right-7 top-1.5"
-          :class="projectMeta.isFavorite(directory, s.id) ? '' : 'opacity-0 group-hover:opacity-100'"
-          :aria-label="projectMeta.isFavorite(directory, s.id) ? 'Unfavorite' : 'Favorite'"
+          class="oc-tap absolute right-7 top-1.5 pointer-coarse:right-12 pointer-coarse:top-1"
+          :class="projectMeta.isFavorite(directory, s.id) ? '' : 'oc-hover-only opacity-0 group-hover:opacity-100'"
+          :aria-label="projectMeta.isFavorite(directory, s.id) ? 'Unfavorite session' : 'Favorite session'"
           @click.stop.prevent="projectMeta.toggleFavorite(directory, s.id)"
         />
         <UButton
+          v-if="confirmingDelete === s.id"
+          icon="i-lucide-trash-2"
+          size="xs"
+          color="error"
+          variant="solid"
+          label="Delete?"
+          class="oc-tap absolute right-1.5 top-1.5 pointer-coarse:top-1 oc-appear"
+          aria-label="Confirm delete session"
+          @click.stop.prevent="requestDelete(s.id)"
+        />
+        <UButton
+          v-else
           icon="i-lucide-trash-2"
           size="xs"
           color="neutral"
           variant="ghost"
-          class="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100"
-          @click.stop.prevent="deleteSession(s.id)"
+          class="oc-tap oc-hover-only absolute right-1.5 top-1.5 pointer-coarse:top-1 opacity-0 group-hover:opacity-100"
+          aria-label="Delete session"
+          @click.stop.prevent="requestDelete(s.id)"
         />
       </div>
       <div v-if="!sessions.length && !refreshing && serverDegraded" class="flex items-center gap-1.5 px-2.5 py-4 text-xs text-error">
@@ -185,7 +218,7 @@ function fmtTime(ts?: number) {
       <div v-else-if="!sessions.length && !refreshing" class="px-2.5 py-4 text-xs text-dimmed">No sessions yet</div>
     </div>
 
-    <div class="p-3">
+    <div class="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <UButton
         block
         color="neutral"

@@ -105,7 +105,7 @@ function saveEdit() {
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-3xl mx-auto px-4 py-8 sm:py-14">
       <div class="flex items-center gap-3 mb-1">
         <div class="size-9 rounded-sm bg-elevated flex items-center justify-center">
@@ -132,7 +132,10 @@ function saveEdit() {
       >
         <UIcon name="i-lucide-search" class="size-4" />
         <span class="flex-1 text-left">Search projects, sessions, MCP servers, presets…</span>
-        <UKbd size="sm">Ctrl</UKbd><UKbd size="sm">K</UKbd>
+        <!-- no keyboard shortcut to advertise on touch screens -->
+        <span class="flex items-center gap-1 pointer-coarse:hidden">
+          <UKbd size="sm">Ctrl</UKbd><UKbd size="sm">K</UKbd>
+        </span>
       </button>
 
       <div class="flex flex-col sm:flex-row gap-2 mb-8 max-w-2xl">
@@ -181,7 +184,7 @@ function saveEdit() {
               size="xs"
               color="neutral"
               variant="ghost"
-              class="opacity-0 group-hover:opacity-100"
+              class="oc-hover-only oc-tap opacity-0 group-hover:opacity-100"
               aria-label="Edit description"
               @click.stop="openEdit(item.directory)"
             />
@@ -191,7 +194,7 @@ function saveEdit() {
               size="xs"
               color="neutral"
               variant="ghost"
-              class="opacity-0 group-hover:opacity-100"
+              class="oc-hover-only oc-tap opacity-0 group-hover:opacity-100"
               aria-label="Remove from recents"
               @click.stop="forget(item.directory)"
             />

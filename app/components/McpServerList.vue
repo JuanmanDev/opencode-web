@@ -139,6 +139,7 @@ function toolsHint(server: McpListServer) {
       <UTooltip text="Filter servers and tools">
         <UButton
           :class="searchOpen ? 'hidden' : 'sm:hidden'"
+          class="oc-tap"
           icon="i-lucide-search"
           size="xs"
           color="neutral"
@@ -162,6 +163,7 @@ function toolsHint(server: McpListServer) {
             size="xs"
             color="neutral"
             variant="ghost"
+            class="relative oc-tap-zone"
             aria-label="Clear filter"
             @click="closeSearch"
           />
@@ -268,6 +270,7 @@ function toolsHint(server: McpListServer) {
               color="neutral"
               icon="i-lucide-refresh-cw"
               label="Retry"
+              class="oc-tap"
               :loading="togglingName === server.name"
               @click="emit('retry', server.name)"
             />
@@ -278,6 +281,7 @@ function toolsHint(server: McpListServer) {
               color="primary"
               icon="i-lucide-key-round"
               label="Sign in"
+              class="oc-tap"
               @click="emit('authenticate', server.name)"
             />
           </template>
@@ -288,6 +292,7 @@ function toolsHint(server: McpListServer) {
             color="neutral"
             icon="i-lucide-server-cog"
             label="Fix in MCP settings"
+            class="oc-tap"
             :to="settingsTo"
           />
         </div>

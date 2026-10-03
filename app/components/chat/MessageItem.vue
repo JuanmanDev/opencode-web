@@ -86,7 +86,7 @@ const errorMessage = computed(() => {
           size="xs"
           color="neutral"
           variant="ghost"
-          class="absolute right-1.5 top-1.5 opacity-0 group-hover/msg:opacity-100"
+          class="oc-hover-only oc-tap-zone absolute right-1.5 top-1.5 opacity-0 group-hover/msg:opacity-100"
           aria-label="Fork from this message"
           @click="emit('fork')"
         />
@@ -106,12 +106,12 @@ const errorMessage = computed(() => {
           :title="sentFull"
           class="text-[10px] font-mono text-dimmed truncate cursor-default"
         >{{ sentShort }}</time>
-        <span class="oc-hover-only ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+        <span class="oc-hover-only ml-auto flex items-center gap-0.5 pointer-coarse:gap-3 opacity-0 group-hover/msg:opacity-100 transition-opacity">
           <UTooltip text="Copy">
-            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy message" @click="copyMessage" />
+            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Copy message" @click="copyMessage" />
           </UTooltip>
           <UTooltip text="Edit and resend">
-            <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit and resend" @click="emit('edit', messageText)" />
+            <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Edit and resend" @click="emit('edit', messageText)" />
           </UTooltip>
         </span>
       </div>
@@ -124,7 +124,7 @@ const errorMessage = computed(() => {
 
         <div v-else-if="part.type === 'reasoning' && (part as any).text" class="my-1">
           <button
-            class="flex items-center gap-1.5 text-xs text-dimmed hover:text-muted cursor-pointer"
+            class="relative oc-tap-zone flex items-center gap-1.5 text-xs text-dimmed hover:text-muted cursor-pointer"
             @click="showReasoning = !showReasoning"
           >
             <UIcon name="i-lucide-brain" class="size-3.5" />
@@ -185,10 +185,10 @@ const errorMessage = computed(() => {
           <span v-if="info.variant" class="text-muted">{{ info.variant }}</span>
           <span v-if="info.cost">${{ info.cost.toFixed(4) }}</span>
         </template>
-        <!-- assistant message actions -->
-        <span v-if="messageText" class="flex items-center gap-0.5 ml-auto">
+        <!-- assistant message actions (touch: wider spacing + 40px hit zones) -->
+        <span v-if="messageText" class="flex items-center gap-0.5 pointer-coarse:gap-3 ml-auto">
           <UTooltip text="Copy">
-            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy reply" @click="copyMessage" />
+            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Copy reply" @click="copyMessage" />
           </UTooltip>
           <UTooltip :text="speech.speakingId.value === info.id ? 'Stop reading' : 'Read aloud'">
             <UButton
@@ -196,12 +196,13 @@ const errorMessage = computed(() => {
               size="xs"
               :color="speech.speakingId.value === info.id ? 'primary' : 'neutral'"
               variant="ghost"
-              aria-label="Read aloud"
+              class="relative oc-tap-zone"
+              :aria-label="speech.speakingId.value === info.id ? 'Stop reading' : 'Read aloud'"
               @click="readAloud"
             />
           </UTooltip>
           <UTooltip text="Fork from here">
-            <UButton icon="i-lucide-git-branch" size="xs" color="neutral" variant="ghost" aria-label="Fork from here" @click="emit('fork')" />
+            <UButton icon="i-lucide-git-branch" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Fork from here" @click="emit('fork')" />
           </UTooltip>
         </span>
       </div>

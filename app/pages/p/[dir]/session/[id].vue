@@ -64,7 +64,8 @@ const viewerResource = computed(() =>
 )
 const isSmallScreen = ref(false)
 onMounted(() => {
-  const mq = window.matchMedia('(max-width: 1023px)')
+  // below xl the 42% panel leaves the chat (and the app) too cramped
+  const mq = window.matchMedia('(max-width: 1279px)')
   isSmallScreen.value = mq.matches
   mq.addEventListener('change', (e) => { isSmallScreen.value = e.matches })
 })
@@ -204,10 +205,14 @@ async function runMcpCommand(input: string) {
 const renamingTitle = ref(false)
 const titleDraft = ref('')
 
+function focusTitleInput() {
+  (document.getElementById('session-title-input') as HTMLInputElement | null)?.focus()
+}
+
 function startTitleRename() {
   titleDraft.value = session.value?.title || ''
   renamingTitle.value = true
-  nextTick(() => (document.getElementById('session-title-input') as HTMLInputElement | null)?.focus())
+  nextTick(focusTitleInput)
 }
 
 async function commitTitleRename() {
@@ -225,6 +230,10 @@ async function commitTitleRename() {
 // ---- todos ----
 const todos = ref<TodoItem[]>([])
 const todosOpen = ref(true)
+// phones: start collapsed, an open list eats a big slice of the screen
+onMounted(() => {
+  if (window.matchMedia('(max-width: 767px)').matches) todosOpen.value = false
+})
 
 async function loadTodos() {
   todos.value = await api.todos(sessionId.value)
@@ -279,6 +288,21 @@ async function openDiff() {
   }
 }
 
+// phones: the header actions live in an overflow menu
+const sessionMenu = computed(() => {
+  const fav = projectMeta.isFavorite(directory.value, sessionId.value)
+  return [[
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: startTitleRename },
+    { label: 'Fork conversation', icon: 'i-lucide-git-branch', onSelect: () => forkSession() },
+    { label: 'Show file changes', icon: 'i-lucide-file-diff', onSelect: openDiff },
+    {
+      label: fav ? 'Unfavorite' : 'Favorite',
+      icon: 'i-lucide-star',
+      onSelect: () => projectMeta.toggleFavorite(directory.value, sessionId.value)
+    }
+  ]]
+})
+
 function diffLineClass(line: string) {
   if (line.startsWith('+') && !line.startsWith('+++')) return 'text-success'
   if (line.startsWith('-') && !line.startsWith('---')) return 'text-error'
@@ -314,6 +338,21 @@ function scrollToBottom(force = false) {
 
 const loadError = ref('')
 
+/**
+ * Permission prompts are pushed over SSE only: one pending at page load, or
+ * asked during an SSE gap, would never show and the agent would wait forever.
+ * Ask the server for the open ones (all sessions) and keep this session's.
+ */
+async function loadPermissions() {
+  const sid = sessionId.value
+  const res = await ocFetch<unknown>('/api/opencode/permission', {
+    query: { directory: directory.value }
+  }).catch(() => null)
+  // older servers lack the endpoint: keep whatever SSE delivered
+  if (!Array.isArray(res) || sid !== sessionId.value) return
+  permissions.value = (res as PermissionRequest[]).filter((p) => p?.id && p.sessionID === sid)
+}
+
 async function loadAll() {
   loading.value = true
   loadError.value = ''
@@ -327,6 +366,7 @@ async function loadAll() {
     messages.value = msgs
     loadTodos()
     loadQuestions()
+    loadPermissions()
     const last = msgs[msgs.length - 1]
     // an incomplete assistant message older than a few hours is a zombie
     // (server restarted mid-run) - never lock the input on it
@@ -484,10 +524,11 @@ useOpencodeEvents(directory, (event) => {
       }
       break
     case 'session.idle':
-      if (props.sessionID === sessionId.value) {
-        busy.value = false
-        loadTodos()
-      }
+      if (props.sessionID === sessionId.value) onSessionIdle()
+      break
+    case 'session.status':
+      // newer servers: { sessionID, status: { type: 'idle' | 'busy' | 'retry' } }
+      if (props.sessionID === sessionId.value && props.status?.type === 'idle') onSessionIdle()
       break
     case 'session.error': {
       const sid = props.sessionID
@@ -527,8 +568,11 @@ useOpencodeEvents(directory, (event) => {
           busy.value = Boolean(
             last && last.info.role === 'assistant' && !last.info.time?.completed && !last.info.error
           )
+          // the idle event itself may have been lost in the gap
+          if (!busy.value) drainQueue()
         }).catch(() => {})
         loadQuestions()
+        loadPermissions()
       }
       break
     default:
@@ -714,13 +758,27 @@ function send(payload: PromptPayload) {
   dispatch(payload)
 }
 
-watch(busy, (now, before) => {
-  if (before && !now && queue.value.length) {
-    const next = queue.value.shift()!
-    // small delay so the finished reply settles before the next prompt
-    setTimeout(() => dispatch(next), 400)
-  }
-})
+// `busy` also drops between the steps of one run (an assistant message
+// completes, the next one starts), so the queue waits for the server's real
+// idle signal instead of any busy -> false flip
+function onSessionIdle() {
+  busy.value = false
+  loadTodos()
+  drainQueue()
+}
+
+let queueTimer: ReturnType<typeof setTimeout> | undefined
+function drainQueue() {
+  clearTimeout(queueTimer)
+  if (!queue.value.length) return
+  // small delay so the finished reply settles before the next prompt; a run
+  // that started meanwhile keeps the queue waiting for its own idle
+  queueTimer = setTimeout(() => {
+    if (busy.value || !queue.value.length) return
+    dispatch(queue.value.shift()!)
+  }, 400)
+}
+onBeforeUnmount(() => clearTimeout(queueTimer))
 
 async function abort() {
   try {
@@ -779,67 +837,96 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     :style="effectiveView === 'side' && !isSmallScreen ? { marginRight: 'min(42vw, 42rem)' } : {}"
   >
   <div class="flex-1 flex flex-col min-h-0 min-w-0">
-    <!-- session header -->
-    <div class="hidden md:flex items-center gap-2 h-12 px-4 bg-muted/50 shrink-0">
+    <!-- session header: title + actions; phones get a compact row with the
+         actions in an overflow menu (sound toggle is in the mobile app bar) -->
+    <div class="flex items-center gap-2 h-10 md:h-12 pl-3 pr-1 md:px-4 bg-muted/50 shrink-0">
       <UInput
         v-if="renamingTitle"
         id="session-title-input"
         v-model="titleDraft"
         size="xs"
-        class="w-72"
+        class="flex-1 min-w-0 md:flex-none md:w-72"
         @keydown.enter.prevent="commitTitleRename"
         @keydown.esc="renamingTitle = false"
         @blur="commitTitleRename"
       />
       <UTooltip v-else text="Click to rename">
         <button
-          class="text-sm font-medium truncate cursor-pointer hover:underline decoration-dotted underline-offset-2"
+          class="oc-tap min-w-0 text-left text-sm font-medium truncate cursor-pointer hover:underline decoration-dotted underline-offset-2"
           @click="startTitleRename"
         >{{ session?.title || 'Untitled session' }}</button>
       </UTooltip>
-      <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse">working</UBadge>
-      <span class="flex-1" />
-      <UTooltip text="Fork this conversation">
+      <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse shrink-0">working</UBadge>
+      <span class="flex-1" :class="renamingTitle ? 'max-md:hidden' : ''" />
+      <div class="hidden md:flex items-center gap-2 min-w-0">
+        <UTooltip text="Fork this conversation">
+          <UButton
+            icon="i-lucide-git-branch"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="oc-tap"
+            aria-label="Fork this conversation"
+            @click="forkSession()"
+          />
+        </UTooltip>
+        <UTooltip text="Show file changes">
+          <UButton
+            icon="i-lucide-file-diff"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="oc-tap"
+            aria-label="Show file changes"
+            @click="openDiff"
+          />
+        </UTooltip>
+        <UTooltip :text="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite' : 'Favorite'">
+          <UButton
+            icon="i-lucide-star"
+            :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
+            variant="ghost"
+            size="xs"
+            class="oc-tap"
+            :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
+            @click="projectMeta.toggleFavorite(directory, sessionId)"
+          />
+        </UTooltip>
+        <UTooltip :text="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'">
+          <UButton
+            :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="oc-tap"
+            :aria-label="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'"
+            @click="chime.toggle()"
+          />
+        </UTooltip>
+        <span class="text-xs text-dimmed font-mono truncate max-w-64">{{ directory }}</span>
+      </div>
+      <!-- non-modal, and no focus return to the trigger: "Rename" must leave
+           the focus (and the phone keyboard) in the title input -->
+      <UDropdownMenu
+        :items="sessionMenu"
+        :modal="false"
+        :content="{
+          align: 'end',
+          onCloseAutoFocus: (e: Event) => {
+            e.preventDefault()
+            if (renamingTitle) focusTitleInput()
+          }
+        }"
+      >
         <UButton
-          icon="i-lucide-git-branch"
+          icon="i-lucide-ellipsis-vertical"
           color="neutral"
           variant="ghost"
           size="xs"
-          aria-label="Fork this conversation"
-          @click="forkSession()"
+          class="oc-tap md:hidden"
+          aria-label="Session actions"
         />
-      </UTooltip>
-      <UTooltip text="Show file changes">
-        <UButton
-          icon="i-lucide-file-diff"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          aria-label="Show file changes"
-          @click="openDiff"
-        />
-      </UTooltip>
-      <UTooltip :text="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite' : 'Favorite'">
-        <UButton
-          icon="i-lucide-star"
-          :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
-          variant="ghost"
-          size="xs"
-          :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
-          @click="projectMeta.toggleFavorite(directory, sessionId)"
-        />
-      </UTooltip>
-      <UTooltip :text="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'">
-        <UButton
-          :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          :aria-label="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'"
-          @click="chime.toggle()"
-        />
-      </UTooltip>
-      <span class="text-xs text-dimmed font-mono truncate max-w-64">{{ directory }}</span>
+      </UDropdownMenu>
     </div>
 
     <!-- live todo list from the agent -->
@@ -958,6 +1045,8 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
                 size="xs"
                 color="neutral"
                 variant="ghost"
+                class="relative oc-tap-zone"
+                aria-label="Remove queued prompt"
                 @click="queue.splice(i, 1)"
               />
             </div>
@@ -1006,25 +1095,27 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     <!-- MCP app viewer: ONE persistent container so the iframe survives
          side <-> fullscreen moves without reloading -->
     <Teleport to="body">
+      <!-- oc-safe-pad: fullscreen on a phone must clear the notch, the home
+           indicator and landscape side insets -->
       <div
         v-if="viewer.appId.value && viewer.view.value"
-        class="fixed z-50 bg-default flex flex-col gap-2 shadow-2xl"
+        class="oc-safe-pad fixed z-50 bg-default flex flex-col gap-2 shadow-2xl"
         :class="effectiveView === 'side'
-          ? 'right-0 inset-y-0 w-[42%] max-w-2xl border-l border-default p-2'
-          : 'inset-0 p-2 sm:p-4'"
+          ? 'right-0 inset-y-0 w-[42%] max-w-2xl border-l border-default'
+          : 'inset-0 sm:[--oc-pad:1rem]'"
       >
         <div class="flex items-center gap-1 shrink-0">
           <span class="text-xs text-muted truncate flex-1 px-1">
             {{ viewerResource?.title || 'MCP app' }}
           </span>
           <UTooltip v-if="effectiveView === 'side'" text="Fullscreen">
-            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" aria-label="Fullscreen" @click="viewer.open(viewer.appId.value, 'full')" />
+            <UButton icon="i-lucide-maximize-2" size="xs" color="neutral" variant="ghost" class="oc-tap" aria-label="Fullscreen" @click="viewer.open(viewer.appId.value, 'full')" />
           </UTooltip>
           <UTooltip v-else text="Dock to side panel">
-            <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="hidden lg:inline-flex" aria-label="Dock to side panel" @click="viewer.open(viewer.appId.value, 'side')" />
+            <UButton icon="i-lucide-panel-right" size="xs" color="neutral" variant="ghost" class="oc-tap hidden xl:inline-flex" aria-label="Dock to side panel" @click="viewer.open(viewer.appId.value, 'side')" />
           </UTooltip>
           <UTooltip text="Move back to the chat">
-            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" aria-label="Close app viewer" @click="viewer.close()" />
+            <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" class="oc-tap" aria-label="Close app viewer" @click="viewer.close()" />
           </UTooltip>
         </div>
 
@@ -1056,7 +1147,16 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     </Teleport>
 
     <!-- diff slideover -->
-    <USlideover v-model:open="diffOpen" title="File changes" description="Everything this session edited.">
+    <USlideover
+      v-model:open="diffOpen"
+      title="File changes"
+      description="Everything this session edited."
+      :ui="{
+        header: 'pt-[max(1rem,env(safe-area-inset-top))]',
+        close: 'top-[max(1rem,env(safe-area-inset-top))] oc-tap-zone',
+        body: 'pb-[max(1rem,env(safe-area-inset-bottom))]'
+      }"
+    >
       <template #body>
         <div v-if="diffLoading" class="space-y-2">
           <USkeleton v-for="i in 4" :key="i" class="h-5 w-full" />
