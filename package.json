@@ -27,7 +27,7 @@
     "@iconify-json/lucide": "^1.2.123",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.2.0",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "vue-tsc": "^3.0.0"
   }
