@@ -1,3 +1,15 @@
+## [0.13.0](https://github.com/JuanmanDev/opencode-web/compare/0.12.0...0.13.0) (2026-10-03)
+
+### Features
+
+* **mcp:** legacy SSE servers, safe UI recovery and exact tool ids ([719957e](https://github.com/JuanmanDev/opencode-web/commit/719957e34970e15b71959935e7d0d502eca3b31c))
+
+### Bug Fixes
+
+* **docker:** non-root web image, persistent web data, healthchecks ([f1419eb](https://github.com/JuanmanDev/opencode-web/commit/f1419ebfa2394d31872c7254ccbad9180441192b))
+* **mobile:** touch-sized controls, safe areas and session actions on phones ([4aea1c3](https://github.com/JuanmanDev/opencode-web/commit/4aea1c31693b221ca847ed631e369ac89cdcea4b))
+* **security:** CSRF origin check, token mode for the UI, secret redaction ([3df9bc1](https://github.com/JuanmanDev/opencode-web/commit/3df9bc1e6b771825246c50b3783ce43219469e89))
+
 ## [0.12.0](https://github.com/JuanmanDev/opencode-web/compare/0.11.1...0.12.0) (2026-09-07)
 
 ### Features
