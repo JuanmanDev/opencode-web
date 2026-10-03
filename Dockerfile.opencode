@@ -1,21 +1,37 @@
 # opencode server image: runs `opencode serve` for all projects mounted under /projects
 FROM node:24-slim
 
+# git/ripgrep for the agent; python3 + uv so `uvx` MCP servers work next to
+# the `npx` ones
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates ripgrep \
+ && apt-get install -y --no-install-recommends git curl ca-certificates ripgrep python3 \
  && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /uvx /usr/local/bin/
 
-RUN npm install -g opencode-ai --no-audit --no-fund
+# pinned per build (CI passes the current release) so layer caches can never
+# freeze opencode at an old version
+ARG OPENCODE_VERSION=latest
+RUN npm install -g opencode-ai@${OPENCODE_VERSION} --no-audit --no-fund \
+ && npm cache clean --force
 
 # non-root; state (auth, sessions, logs) lives under /home/node/.local and
 # /home/node/.config. Pre-create those paths owned by node: a fresh named
 # volume copies the image's ownership, otherwise it is created root-owned
 # and opencode dies at startup with EACCES on mkdir.
-RUN mkdir -p /projects       /home/node/.local/share/opencode       /home/node/.local/state/opencode       /home/node/.config/opencode  && chown -R node:node /projects /home/node
+RUN mkdir -p /projects \
+      /home/node/.local/share/opencode \
+      /home/node/.local/state/opencode \
+      /home/node/.config/opencode \
+      /home/node/.cache \
+      /home/node/.npm \
+ && chown -R node:node /projects /home/node
 USER node
 WORKDIR /projects
 
 ENV OPENCODE_SERVER_USERNAME=opencode
 
 EXPOSE 4096
+# any HTTP answer (401 included) means the server is up
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD curl -so /dev/null http://127.0.0.1:4096/ || exit 1
 CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

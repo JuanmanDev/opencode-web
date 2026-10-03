@@ -19,6 +19,10 @@ services:
       - opencode-data:/home/node/.local/share/opencode
       - opencode-state:/home/node/.local/state/opencode
       - opencode-config:/home/node/.config/opencode
+      # package caches: plugins and npx/uvx MCP servers aren't re-downloaded
+      # on every update
+      - opencode-cache:/home/node/.cache
+      - opencode-npm:/home/node/.npm
     networks: [internal]
     # deliberately NOT exposed publicly — only the web service reaches it
 
@@ -29,7 +33,16 @@ services:
       NUXT_OPENCODE_URL: http://opencode:4096
       NUXT_OPENCODE_USERNAME: opencode
       NUXT_OPENCODE_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?set in .env}
-    depends_on: [opencode]
+      # how opencode reaches this app's built-in MCP UI demo server
+      NUXT_PUBLIC_DEMO_MCP_URL: http://web:3000/mcp-demo
+      # optional: bearer token for /api/v1, /mcp and the proxy (see README)
+      NUXT_API_TOKEN: ${API_TOKEN:-}
+    volumes:
+      # project metadata, favorites, MCP presets
+      - web-data:/app/.data
+    depends_on:
+      opencode:
+        condition: service_healthy
     networks: [internal, proxy]
     # Uncomment to use without Traefik:
     # ports:
@@ -52,6 +65,9 @@ volumes:
   opencode-data:
   opencode-state:
   opencode-config:
+  opencode-cache:
+  opencode-npm:
+  web-data:
 
 networks:
   internal:
