@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      nuxt:
+        patterns: ['nuxt', '@nuxt/*', 'vue', 'vue-tsc', '@vue/*']
+      dev:
+        dependency-type: development
+        update-types: [minor, patch]
+    commit-message:
+      prefix: fix(deps)
+      prefix-development: chore(deps)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+  - package-ecosystem: docker
+    directories: [/]
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix(docker)

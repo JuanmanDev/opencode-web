@@ -1,15 +1,16 @@
 name: Release
 
+# Releases only what CI tested: runs after a green CI run of a push to main
+# (or by hand). Release commits carry [skip ci], so they never loop back here.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 concurrency:
   group: release
@@ -18,107 +19,204 @@ concurrency:
 jobs:
   release:
     name: Semantic release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       published: ${{ steps.semantic.outputs.new_release_published }}
       version: ${{ steps.semantic.outputs.new_release_version }}
+      opencode: ${{ steps.opencode.outputs.version }}
     steps:
-      # always release from the current branch head: runs can sit queued behind
-      # a slow docker build while release commits land on main in the meantime
-      - uses: actions/checkout@v4
+      # the exact commit CI tested; if main moved on meanwhile, semantic-release
+      # skips and the newer commit's own CI run releases everything
+      - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Semantic Release
         id: semantic
-        uses: cycjimmy/semantic-release-action@v4
+        uses: cycjimmy/semantic-release-action@v5
         with:
           extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
+            @semantic-release/changelog@6
+            @semantic-release/git@10
             conventional-changelog-conventionalcommits@8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # resolved once so both architectures ship the same opencode
+      - name: Resolve opencode version
+        id: opencode
+        if: steps.semantic.outputs.new_release_published == 'true'
+        run: echo "version=$(npm view opencode-ai version)" >> "$GITHUB_OUTPUT"
 
-  docker:
-    name: Publish Docker images
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
     needs: release
     if: needs.release.outputs.published == 'true'
-    runs-on: ubuntu-latest
+    # native runners per architecture: no QEMU emulation
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        image: [web, server]
+        arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: main
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+          ref: ${{ needs.release.outputs.version }}
+      - name: Image settings
+        id: img
+        env:
+          IMAGE: ${{ matrix.image }}
+          OPENCODE_VERSION: ${{ needs.release.outputs.opencode }}
+        run: |
+          name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if [ "$IMAGE" = server ]; then
+            {
+              echo "name=${name}-server"
+              echo "file=Dockerfile.opencode"
+              echo "args=OPENCODE_VERSION=${OPENCODE_VERSION}"
+            } >> "$GITHUB_OUTPUT"
+          else
+            { echo "name=${name}"; echo "file=Dockerfile"; echo "args="; } >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Web image metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v7
         with:
-          images: ghcr.io/${{ github.repository }}
+          context: .
+          file: ${{ steps.img.outputs.file }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: ${{ steps.img.outputs.args }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha || github.sha }}
+            org.opencontainers.image.licenses=MIT
+          outputs: type=image,name=${{ steps.img.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}-linux-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-linux-${{ matrix.arch }}
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish ${{ matrix.image }} image
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      matrix:
+        image: [web, server]
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+      - name: Image name
+        id: img
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          [ "$IMAGE" = server ] && name="${name}-server"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.img.outputs.name }}
           tags: |
             type=raw,value=latest
             type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
-      - name: Build & push web image
-        uses: docker/build-push-action@v6
+            type=raw,value=opencode-${{ needs.release.outputs.opencode }},enable=${{ matrix.image == 'server' }}
+      - name: Create multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          NAME: ${{ steps.img.outputs.name }}
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${NAME}@sha256:%s " *)
+          docker buildx imagetools inspect "${NAME}:${{ needs.release.outputs.version }}"
+      # informative: findings land in the Security tab, they never block a release
+      - name: Vulnerability scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Server image metadata
-        id: meta_server
-        uses: docker/metadata-action@v5
+          image-ref: ${{ steps.img.outputs.name }}:${{ needs.release.outputs.version }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Upload scan to code scanning
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          images: ghcr.io/${{ github.repository }}-server
-          tags: |
-            type=raw,value=latest
-            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
-      - name: Build & push opencode server image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.opencode
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta_server.outputs.tags }}
-          labels: ${{ steps.meta_server.outputs.labels }}
+          sarif_file: trivy.sarif
+          category: trivy-${{ matrix.image }}
 
   screenshots:
-    name: Refresh README screenshots
+    name: Commit README screenshots
     needs: release
-    if: needs.release.outputs.published == 'true'
+    if: needs.release.outputs.published == 'true' && github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
-      - uses: actions/setup-node@v4
+      # captured by the CI run that gated this release: no second build
+      - uses: actions/download-artifact@v8
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-        env:
-          SCREENSHOTS: '1'
+          name: screenshots
+          path: docs/screenshots
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit updated screenshots
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'chore: refresh screenshots [skip ci]'
           file_pattern: docs/screenshots/*.png

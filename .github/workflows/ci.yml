@@ -4,18 +4,32 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
   test:
     name: Typecheck & unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -27,49 +41,99 @@ jobs:
     name: E2E tests (Playwright + mock server)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # screenshots are always captured: the release workflow commits the ones
+      # from the run that gated it instead of rebuilding everything
       - run: npm run test:e2e
+        env:
+          SCREENSHOTS: '1'
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: docs/screenshots/
           if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 14
 
   docker:
-    name: Docker build check
-    if: github.event_name == 'pull_request'
+    name: Docker build & smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Resolve opencode version
+        id: opencode
+        run: echo "version=$(npm view opencode-ai version)" >> "$GITHUB_OUTPUT"
+      # same cache scopes as the release builds: main warms them for releases
+      - name: Build web image
+        uses: docker/build-push-action@v7
         with:
           context: .
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          load: true
+          tags: opencode-web:ci
+          cache-from: type=gha,scope=web-linux-amd64
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=web-linux-amd64' || '' }}
+      - name: Build opencode server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.opencode
+          load: true
+          tags: opencode-web-server:ci
+          build-args: OPENCODE_VERSION=${{ steps.opencode.outputs.version }}
+          cache-from: type=gha,scope=server-linux-amd64
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=server-linux-amd64' || '' }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Smoke test the images
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint opencode opencode-web-server:ci --version
+          node scripts/mock-opencode.mjs &
+          docker run -d --name web --network host \
+            -e NITRO_PORT=3300 -e NUXT_OPENCODE_URL=http://127.0.0.1:4517 opencode-web:ci
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3300/api/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3300/api/health | grep -q '"ok":true'
+          curl -fsS http://127.0.0.1:3300/ | grep -q '<div id="__nuxt"'
+          # built-in MCP demo server answers initialize
+          curl -fsS http://127.0.0.1:3300/mcp-demo \
+            -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            | grep -q '"protocolVersion"'
+          # the container runs as an unprivileged user and its healthcheck goes green
+          test "$(docker exec web id -u)" != "0"
+          for _ in $(seq 1 20); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' web)" = healthy ] && exit 0
+            sleep 3
+          done
+          docker logs web
+          exit 1
 
   commitlint:
     name: Conventional commits
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
