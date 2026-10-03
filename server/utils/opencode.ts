@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { joinURL } from 'ufo'
 import type { H3Event } from 'h3'
 
@@ -29,17 +30,32 @@ export function opencodeFetch<T = unknown>(
   })
 }
 
+/** HttpOnly cookie that authenticates the app's own pages (see middleware/security.ts). */
+export const UI_COOKIE = 'ocw_ui'
+
+export function uiCookieValue(token: string) {
+  return createHmac('sha256', token).update('opencode-web-ui-v1').digest('base64url')
+}
+
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a)
+  const right = Buffer.from(b)
+  return left.length === right.length && timingSafeEqual(left, right)
+}
+
 /**
- * Optional bearer-token guard for the public API and MCP endpoints.
+ * Optional guard for the public API, the MCP endpoint and the opencode proxy.
  * When NUXT_API_TOKEN is unset the app is assumed to be protected by the
- * reverse proxy (tinyauth) and requests pass through.
+ * reverse proxy (tinyauth) and requests pass through. When set, callers send
+ * `Authorization: Bearer <token>`; the UI itself carries the page cookie.
  */
 export function requireApiToken(event: H3Event) {
   const token = useRuntimeConfig().apiToken
   if (!token) return
   const header = getHeader(event, 'authorization') || ''
-  const provided = header.startsWith('Bearer ') ? header.slice(7) : ''
-  if (provided !== token) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized', message: 'Invalid or missing API token' })
-  }
+  const bearer = header.startsWith('Bearer ') ? header.slice(7) : ''
+  if (bearer && safeEqual(bearer, token)) return
+  const cookie = getCookie(event, UI_COOKIE)
+  if (cookie && safeEqual(cookie, uiCookieValue(token))) return
+  throw createError({ statusCode: 401, statusMessage: 'Unauthorized', message: 'Invalid or missing API token' })
 }

@@ -183,7 +183,7 @@ async function callTool(name: string, args: Record<string, any>) {
         sessionID = session.id
       }
       const reply = await opencodeFetch<{ parts?: Array<{ type: string; text?: string }> }>(
-        `/session/${sessionID}/message`,
+        `/session/${encodeURIComponent(sessionID)}/message`,
         {
           method: 'POST',
           query: dir,
@@ -205,11 +205,11 @@ async function callTool(name: string, args: Record<string, any>) {
       return textResult(`[session ${sessionID}]\n${text || '(no text reply)'}`)
     }
     case 'get_messages':
-      return textResult(await opencodeFetch(`/session/${args.session_id}/message`, { query: dir }))
+      return textResult(await opencodeFetch(`/session/${encodeURIComponent(String(args.session_id))}/message`, { query: dir }))
     case 'abort_session':
-      return textResult(await opencodeFetch(`/session/${args.session_id}/abort`, { method: 'POST', query: dir }))
+      return textResult(await opencodeFetch(`/session/${encodeURIComponent(String(args.session_id))}/abort`, { method: 'POST', query: dir }))
     case 'list_models':
-      return textResult(await opencodeFetch('/config/providers', { query: dir }))
+      return textResult(redactSecrets(await opencodeFetch('/config/providers', { query: dir })))
     case 'mcp_status':
       return textResult(await opencodeFetch('/mcp', { query: dir }))
     case 'list_mcp': {
@@ -254,7 +254,7 @@ async function callTool(name: string, args: Record<string, any>) {
     }
     case 'fork_session':
       return textResult(
-        await opencodeFetch(`/session/${args.session_id}/fork`, {
+        await opencodeFetch(`/session/${encodeURIComponent(String(args.session_id))}/fork`, {
           method: 'POST',
           body: args.message_id ? { messageID: args.message_id } : {},
           query: dir
@@ -275,7 +275,11 @@ async function callTool(name: string, args: Record<string, any>) {
 
 export default defineEventHandler(async (event) => {
   requireApiToken(event)
-  const message = await readBody<JsonRpcRequest>(event)
+  const message = await readBody<JsonRpcRequest>(event).catch(() => null)
+  if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.method !== 'string') {
+    setResponseStatus(event, 400)
+    return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request: expected one JSON-RPC object' } }
+  }
 
   // notifications have no id and expect 202 with no body
   if (message.id === undefined || message.id === null) {

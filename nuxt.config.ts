@@ -43,14 +43,24 @@ export default defineNuxtConfig({
     opencodeUrl: 'http://127.0.0.1:4096',
     opencodeUsername: 'opencode',
     opencodePassword: '',
-    // optional bearer token protecting /api/v1/* and /mcp (NUXT_API_TOKEN)
+    // optional bearer token protecting /api/v1/*, /mcp and the opencode proxy
+    // (NUXT_API_TOKEN); the UI itself authenticates with a page cookie
     apiToken: '',
+    // extra browser origins allowed to send state-changing requests, comma
+    // separated (NUXT_ALLOWED_ORIGINS), e.g. an MCP inspector on localhost
+    allowedOrigins: '',
     // Tool discovery for local (stdio) MCP servers spawns them here, in this
     // app - which is only exactly right when opencode runs on the same host.
     //   always    - always spawn (default; names match, opencode may differ)
     //   same-host - only when opencodeUrl is localhost
     //   never     - never spawn; local servers list no tools
-    mcpLocalDiscovery: 'always'
+    mcpLocalDiscovery: 'always',
+    public: {
+      // URL at which *opencode* reaches this app's demo MCP server, used when
+      // adding it from the MCP page (NUXT_PUBLIC_DEMO_MCP_URL). Empty: the
+      // browser's origin, right when both run on the same host.
+      demoMcpUrl: ''
+    }
   },
   nitro: {
     // keep proxy responses unbuffered for SSE
