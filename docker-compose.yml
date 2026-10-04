@@ -26,6 +26,19 @@ services:
     networks: [internal]
     # deliberately NOT exposed publicly — only the web service reaches it
 
+  # optional browser automation for the agent:
+  #   docker compose --profile browser up -d
+  # then add the MCP server  { "type": "remote", "url": "http://playwright-mcp:8931/mcp" }
+  playwright-mcp:
+    image: mcr.microsoft.com/playwright/mcp
+    profiles: [browser]
+    restart: unless-stopped
+    init: true
+    entrypoint: node
+    command: [/app/cli.js, --headless, --browser, chromium, --no-sandbox, --isolated,
+              --port, "8931", --host, 0.0.0.0, --allowed-hosts, "*"]
+    networks: [internal]
+
   web:
     build: .
     restart: unless-stopped
