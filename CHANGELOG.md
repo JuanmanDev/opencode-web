@@ -1,3 +1,15 @@
+## [0.14.0](https://github.com/JuanmanDev/opencode-web/compare/0.13.0...0.14.0) (2026-10-04)
+
+### Features
+
+* **compat:** every opencode 1.x server and the v2 protocol ([a2ed3c8](https://github.com/JuanmanDev/opencode-web/commit/a2ed3c87af8a256dac2aa47c58b26fc414a114d8))
+* **docker:** optional Playwright MCP service for browser automation ([84d24f1](https://github.com/JuanmanDev/opencode-web/commit/84d24f15c7dc809f6edeb4a40174677661bf94db))
+
+### Bug Fixes
+
+* **deps:** nuxt ui 4.11, marked 18.0.14, vitest 5, playwright 1.63 ([68227ce](https://github.com/JuanmanDev/opencode-web/commit/68227ce02923f39a1802f38e6ea0c81eec3feb7c))
+* **security:** external images in agent output load only on click ([7820bd6](https://github.com/JuanmanDev/opencode-web/commit/7820bd685e33992d1780080c3b9e97d6f079cb95))
+
 ## [0.13.0](https://github.com/JuanmanDev/opencode-web/compare/0.12.0...0.13.0) (2026-10-03)
 
 ### Features
