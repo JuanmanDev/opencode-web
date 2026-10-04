@@ -10,6 +10,10 @@ updates:
       dev:
         dependency-type: development
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 (native compiler) is not supported by vue-tsc / @nuxt/ui yet
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
     commit-message:
       prefix: fix(deps)
       prefix-development: chore(deps)
@@ -26,5 +30,9 @@ updates:
     directories: [/]
     schedule:
       interval: weekly
+    ignore:
+      # Node majors are bumped by hand once they reach LTS
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
     commit-message:
       prefix: fix(docker)

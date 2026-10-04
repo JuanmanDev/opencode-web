@@ -17,18 +17,18 @@
     "mock": "node scripts/mock-opencode.mjs"
   },
   "dependencies": {
-    "@nuxt/ui": "^4.10.0",
+    "@nuxt/ui": "^4.11.3",
     "isomorphic-dompurify": "^3.22.0",
-    "marked": "^18.0.9",
+    "marked": "^18.0.14",
     "nuxt": "^4.5.2",
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.123",
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^26.2.0",
+    "@iconify-json/lucide": "^1.2.139",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.10",
-    "vue-tsc": "^3.0.0"
+    "vitest": "^5.0.3",
+    "vue-tsc": "^3.3.12"
   }
 }
