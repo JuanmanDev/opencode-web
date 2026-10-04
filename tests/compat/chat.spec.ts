@@ -8,6 +8,16 @@ const WORK = path.resolve('test-results/compat/work')
 const DIR = Buffer.from(WORK).toString('base64url')
 const PROTOCOL = process.env.COMPAT_PROTOCOL === 'v2' ? 'v2' : 'legacy'
 
+/** Is the server under test at least `min`? ("latest" always is.) */
+function atLeast(min: string) {
+  const version = process.env.OPENCODE_VERSION
+  if (!version || version === 'latest') return true
+  const a = version.split('.').map(Number)
+  const b = min.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0)
+  return true
+}
+
 async function newChat(page: Page) {
   await page.goto(`/p/${DIR}`)
   await page.getByRole('button', { name: 'New chat' }).first().click()
@@ -44,6 +54,7 @@ test('tool call behind a permission prompt', async ({ page }) => {
 })
 
 test('question tool is answered from the UI', async ({ page }) => {
+  test.skip(!atLeast('1.1.65'), 'opencode < 1.1.65 has no question tool')
   await newChat(page)
   await send(page, 'ask me something')
   await expect(page.getByText('Pick one?').first()).toBeVisible()
@@ -53,6 +64,8 @@ test('question tool is answered from the UI', async ({ page }) => {
 })
 
 test('a reload mid-permission still shows the prompt', async ({ page }) => {
+  // pending permissions can only be listed (GET /permission) since 1.0.224
+  test.skip(!atLeast('1.0.224'), 'opencode < 1.0.224 cannot list pending permissions')
   await newChat(page)
   await send(page, 'run bash again')
   await expect(page.getByText('Permission required')).toBeVisible()

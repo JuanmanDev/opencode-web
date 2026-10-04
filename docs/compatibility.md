@@ -15,19 +15,21 @@ The compat suite (`playwright.compat.config.ts`) runs the real `opencode serve` 
 
 | opencode | API | result |
 | --- | --- | --- |
-| 1.0.0 (first 1.x release) | 1.x | ✅ all pass |
+| 1.0.0 (first 1.x release) | 1.x | ✅ UI and API compatible; ⚠️ tool calls fail **inside opencode** with current provider packages (see below) |
 | 1.1.65 | 1.x | ✅ all pass |
 | 1.4.17 | 1.x | ✅ all pass |
 | 1.18.34 | 1.x | ✅ all pass |
 | 1.18.34, forced to v2 (`NUXT_OPENCODE_PROTOCOL=v2`) | v2 `/api/*` | ✅ all pass |
 
-CI runs 1.0.0, 1.4.17, 1.14.51 and the latest release on the 1.x API, plus the latest release on v2. It also runs every week, so a new opencode release that breaks something shows up before you update.
+CI runs 1.1.65, 1.4.17, 1.14.51 and the latest release on the 1.x API, plus the latest release on v2. It also runs every week, so a new opencode release that breaks something shows up before you update.
 
 ```sh
 npm run build
 OPENCODE_VERSION=1.4.17 npx playwright test -c playwright.compat.config.ts
 OPENCODE_VERSION=latest COMPAT_PROTOCOL=v2 npx playwright test -c playwright.compat.config.ts
 ```
+
+> **opencode 1.0.x and today's providers:** 1.0.x is built on AI SDK 5. The `@ai-sdk/*` provider packages it downloads today implement a newer model spec, so the server logs `Unsupported model version v4 … AI SDK 5 only supports … "v2"` and its tool steps fail (`DecimalError`). opencode web shows that error with Retry / Continue; the fix is to upgrade opencode.
 
 ## How the protocol is chosen
 

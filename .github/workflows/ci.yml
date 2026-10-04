@@ -80,8 +80,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # oldest release, one per API era, latest; v2 = the /api protocol only
-          - { opencode: 1.0.0, protocol: legacy }
+          # oldest with today's AI SDK providers working, one per API era,
+          # latest; v2 = the /api protocol only. (1.0.x's AI SDK 5 can't load
+          # current @ai-sdk provider packages: its tool steps fail server-side)
+          - { opencode: 1.1.65, protocol: legacy }
           - { opencode: 1.4.17, protocol: legacy }
           - { opencode: 1.14.51, protocol: legacy }
           - { opencode: latest, protocol: legacy }
