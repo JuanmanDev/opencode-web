@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # catches new opencode releases breaking the compat suite before users do
+  schedule:
+    - cron: '17 5 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -68,6 +71,43 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 14
+
+  compat:
+    name: opencode ${{ matrix.opencode }} (${{ matrix.protocol }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # oldest release, one per API era, latest; v2 = the /api protocol only
+          - { opencode: 1.0.0, protocol: legacy }
+          - { opencode: 1.4.17, protocol: legacy }
+          - { opencode: 1.14.51, protocol: legacy }
+          - { opencode: latest, protocol: legacy }
+          - { opencode: latest, protocol: v2 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      # real opencode server + deterministic mock model, see playwright.compat.config.ts
+      - run: npx playwright test -c playwright.compat.config.ts
+        env:
+          OPENCODE_VERSION: ${{ matrix.opencode }}
+          COMPAT_PROTOCOL: ${{ matrix.protocol }}
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compat-${{ matrix.opencode }}-${{ matrix.protocol }}
+          path: |
+            playwright-report-compat/
+            test-results/
           retention-days: 14
 
   docker:
