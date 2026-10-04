@@ -1,0 +1,482 @@
+{
+  "rejectStatus": 204,
+  "questionRejectStatus": 204,
+  "activeLog": [
+    [
+      "before-reject",
+      {
+        "data": {
+          "ses_efb64ecb3ffetCgXZFqGoYLEa0": {
+            "type": "running"
+          }
+        }
+      }
+    ],
+    [
+      "after-reject+250ms",
+      {
+        "data": {
+          "ses_efb64ecb3ffetCgXZFqGoYLEa0": {
+            "type": "running"
+          }
+        }
+      }
+    ],
+    [
+      "after-reject+500ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-reject+750ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-reject+1000ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-reject+1250ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-reject+1500ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+250ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+500ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+750ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+1000ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+1250ms",
+      {
+        "data": {}
+      }
+    ],
+    [
+      "after-qreject+1500ms",
+      {
+        "data": {}
+      }
+    ]
+  ],
+  "eventTypes": [
+    "session.created",
+    "session.next.prompt.admitted",
+    "session.next.prompted",
+    "session.next.step.started",
+    "session.next.tool.input.started",
+    "session.next.tool.input.delta",
+    "session.next.tool.input.delta",
+    "session.next.tool.input.ended",
+    "session.next.tool.called",
+    "permission.v2.asked",
+    "permission.v2.replied",
+    "session.next.tool.failed",
+    "session.next.step.ended",
+    "session.next.step.started",
+    "session.next.text.started",
+    "session.next.text.delta",
+    "session.next.text.delta",
+    "session.next.text.delta",
+    "session.next.text.ended",
+    "session.next.step.ended",
+    "session.next.prompt.admitted",
+    "session.next.prompted",
+    "session.next.step.started",
+    "session.next.tool.input.started",
+    "session.next.tool.input.delta",
+    "session.next.tool.input.delta",
+    "session.next.tool.input.ended",
+    "session.next.tool.called",
+    "question.v2.asked",
+    "question.v2.rejected",
+    "session.next.tool.failed"
+  ],
+  "terminal": [
+    {
+      "id": "evt_1049b1449002O43Xf5Ba8MMXpW",
+      "type": "session.next.tool.input.ended",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 5,
+        "version": 1
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078634569,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1445001ilpfInFd88Jmwn",
+        "callID": "call_1791078634563",
+        "text": "{\"command\":\"echo hello-from-bash\",\"description\":\"Echo test\"}"
+      }
+    },
+    {
+      "id": "evt_1049b1508001WAlQc22eNScJrC",
+      "type": "permission.v2.replied",
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "requestID": "per_1049b1455001yj00aI8nR9veIG",
+        "reply": "reject"
+      }
+    },
+    {
+      "id": "evt_1049b1509001bBGAZTBg6FgDld",
+      "type": "session.next.tool.failed",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 7,
+        "version": 1
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078634761,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1445001ilpfInFd88Jmwn",
+        "callID": "call_1791078634563",
+        "error": {
+          "type": "unknown",
+          "message": "Unable to execute command: echo hello-from-bash"
+        },
+        "result": {
+          "type": "error",
+          "value": "Unable to execute command: echo hello-from-bash"
+        },
+        "provider": {
+          "executed": false
+        }
+      }
+    },
+    {
+      "id": "evt_1049b1530001AmNmv5SM9SCsLo",
+      "type": "session.next.step.ended",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 8,
+        "version": 2
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078634800,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1445001ilpfInFd88Jmwn",
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "evt_1049b1678001WvBm0sHhoc9y9D",
+      "type": "session.next.text.ended",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 11,
+        "version": 1
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078635128,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1569001zwZ34r0JWAp6he",
+        "textID": "text-0",
+        "text": "Tool finished OK."
+      }
+    },
+    {
+      "id": "evt_1049b169a001aC4JrOrGhbFknl",
+      "type": "session.next.step.ended",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 12,
+        "version": 2
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078635162,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1569001zwZ34r0JWAp6he",
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "evt_1049b1b6e0036fOCweY3JhPFB8",
+      "type": "session.next.tool.input.ended",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 17,
+        "version": 1
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078636398,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1b6b001C3Nptr8paZ3ANX",
+        "callID": "call_1791078636390",
+        "text": "{\"questions\":[{\"question\":\"Pick one?\",\"header\":\"Pick\",\"options\":[{\"label\":\"A\",\"description\":\"first\"},{\"label\":\"B\",\"description\":\"second\"}]}]}"
+      }
+    },
+    {
+      "id": "evt_1049b1c37001KQnp7AWv814JPA",
+      "type": "question.v2.rejected",
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "requestID": "que_1049b1b76001yEqJtpBx1aWhkH"
+      }
+    },
+    {
+      "id": "evt_1049b1c380013UZb83lZtI8bzE",
+      "type": "session.next.tool.failed",
+      "durable": {
+        "aggregateID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "seq": 19,
+        "version": 1
+      },
+      "location": {
+        "directory": "C:\\work"
+      },
+      "data": {
+        "timestamp": 1791078636600,
+        "sessionID": "ses_efb64ecb3ffetCgXZFqGoYLEa0",
+        "assistantMessageID": "msg_1049b1b6b001C3Nptr8paZ3ANX",
+        "callID": "call_1791078636390",
+        "error": {
+          "type": "unknown",
+          "message": "Tool execution interrupted"
+        },
+        "provider": {
+          "executed": false
+        }
+      }
+    }
+  ],
+  "messages": {
+    "data": [
+      {
+        "id": "msg_1049b13fd001sRzApI8mDKiZXo",
+        "time": {
+          "created": 1791078634494
+        },
+        "text": "please run bash",
+        "type": "user"
+      },
+      {
+        "id": "msg_1049b1445001ilpfInFd88Jmwn",
+        "time": {
+          "created": 1791078634565,
+          "completed": 1791078634800
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078634563",
+            "name": "bash",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "echo hello-from-bash",
+                "description": "Echo test"
+              },
+              "content": [],
+              "structured": {},
+              "error": {
+                "type": "unknown",
+                "message": "Unable to execute command: echo hello-from-bash"
+              },
+              "result": {
+                "type": "error",
+                "value": "Unable to execute command: echo hello-from-bash"
+              }
+            },
+            "time": {
+              "created": 1791078634567,
+              "ran": 1791078634571,
+              "completed": 1791078634761
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_1049b1569001zwZ34r0JWAp6he",
+        "time": {
+          "created": 1791078634858,
+          "completed": 1791078635162
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_1049b1b2b001PWZ6OFRwXDXkcf",
+        "time": {
+          "created": 1791078636331
+        },
+        "text": "please ask me",
+        "type": "user"
+      },
+      {
+        "id": "msg_1049b1b6b001C3Nptr8paZ3ANX",
+        "time": {
+          "created": 1791078636395
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078636390",
+            "name": "question",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "error",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick one?",
+                    "header": "Pick",
+                    "options": [
+                      {
+                        "label": "A",
+                        "description": "first"
+                      },
+                      {
+                        "label": "B",
+                        "description": "second"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "content": [],
+              "structured": {},
+              "error": {
+                "type": "unknown",
+                "message": "Tool execution interrupted"
+              }
+            },
+            "time": {
+              "created": 1791078636396,
+              "ran": 1791078636400,
+              "completed": 1791078636600
+            }
+          }
+        ]
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDQ5YjEzZmQwMDFzUnpBcEk4bURLaVpYbyIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDQ5YjFiNmIwMDFDM05wdHI4cGFaM0FOWCIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

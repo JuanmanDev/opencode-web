@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MessageWithParts, Part, TokenUsage } from '#shared/types/opencode'
 
-const props = defineProps<{ message: MessageWithParts }>()
+const props = withDefaults(defineProps<{ message: MessageWithParts; canFork?: boolean }>(), { canFork: true })
 const emit = defineEmits<{ fork: []; retry: []; continue: []; edit: [text: string] }>()
 
 const toast = useToast()
@@ -80,7 +80,7 @@ const errorMessage = computed(() => {
     <!-- user message -->
     <!-- pr-8 keeps the absolutely-positioned fork button off the text -->
     <div v-if="isUser" class="oc-send group/msg relative border-l-2 border-accented bg-elevated rounded-r-sm pl-3 pr-8 py-2 my-3">
-      <UTooltip text="Fork the conversation from here">
+      <UTooltip v-if="canFork" text="Fork the conversation from here">
         <UButton
           icon="i-lucide-git-branch"
           size="xs"
@@ -201,7 +201,7 @@ const errorMessage = computed(() => {
               @click="readAloud"
             />
           </UTooltip>
-          <UTooltip text="Fork from here">
+          <UTooltip v-if="canFork" text="Fork from here">
             <UButton icon="i-lucide-git-branch" size="xs" color="neutral" variant="ghost" class="relative oc-tap-zone" aria-label="Fork from here" @click="emit('fork')" />
           </UTooltip>
         </span>

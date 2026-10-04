@@ -2,6 +2,7 @@
 import type { MessageInfo, Project, SessionInfo } from '#shared/types/opencode'
 
 const route = useRoute()
+const caps = useCapabilities()
 const directory = computed(() => decodeDir(route.params.dir as string))
 if (!directory.value) {
   throw createError({
@@ -253,7 +254,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           :to="`/p/${route.params.dir}`"
         />
       </UTooltip>
-      <UTooltip text="MCP servers" :content="{ side: 'right' }">
+      <UTooltip v-if="caps.mcp" text="MCP servers" :content="{ side: 'right' }">
         <UButton
           icon="i-lucide-server-cog"
           color="neutral"

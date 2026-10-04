@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/session/ses_efb6b4642ffedDM7FFyDoLBC2c/revert/stage",
+    "body": {
+      "messageID": "msg_10494c855001JLoejBBaKA7B0l"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {
+      "messageID": "msg_10494c855001JLoejBBaKA7B0l",
+      "diff": "",
+      "files": []
+    }
+  }
+}

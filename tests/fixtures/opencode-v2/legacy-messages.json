@@ -1,0 +1,298 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "info": {
+        "id": "msg_10497e319001dqp2Jgu7vqwe4i",
+        "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+        "role": "user",
+        "time": {
+          "created": 1791078425369
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "mock",
+          "modelID": "mock-model"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_10497e31e0016Sn7JE20EYXOzR",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497e319001dqp2Jgu7vqwe4i",
+          "type": "text",
+          "text": "hello legacy"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_10497e455001aPNk7N2Y4keXst",
+        "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+        "role": "assistant",
+        "time": {
+          "created": 1791078425685,
+          "completed": 1791078427171
+        },
+        "parentID": "msg_10497e319001dqp2Jgu7vqwe4i",
+        "modelID": "mock-model",
+        "providerID": "mock",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "C:\\work",
+          "root": "C:\\work"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 132,
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_10497e8880012vfvTHE4Yt52NI",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497e455001aPNk7N2Y4keXst",
+          "type": "step-start",
+          "snapshot": ""
+        },
+        {
+          "id": "prt_10497e889001oJcGEPtbItS659",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497e455001aPNk7N2Y4keXst",
+          "type": "reasoning",
+          "text": "Thinking about it.",
+          "time": {
+            "start": 1791078426761,
+            "end": 1791078426763
+          }
+        },
+        {
+          "id": "prt_10497e88c001pEARUIpm5bTnN6",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497e455001aPNk7N2Y4keXst",
+          "type": "text",
+          "text": "Hello from the mock model.",
+          "time": {
+            "start": 1791078426764,
+            "end": 1791078427059
+          }
+        },
+        {
+          "id": "prt_10497ea1f001r3egf9XaZauo6F",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497e455001aPNk7N2Y4keXst",
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "",
+          "cost": 0,
+          "tokens": {
+            "total": 132,
+            "input": 120,
+            "output": 12,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_10497ea38001Q7CpDZouLeCBag",
+        "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+        "role": "user",
+        "time": {
+          "created": 1791078427192
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "mock",
+          "modelID": "mock-model"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_10497ea38002y88qhFdxyIeeR3",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497ea38001Q7CpDZouLeCBag",
+          "type": "text",
+          "text": "please run bash"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_10497ea44001OAYNPA74H8JswF",
+        "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+        "role": "assistant",
+        "time": {
+          "created": 1791078427204,
+          "completed": 1791078435950
+        },
+        "parentID": "msg_10497ea38001Q7CpDZouLeCBag",
+        "modelID": "mock-model",
+        "providerID": "mock",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "C:\\work",
+          "root": "C:\\work"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 132,
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_10497eb7b0011C2WePhekc70ed",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497ea44001OAYNPA74H8JswF",
+          "type": "step-start",
+          "snapshot": ""
+        },
+        {
+          "id": "prt_10497eb7d001t0w2UuNppVYLcT",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497ea44001OAYNPA74H8JswF",
+          "type": "tool",
+          "callID": "call_1791078427337",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo hello-from-bash",
+              "description": "Echo test"
+            },
+            "output": "hello-from-bash\n",
+            "title": "echo hello-from-bash",
+            "metadata": {
+              "output": "hello-from-bash\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "time": {
+              "start": 1791078427522,
+              "end": 1791078435397
+            }
+          }
+        },
+        {
+          "id": "prt_104980c65001OJ7KJ7ZT3IgwQo",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_10497ea44001OAYNPA74H8JswF",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "",
+          "cost": 0,
+          "tokens": {
+            "total": 132,
+            "input": 120,
+            "output": 12,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_104980c71001pLEpMUWkeMNqum",
+        "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+        "role": "assistant",
+        "time": {
+          "created": 1791078435953,
+          "completed": 1791078436974
+        },
+        "parentID": "msg_10497ea38001Q7CpDZouLeCBag",
+        "modelID": "mock-model",
+        "providerID": "mock",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "C:\\work",
+          "root": "C:\\work"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 132,
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_104980fcc001QIVdbh2C7sDOA1",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_104980c71001pLEpMUWkeMNqum",
+          "type": "step-start",
+          "snapshot": ""
+        },
+        {
+          "id": "prt_104980fce001LYVVIXAvfju9wA",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_104980c71001pLEpMUWkeMNqum",
+          "type": "text",
+          "text": "Tool finished OK.",
+          "time": {
+            "start": 1791078436814,
+            "end": 1791078436815
+          }
+        },
+        {
+          "id": "prt_10498106b001lVJy0qLJCTY1Ew",
+          "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+          "messageID": "msg_104980c71001pLEpMUWkeMNqum",
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "",
+          "cost": 0,
+          "tokens": {
+            "total": 132,
+            "input": 120,
+            "output": 12,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "id": "msg_104b72908001yg9QbScWi9CTdL",
+        "time": {
+          "created": 1791080474889
+        },
+        "text": "please run bash",
+        "type": "user"
+      },
+      {
+        "id": "msg_104b7297a001C5uVQjFRddOZPa",
+        "time": {
+          "created": 1791080475003,
+          "completed": 1791080475206
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791080474986",
+            "name": "bash",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "echo hello-from-bash",
+                "description": "Echo test"
+              },
+              "content": [],
+              "structured": {},
+              "error": {
+                "type": "unknown",
+                "message": "Unable to execute command: echo hello-from-bash"
+              },
+              "result": {
+                "type": "error",
+                "value": "Unable to execute command: echo hello-from-bash"
+              }
+            },
+            "time": {
+              "created": 1791080475004,
+              "ran": 1791080475012,
+              "completed": 1791080475166
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_104b72a7d001sJS051icApzJjn",
+        "time": {
+          "created": 1791080475261,
+          "completed": 1791080475570
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_104b72c29001eo85W0oz375f1Z",
+        "time": {
+          "created": 1791080475689
+        },
+        "text": "please ask me",
+        "type": "user"
+      },
+      {
+        "id": "msg_104b72c67001eYbGycZEc3AUAC",
+        "time": {
+          "created": 1791080475751
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791080475744",
+            "name": "question",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "error",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick one?",
+                    "header": "Pick",
+                    "options": [
+                      {
+                        "label": "A",
+                        "description": "first"
+                      },
+                      {
+                        "label": "B",
+                        "description": "second"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "content": [],
+              "structured": {},
+              "error": {
+                "type": "unknown",
+                "message": "Tool execution interrupted"
+              }
+            },
+            "time": {
+              "created": 1791080475753,
+              "ran": 1791080475757,
+              "completed": 1791080475967
+            }
+          }
+        ]
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDRiNzI5MDgwMDF5ZzlRYlNjV2k5Q1RkTCIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDRiNzJjNjcwMDFlWWJHeWNaRWMzQVVBQyIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

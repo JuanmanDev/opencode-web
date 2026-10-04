@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session?directory=C%3A%5Cwork&limit=5"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": [
+      {
+        "id": "ses_efb6b4642ffedDM7FFyDoLBC2c",
+        "projectID": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "time": {
+          "created": 1791078218402,
+          "updated": 1791078218402
+        },
+        "title": "New session - 2026-10-04T01:43:38.402Z",
+        "location": {
+          "directory": "C:\\work"
+        }
+      }
+    ],
+    "cursor": {
+      "previous": "eyJkaXJlY3RvcnkiOiJDOlxcVXNlcnNcXEp1YW5tXFxBcHBEYXRhXFxMb2NhbFxcVGVtcFxcY2xhdWRlXFxDLS1jb2RlLW9wZW5jb2RlLWp1YW5tYVxcMDg3MDdiNzQtNDRiYy00NmM5LWEzZDItMTM4MjNhYmJjNjM1XFxzY3JhdGNocGFkXFxjb21wYXQtdjJcXHdvcmsiLCJhbmNob3IiOnsiaWQiOiJzZXNfZWZiNmI0NjQyZmZlZERNN0ZGeURvTEJDMmMiLCJ0aW1lIjoxNzkxMDc4MjE4NDAyLCJkaXJlY3Rpb24iOiJwcmV2aW91cyJ9fQ",
+      "next": "eyJkaXJlY3RvcnkiOiJDOlxcVXNlcnNcXEp1YW5tXFxBcHBEYXRhXFxMb2NhbFxcVGVtcFxcY2xhdWRlXFxDLS1jb2RlLW9wZW5jb2RlLWp1YW5tYVxcMDg3MDdiNzQtNDRiYy00NmM5LWEzZDItMTM4MjNhYmJjNjM1XFxzY3JhdGNocGFkXFxjb21wYXQtdjJcXHdvcmsiLCJhbmNob3IiOnsiaWQiOiJzZXNfZWZiNmI0NjQyZmZlZERNN0ZGeURvTEJDMmMiLCJ0aW1lIjoxNzkxMDc4MjE4NDAyLCJkaXJlY3Rpb24iOiJuZXh0In19"
+    }
+  }
+}

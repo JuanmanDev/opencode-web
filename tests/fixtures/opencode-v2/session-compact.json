@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/session/ses_efb6b4642ffedDM7FFyDoLBC2c/compact"
+  },
+  "status": 503,
+  "contentType": "application/json",
+  "body": {
+    "_tag": "ServiceUnavailableError",
+    "message": "Session compact is not available yet",
+    "service": "session.compact"
+  }
+}

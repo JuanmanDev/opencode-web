@@ -38,6 +38,7 @@ const emit = defineEmits<{
   abort: []
   refreshProviders: []
 }>()
+const caps = useCapabilities()
 
 // NOTE: Reka UI <SelectItem> forbids empty-string values, so "default"
 // sentinels are used instead of '' everywhere below.
@@ -505,7 +506,7 @@ function onKeydown(e: KeyboardEvent) {
           </UFormField>
 
           <!-- MCP shares the same row -->
-          <UFormField label="MCP" size="xs" class="col-span-2 sm:w-44 shrink-0">
+          <UFormField v-if="caps.mcp" label="MCP" size="xs" class="col-span-2 sm:w-44 shrink-0">
             <USelect
               v-if="mcpLoading"
               disabled
@@ -541,7 +542,7 @@ function onKeydown(e: KeyboardEvent) {
         <!-- custom MCP selection: one compact header row (filter + presets),
              then the table-like server list -->
         <CollapseTransition>
-        <div v-if="(mcpInfo.length || mcpLoading) && mcpMode === 'custom'">
+        <div v-if="caps.mcp && (mcpInfo.length || mcpLoading) && mcpMode === 'custom'">
           <McpServerList
             :servers="mcpInfo"
             :loading="mcpLoading"

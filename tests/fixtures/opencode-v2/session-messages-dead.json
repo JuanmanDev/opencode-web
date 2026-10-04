@@ -1,0 +1,44 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/ses_efb6b3591ffemeYrx1VKhz409q/message?order=asc"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": [
+      {
+        "id": "msg_10494cafc001jUlra6ig8JVKLt",
+        "time": {
+          "created": 1791078222589
+        },
+        "text": "hello dead",
+        "type": "user"
+      },
+      {
+        "id": "msg_10494cc1f001L79jXAg2YQACyn",
+        "time": {
+          "created": 1791078222879,
+          "completed": 1791078222880
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "dead-model",
+          "providerID": "dead",
+          "variant": "default"
+        },
+        "content": [],
+        "finish": "error",
+        "error": {
+          "type": "unknown",
+          "message": "HTTP transport failed"
+        }
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDQ5NGNhZmMwMDFqVWxyYTZpZzhKVktMdCIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDQ5NGNjMWYwMDFMNzlqWEFnMllRQUN5biIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

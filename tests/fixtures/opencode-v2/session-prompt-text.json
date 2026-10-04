@@ -1,0 +1,25 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/session/ses_efb6b4642ffedDM7FFyDoLBC2c/prompt",
+    "body": {
+      "prompt": {
+        "text": "hello there"
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {
+      "admittedSeq": 1,
+      "id": "msg_10494bcd2001MeJ5OtI3voIbvz",
+      "sessionID": "ses_efb6b4642ffedDM7FFyDoLBC2c",
+      "prompt": {
+        "text": "hello there"
+      },
+      "delivery": "steer",
+      "timeCreated": 1791078218963
+    }
+  }
+}

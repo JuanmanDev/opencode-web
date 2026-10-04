@@ -1,0 +1,311 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/ses_efb6b4642ffedDM7FFyDoLBC2c/message?order=asc&limit=200"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": [
+      {
+        "id": "msg_10494bcd2001MeJ5OtI3voIbvz",
+        "time": {
+          "created": 1791078218963
+        },
+        "text": "hello there",
+        "type": "user"
+      },
+      {
+        "id": "msg_10494bd63001w10jbw8MSjAtsS",
+        "time": {
+          "created": 1791078219107,
+          "completed": 1791078219687
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "id": "reasoning-0",
+            "text": "Thinking about it.",
+            "time": {
+              "created": 1791078219110,
+              "completed": 1791078219449
+            }
+          },
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Hello from the mock model."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_10494c0080012jkK2IKinYPc6x",
+        "time": {
+          "created": 1791078219784
+        },
+        "text": "please run bash",
+        "type": "user"
+      },
+      {
+        "id": "msg_10494c0b9001fUpVyXoD5KT9I9",
+        "time": {
+          "created": 1791078219961,
+          "completed": 1791078220283
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078219959",
+            "name": "bash",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "completed",
+              "input": {
+                "command": "echo hello-from-bash",
+                "description": "Echo test"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello-from-bash\r\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Command exited with code 0."
+                }
+              ],
+              "outputPaths": [],
+              "structured": {
+                "exit": 0,
+                "truncated": false
+              }
+            },
+            "time": {
+              "created": 1791078219963,
+              "ran": 1791078219969,
+              "completed": 1791078220210
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_10494c296001E2uxlSAEkrO7nb",
+        "time": {
+          "created": 1791078220438,
+          "completed": 1791078220755
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_10494c43c001RKue1PjVEnQuVF",
+        "time": {
+          "created": 1791078220860
+        },
+        "text": "please ask me",
+        "type": "user"
+      },
+      {
+        "id": "msg_10494c48b001qdohQASZm26e4j",
+        "time": {
+          "created": 1791078220939,
+          "completed": 1791078221231
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078220939",
+            "name": "question",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "completed",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick one?",
+                    "header": "Pick",
+                    "options": [
+                      {
+                        "label": "A",
+                        "description": "first"
+                      },
+                      {
+                        "label": "B",
+                        "description": "second"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "User has answered your questions: \"Pick one?\"=\"A\". You can now continue with the user's answers in mind."
+                }
+              ],
+              "outputPaths": [],
+              "structured": {
+                "answers": [
+                  [
+                    "A"
+                  ]
+                ]
+              }
+            },
+            "time": {
+              "created": 1791078220941,
+              "ran": 1791078220945,
+              "completed": 1791078221188
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_10494c5e6001lO2AoxTYg5LCCo",
+        "time": {
+          "created": 1791078221286,
+          "completed": 1791078221601
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_10494c855001JLoejBBaKA7B0l",
+        "time": {
+          "created": 1791078221909
+        },
+        "text": "make a todo",
+        "files": [
+          {
+            "uri": "data:text/plain;base64,YXR0YWNoZWQh",
+            "mime": "text/plain",
+            "name": "note.txt"
+          }
+        ],
+        "type": "user"
+      },
+      {
+        "id": "msg_10494c899001iHZqbFNhD1wUSy",
+        "time": {
+          "created": 1791078221977,
+          "completed": 1791078221979
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [],
+        "finish": "error",
+        "error": {
+          "type": "unknown",
+          "message": "OpenAI Chat does not support media type text/plain"
+        }
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDQ5NGJjZDIwMDFNZUo1T3RJM3ZvSWJ2eiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDQ5NGM4OTkwMDFpSFpxYkZOaEQxd1VTeSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

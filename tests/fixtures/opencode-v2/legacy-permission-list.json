@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": "per_10497eaf8001c54cXDx6Lot55p",
+      "sessionID": "ses_efb681cfdffeVXwoRv5njn9gsD",
+      "permission": "bash",
+      "patterns": [
+        "echo hello-from-bash"
+      ],
+      "metadata": {
+        "command": "echo hello-from-bash"
+      },
+      "always": [
+        "echo *"
+      ],
+      "tool": {
+        "messageID": "msg_10497ea44001OAYNPA74H8JswF",
+        "callID": "call_1791078427337"
+      }
+    }
+  ]
+}

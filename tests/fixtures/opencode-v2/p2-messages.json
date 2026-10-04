@@ -1,0 +1,215 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/ses_efb69c685ffe3X8aR67CzaGu8G/message?order=asc"
+  },
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "id": "msg_104963aa2001aXzXEFQ3pccJ35",
+        "time": {
+          "created": 1791078316706
+        },
+        "text": "make a todo",
+        "type": "user"
+      },
+      {
+        "id": "msg_104963aff001vnSSDf3NqNAKdE",
+        "time": {
+          "created": 1791078316799,
+          "completed": 1791078316867
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078316798",
+            "name": "todowrite",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "completed",
+              "input": {
+                "todos": [
+                  {
+                    "content": "Write spec",
+                    "status": "in_progress",
+                    "priority": "high"
+                  }
+                ]
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[\n  {\n    \"content\": \"Write spec\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  }\n]"
+                }
+              ],
+              "outputPaths": [],
+              "structured": {
+                "todos": [
+                  {
+                    "content": "Write spec",
+                    "status": "in_progress",
+                    "priority": "high"
+                  }
+                ]
+              }
+            },
+            "time": {
+              "created": 1791078316801,
+              "ran": 1791078316805,
+              "completed": 1791078316809
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_104963b72001VnfC4TouFR5kiD",
+        "time": {
+          "created": 1791078316914,
+          "completed": 1791078317244
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_104963d7e001kZzVL4vBrMftqt",
+        "time": {
+          "created": 1791078317438
+        },
+        "text": "read the readme",
+        "type": "user"
+      },
+      {
+        "id": "msg_104963db50010q3ubHsIFWAwrp",
+        "time": {
+          "created": 1791078317493,
+          "completed": 1791078317550
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_1791078317493",
+            "name": "read",
+            "provider": {
+              "executed": false
+            },
+            "state": {
+              "status": "error",
+              "input": {
+                "filePath": "README.md"
+              },
+              "content": [],
+              "structured": {},
+              "error": {
+                "type": "unknown",
+                "message": "Invalid tool input: Missing key\n  at [\"path\"]"
+              },
+              "result": {
+                "type": "error",
+                "value": "Invalid tool input: Missing key\n  at [\"path\"]"
+              }
+            },
+            "time": {
+              "created": 1791078317495,
+              "ran": 1791078317498,
+              "completed": 1791078317500
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      {
+        "id": "msg_104963e20001b45gAgB36H46Q5",
+        "time": {
+          "created": 1791078317600,
+          "completed": 1791078317917
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "Tool finished OK."
+          }
+        ],
+        "finish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 12,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDQ5NjNhYTIwMDFhWHpYRUZRM3BjY0ozNSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDQ5NjNlMjAwMDFiNDVnQWdCMzZINDZRNSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

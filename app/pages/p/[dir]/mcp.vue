@@ -2,6 +2,7 @@
 import type { McpStatus } from '#shared/types/opencode'
 
 const route = useRoute()
+const caps = useCapabilities()
 const directory = computed(() => decodeDir(route.params.dir as string))
 const api = useOpencodeApi(directory)
 const toast = useToast()
@@ -55,6 +56,7 @@ onMounted(() => {
 })
 
 async function refresh(rediscover = false) {
+  if (!caps.value.mcp) return
   loading.value = true
   try {
     const [status, config, discovered] = await Promise.all([
@@ -561,6 +563,15 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
 <template>
   <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-2xl mx-auto px-4 py-6">
+      <UAlert
+        v-if="!caps.mcp"
+        class="mb-4"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-plug-zap"
+        title="No MCP on this server"
+        description="This opencode server speaks the v2 protocol, which has no MCP support yet: its agent only uses the built-in tools. Connect a 1.x server (or a later 2.x with MCP) to manage MCP servers here."
+      />
       <div class="flex items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">MCP servers</h1>
         <span class="flex-1" />

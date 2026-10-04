@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/ses_efb6b3356ffentp4psMxEjhaXL/message?order=asc"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": [
+      {
+        "id": "msg_10494cd340019HrBM3rmOTQRQ2",
+        "time": {
+          "created": 1791078223157
+        },
+        "text": "slow please",
+        "type": "user"
+      },
+      {
+        "id": "msg_10494cd66001CmFWUODBDkP5Wu",
+        "time": {
+          "created": 1791078223206,
+          "completed": 1791078225195
+        },
+        "type": "assistant",
+        "agent": "build",
+        "model": {
+          "id": "mock-model",
+          "providerID": "mock"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "id": "reasoning-0",
+            "text": "Thinking about it.",
+            "time": {
+              "created": 1791078223207,
+              "completed": 1791078223331
+            }
+          },
+          {
+            "type": "text",
+            "id": "text-0",
+            "text": "w0 w1 w2 w3 w4 w5 w6 w7 "
+          }
+        ],
+        "finish": "error",
+        "error": {
+          "type": "unknown",
+          "message": "Provider turn interrupted"
+        }
+      }
+    ],
+    "cursor": {
+      "previous": "eyJpZCI6Im1zZ18xMDQ5NGNkMzQwMDE5SHJCTTNybU9UUVJRMiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+      "next": "eyJpZCI6Im1zZ18xMDQ5NGNkNjYwMDFDbUZXVU9EQkRrUDVXdSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+    }
+  }
+}

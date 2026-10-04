@@ -3,8 +3,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { joinURL } from 'ufo'
 import type { H3Event } from 'h3'
 
-/** Server-side client for the opencode API (auth injected, directory scoped). */
-export function opencodeFetch<T = unknown>(
+/**
+ * Server-side client for the opencode API (auth injected, directory scoped).
+ * Always called with legacy (1.x) paths and shapes; a server that only speaks
+ * the v2 protocol gets the request translated, prompts waiting for the reply.
+ */
+export async function opencodeFetch<T = unknown>(
   path: string,
   opts: {
     method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
@@ -13,6 +17,17 @@ export function opencodeFetch<T = unknown>(
     timeoutMs?: number
   } = {}
 ): Promise<T> {
+  if ((await getServerProfile()).protocol === 'v2') {
+    const timeout = AbortSignal.timeout(opts.timeoutMs ?? 15000)
+    return v2Request({
+      method: opts.method || 'GET',
+      path: path.replace(/^\/+/, ''),
+      query: opts.query || {},
+      body: opts.body,
+      wait: true,
+      signal: timeout
+    }).catch((error) => { throw compatToH3Error(error) }) as Promise<T>
+  }
   const config = useRuntimeConfig()
   const headers: Record<string, string> = {}
   if (config.opencodePassword) {

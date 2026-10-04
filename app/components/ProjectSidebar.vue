@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{ directory: string }>()
 const emit = defineEmits<{ navigate: [] }>()
+const caps = useCapabilities()
 
 const route = useRoute()
 const dirParam = computed(() => encodeDir(props.directory))
@@ -91,6 +92,7 @@ function fmtTime(ts?: number) {
         @click="newSession"
       />
       <UButton
+        v-if="caps.mcp"
         block
         color="neutral"
         variant="ghost"

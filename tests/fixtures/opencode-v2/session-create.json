@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "body": {
+      "location": {
+        "directory": "C:\\work"
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {
+      "id": "ses_efb6b4642ffedDM7FFyDoLBC2c",
+      "projectID": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+      "cost": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "time": {
+        "created": 1791078218402,
+        "updated": 1791078218402
+      },
+      "title": "New session - 2026-10-04T01:43:38.402Z",
+      "location": {
+        "directory": "C:\\work"
+      }
+    }
+  }
+}

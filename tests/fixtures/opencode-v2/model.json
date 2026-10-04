@@ -1,0 +1,181 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/model?location%5Bdirectory%5D=C%3A%5Cwork"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "location": {
+      "directory": "C:\\work",
+      "project": {
+        "id": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+        "directory": "C:\\work"
+      }
+    },
+    "data": [
+      {
+        "id": "fledge-alpha-free",
+        "providerID": "opencode",
+        "name": "Fledge Alpha Free",
+        "api": {
+          "id": "fledge-alpha-free",
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "https://opencode.ai/zen/v1"
+        },
+        "capabilities": {
+          "tools": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "request": {
+          "headers": {},
+          "body": {
+            "apiKey": "public"
+          }
+        },
+        "variants": [],
+        "time": {
+          "released": 1790812800000
+        },
+        "cost": [
+          {
+            "input": 0,
+            "output": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        ],
+        "status": "active",
+        "enabled": true,
+        "limit": {
+          "context": 1048576,
+          "output": 131072
+        }
+      },
+      {
+        "id": "ling-3.1-flash-free",
+        "providerID": "opencode",
+        "family": "ling",
+        "name": "Ling 3.1 Flash Free",
+        "api": {
+          "id": "ling-3.1-flash-free",
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "https://opencode.ai/zen/v1"
+        },
+        "capabilities": {
+          "tools": true,
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "request": {
+          "headers": {},
+          "body": {
+            "apiKey": "public"
+          }
+        },
+        "variants": [],
+        "time": {
+          "released": 1790640000000
+        },
+        "cost": [
+          {
+            "input": 0,
+            "output": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        ],
+        "status": "active",
+        "enabled": true,
+        "limit": {
+          "context": 262144,
+          "output": 32768
+        }
+      },
+      {
+        "id": "mock-model",
+        "providerID": "mock",
+        "name": "Mock Model",
+        "api": {
+          "id": "mock-model",
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "http://127.0.0.1:4791/v1",
+          "settings": {
+            "apiKey": "sk-mock"
+          }
+        },
+        "capabilities": {
+          "tools": true,
+          "input": [],
+          "output": []
+        },
+        "request": {
+          "headers": {},
+          "body": {}
+        },
+        "variants": [],
+        "time": {
+          "released": 0
+        },
+        "cost": [],
+        "status": "active",
+        "enabled": true,
+        "limit": {
+          "context": 100000,
+          "output": 4096
+        }
+      },
+      {
+        "id": "dead-model",
+        "providerID": "dead",
+        "name": "Dead Model",
+        "api": {
+          "id": "dead-model",
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "http://127.0.0.1:9/v1",
+          "settings": {
+            "apiKey": "sk-dead"
+          }
+        },
+        "capabilities": {
+          "tools": true,
+          "input": [],
+          "output": []
+        },
+        "request": {
+          "headers": {},
+          "body": {}
+        },
+        "variants": [],
+        "time": {
+          "released": 0
+        },
+        "cost": [],
+        "status": "active",
+        "enabled": true,
+        "limit": {
+          "context": 100000,
+          "output": 4096
+        }
+      }
+    ]
+  }
+}

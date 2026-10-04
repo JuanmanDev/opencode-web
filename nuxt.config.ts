@@ -43,6 +43,9 @@ export default defineNuxtConfig({
     opencodeUrl: 'http://127.0.0.1:4096',
     opencodeUsername: 'opencode',
     opencodePassword: '',
+    // which opencode API to speak (NUXT_OPENCODE_PROTOCOL): auto (detect),
+    // legacy (every 1.x server) or v2 (servers serving only /api/*)
+    opencodeProtocol: 'auto',
     // optional bearer token protecting /api/v1/*, /mcp and the opencode proxy
     // (NUXT_API_TOKEN); the UI itself authenticates with a page cookie
     apiToken: '',

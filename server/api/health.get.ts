@@ -1,21 +1,12 @@
-import { Buffer } from 'node:buffer'
-
+// Liveness for the Docker healthcheck and the UI's "server down" states.
+// `opencode` tells whether the opencode server answers, `protocol` /
+// `version` which API it speaks (re-probed, not cached).
 export default defineEventHandler(async () => {
-  const config = useRuntimeConfig()
-  let opencode = false
-  try {
-    const headers: Record<string, string> = {}
-    if (config.opencodePassword) {
-      headers.authorization =
-        'Basic ' + Buffer.from(`${config.opencodeUsername}:${config.opencodePassword}`).toString('base64')
-    }
-    await $fetch(`${config.opencodeUrl}/app`, { headers, timeout: 3000 }).catch(async () => {
-      // older/newer servers expose different roots; any HTTP response means reachable
-      await $fetch(`${config.opencodeUrl}/config`, { headers, timeout: 3000 })
-    })
-    opencode = true
-  } catch {
-    opencode = false
+  const profile = await getServerProfile(true).catch(() => null)
+  return {
+    ok: true,
+    opencode: Boolean(profile?.reachable),
+    protocol: profile?.protocol,
+    version: profile?.version
   }
-  return { ok: true, opencode }
 })

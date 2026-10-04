@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/question/request?location%5Bdirectory%5D=C%3A%5Cwork"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "location": {
+      "directory": "C:\\work",
+      "project": {
+        "id": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+        "directory": "C:\\work"
+      }
+    },
+    "data": [
+      {
+        "id": "que_10494c4940018MjCGebkhiFKZY",
+        "sessionID": "ses_efb6b4642ffedDM7FFyDoLBC2c",
+        "questions": [
+          {
+            "question": "Pick one?",
+            "header": "Pick",
+            "options": [
+              {
+                "label": "A",
+                "description": "first"
+              },
+              {
+                "label": "B",
+                "description": "second"
+              }
+            ]
+          }
+        ],
+        "tool": {
+          "messageID": "msg_10494c48b001qdohQASZm26e4j",
+          "callID": "call_1791078220939"
+        }
+      }
+    ]
+  }
+}

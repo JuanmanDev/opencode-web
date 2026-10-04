@@ -4,6 +4,7 @@ import type { Project, SessionInfo } from '#shared/types/opencode'
 const api = useOpencodeApi()
 const { recents, load: loadRecents, remember, forget } = useRecentProjects()
 const projectMeta = useProjectMeta()
+const caps = useCapabilities()
 
 const projects = ref<Project[]>([])
 const projectsLoading = ref(true)
@@ -240,6 +241,11 @@ function saveEdit() {
           No projects yet — type a folder path above or browse the server.
         </div>
       </div>
+      <!-- which server and protocol this UI is talking to -->
+      <p class="w-full max-w-2xl mt-6 text-[11px] text-dimmed font-mono text-center">
+        opencode{{ caps.version ? ` ${caps.version}` : '' }} ·
+        {{ caps.protocol === 'v2' ? 'v2 protocol (/api)' : 'v1 API' }}
+      </p>
     </div>
 
     <DirectoryBrowser v-model:open="browserOpen" @select="openProject" />

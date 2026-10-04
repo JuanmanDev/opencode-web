@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/session/ses_efb6b4642ffedDM7FFyDoLBC2c/prompt",
+    "body": {
+      "prompt": {
+        "text": "make a todo",
+        "files": [
+          {
+            "uri": "data:text/plain;base64,YXR0YWNoZWQh",
+            "name": "note.txt"
+          }
+        ]
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {
+      "admittedSeq": 33,
+      "id": "msg_10494c855001JLoejBBaKA7B0l",
+      "sessionID": "ses_efb6b4642ffedDM7FFyDoLBC2c",
+      "prompt": {
+        "text": "make a todo",
+        "files": [
+          {
+            "uri": "data:text/plain;base64,YXR0YWNoZWQh",
+            "mime": "text/plain",
+            "name": "note.txt"
+          }
+        ]
+      },
+      "delivery": "steer",
+      "timeCreated": 1791078221909
+    }
+  }
+}

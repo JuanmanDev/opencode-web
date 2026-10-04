@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/location?location%5Bdirectory%5D=C%3A%5Cwork"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "directory": "C:\\work",
+    "project": {
+      "id": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+      "directory": "C:\\work"
+    }
+  }
+}

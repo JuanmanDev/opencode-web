@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/active"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {
+      "ses_efb6b4642ffedDM7FFyDoLBC2c": {
+        "type": "running"
+      }
+    }
+  }
+}

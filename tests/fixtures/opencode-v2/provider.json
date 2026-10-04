@@ -1,0 +1,66 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/provider?location%5Bdirectory%5D=C%3A%5Cwork"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "location": {
+      "directory": "C:\\work",
+      "project": {
+        "id": "3bcca03b01b621f067a74daf1e82cafb99a60546",
+        "directory": "C:\\work"
+      }
+    },
+    "data": [
+      {
+        "id": "opencode",
+        "name": "OpenCode Zen",
+        "api": {
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "https://opencode.ai/zen/v1"
+        },
+        "request": {
+          "headers": {},
+          "body": {
+            "apiKey": "public"
+          }
+        }
+      },
+      {
+        "id": "mock",
+        "name": "Mock",
+        "api": {
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "http://127.0.0.1:4791/v1",
+          "settings": {
+            "apiKey": "sk-mock"
+          }
+        },
+        "request": {
+          "headers": {},
+          "body": {}
+        }
+      },
+      {
+        "id": "dead",
+        "name": "Dead",
+        "api": {
+          "type": "aisdk",
+          "package": "@ai-sdk/openai-compatible",
+          "url": "http://127.0.0.1:9/v1",
+          "settings": {
+            "apiKey": "sk-dead"
+          }
+        },
+        "request": {
+          "headers": {},
+          "body": {}
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/session/active"
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "data": {}
+  }
+}

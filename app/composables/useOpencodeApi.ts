@@ -96,8 +96,10 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
         body: messageID ? { messageID } : {},
         query: q()
       }),
+    // GET on every version: newer servers answer an unknown POST with their
+    // web UI's HTML (200), which made the diff view silently empty
     diff: (id: string) =>
-      ocFetch<unknown>(`${BASE}/session/${id}/diff`, { method: 'POST', body: {}, query: q() }),
+      ocFetch<unknown>(`${BASE}/session/${id}/diff`, { query: q() }),
 
     prompt: (id: string, body: {
       parts: Array<Record<string, unknown>>

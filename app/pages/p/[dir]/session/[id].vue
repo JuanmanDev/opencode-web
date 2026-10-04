@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Capabilities } from '~/composables/useCapabilities'
 import type {
   AgentInfo,
   MessageInfo,
@@ -11,6 +12,7 @@ import type {
 } from '#shared/types/opencode'
 
 const route = useRoute()
+const caps = useCapabilities()
 const directory = computed(() => decodeDir(route.params.dir as string))
 const sessionId = computed(() => route.params.id as string)
 
@@ -293,8 +295,8 @@ const sessionMenu = computed(() => {
   const fav = projectMeta.isFavorite(directory.value, sessionId.value)
   return [[
     { label: 'Rename', icon: 'i-lucide-pencil', onSelect: startTitleRename },
-    { label: 'Fork conversation', icon: 'i-lucide-git-branch', onSelect: () => forkSession() },
-    { label: 'Show file changes', icon: 'i-lucide-file-diff', onSelect: openDiff },
+    ...(caps.value.fork ? [{ label: 'Fork conversation', icon: 'i-lucide-git-branch', onSelect: () => forkSession() }] : []),
+    ...(caps.value.diff ? [{ label: 'Show file changes', icon: 'i-lucide-file-diff', onSelect: openDiff }] : []),
     {
       label: fav ? 'Unfavorite' : 'Favorite',
       icon: 'i-lucide-star',
@@ -509,6 +511,23 @@ function upsertPart(part: Part) {
   scrollToBottom()
 }
 
+/** `{ messageID, partID, field, delta }`: append to that part's text field. */
+function applyPartDelta(props: Record<string, any>) {
+  const { messageID, partID, delta } = props
+  const field = typeof props.field === 'string' ? props.field : 'text'
+  if (typeof delta !== 'string' || typeof partID !== 'string') return
+  const msg = messages.value.find((m) => m.info.id === messageID)
+  const idx = msg ? msg.parts.findIndex((p) => p.id === partID) : -1
+  if (!msg || idx < 0) {
+    // delta before its part: start one, the final message.part.updated fixes the rest
+    upsertPart({ id: partID, messageID, sessionID: props.sessionID, type: 'text', [field]: delta } as unknown as Part)
+    return
+  }
+  const part = msg.parts[idx] as Record<string, any>
+  msg.parts.splice(idx, 1, { ...part, [field]: (typeof part[field] === 'string' ? part[field] : '') + delta } as Part)
+  scrollToBottom()
+}
+
 useOpencodeEvents(directory, (event) => {
   const props = (event.properties || {}) as Record<string, any>
   switch (event.type) {
@@ -517,6 +536,11 @@ useOpencodeEvents(directory, (event) => {
       break
     case 'message.part.updated':
       if (props.part) upsertPart(props.part as Part)
+      break
+    case 'message.part.delta':
+      // opencode >= 1.2 streams text as deltas; message.part.updated only
+      // carries the empty part at start and the full one at the end
+      if (props.sessionID === sessionId.value) applyPartDelta(props)
       break
     case 'message.removed':
       if (props.sessionID === sessionId.value) {
@@ -646,8 +670,10 @@ const BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
   { name: 'test', description: 'UI demos, e.g. /test question' }
 ]
 
+// built-ins the connected server can't run are not offered
+const UNSUPPORTED_BUILTIN: Record<string, keyof Capabilities> = { share: 'share', mcp: 'mcp' }
 const allCommands = computed(() => [
-  ...BUILTIN_COMMANDS,
+  ...BUILTIN_COMMANDS.filter((c) => !UNSUPPORTED_BUILTIN[c.name] || caps.value[UNSUPPORTED_BUILTIN[c.name]!]),
   ...commands.value.map((c) => ({
     name: c.name,
     description: c.description || `${c.source || 'custom'} command`
@@ -716,6 +742,10 @@ function send(payload: PromptPayload) {
   if (trimmed.startsWith('!')) {
     const cmd = trimmed.slice(1).trim()
     if (!cmd) return
+    if (!caps.value.shell) {
+      note('❌ shell commands are not available on this opencode server (v2 protocol)')
+      return
+    }
     busy.value = true
     note(`$ ${cmd}`)
     api.shell(sessionId.value, cmd).catch((e) => {
@@ -725,7 +755,7 @@ function send(payload: PromptPayload) {
     return
   }
   // /mcp … -> handled locally by the UI, never sent to the agent
-  if (trimmed.startsWith('/mcp')) {
+  if (trimmed.startsWith('/mcp') && caps.value.mcp) {
     runMcpCommand(payload.text)
     return
   }
@@ -859,7 +889,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       <UBadge v-if="busy" color="warning" variant="subtle" size="sm" class="animate-pulse shrink-0">working</UBadge>
       <span class="flex-1" :class="renamingTitle ? 'max-md:hidden' : ''" />
       <div class="hidden md:flex items-center gap-2 min-w-0">
-        <UTooltip text="Fork this conversation">
+        <UTooltip v-if="caps.fork" text="Fork this conversation">
           <UButton
             icon="i-lucide-git-branch"
             color="neutral"
@@ -870,7 +900,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             @click="forkSession()"
           />
         </UTooltip>
-        <UTooltip text="Show file changes">
+        <UTooltip v-if="caps.diff" text="Show file changes">
           <UButton
             icon="i-lucide-file-diff"
             color="neutral"
@@ -1006,6 +1036,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
             v-for="message in messages"
             :key="message.info.id"
             :message="message"
+            :can-fork="caps.fork"
             @fork="forkSession(message.info.id)"
             @retry="retryLast"
             @continue="continueRun"
