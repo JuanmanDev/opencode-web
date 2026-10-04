@@ -36,6 +36,7 @@ One origin means no CORS, no double auth, and SSE streaming included. **It works
 | 🧩 **MCP UI apps** | Tool results render live in sandboxed iframes: **MCP Apps** (SEP-1865 JSON-RPC host, theme & display-mode aware), mcp-ui **raw HTML**, **external URLs** and **remote-dom** components. Apps can move to a side panel or fullscreen, with shareable `?app=` links. Tools aren't re-run silently: only read-only ones are, and the rest get a **Render UI** button. A built-in demo server (`/mcp-demo`) showcases every flavour. [More →](docs/mcp.md#mcp-ui-apps) |
 | 🔑 **Provider config from the UI** | "Configure providers…" right inside the model dropdown adds or updates API keys without touching the server. Keys are never sent back to the browser. |
 | 📱 **Mobile first** | The desktop sidebar (resizable, collapsible to an icon rail, optional projects panel) becomes a slideover on phones. There are touch-sized controls, safe-area aware layouts and a prompt box that stays above the keyboard, so you can continue any session from your phone. Installable as a PWA. |
+| 🔄 **Any opencode version** | Works with every opencode 1.x server (1.0 → 1.18) and with servers that only speak the new **v2 protocol** (`/api/*`): the server detects which one it talks to and translates, so the UI behaves the same. Features a server lacks are hidden instead of failing. [More →](docs/compatibility.md) |
 | 🤖 **Scriptable** | REST API with an OpenAPI spec, an MCP server (`/mcp`) to drive opencode from Claude, Cursor or n8n, and WebMCP tools in the page. |
 | 🛡️ **Safe by default** | Fail-fast proxy with health states everywhere, CSRF origin checks, optional API token, secret redaction and strict iframe sandboxing. [More →](docs/security.md) |
 
@@ -126,12 +127,13 @@ flowchart LR
 - `server/middleware/security.ts`: CSRF origin check and the UI cookie for token mode
 - `server/utils/mcp-client.ts`: MCP client (Streamable HTTP and legacy SSE) for discovery and UI recovery
 - `server/utils/mcp-stdio.ts`: stdio discovery for local servers
+- `server/utils/compat.ts` + `server/utils/compat/v2/*`: protocol detection and the v2 adapter (requests, events, message model)
 - `app/composables/useOpencodeApi.ts`: typed client, directory-scoped, feeds global health state
 - `app/composables/useOpencodeEvents.ts`: shared `EventSource` per project with reconnect
 - `app/pages/p/[dir]/…`: project shell (the directory travels base64url-encoded in the URL)
 - `app/components/chat/McpHtmlFrame.vue`: sandboxed renderer and MCP Apps host for MCP UI resources
 
-Verified against opencode **1.18.x**.
+Tested in CI against real opencode servers, from 1.0 to the latest release, plus the v2 protocol: see [docs/compatibility.md](docs/compatibility.md).
 
 ## API & MCP
 
@@ -169,6 +171,7 @@ Tools: `list_projects`, `create_project`, `list_sessions`, `create_session`, `se
 | `NUXT_OPENCODE_URL` | `http://127.0.0.1:4096` | opencode server base URL |
 | `NUXT_OPENCODE_USERNAME` | `opencode` | basic-auth user |
 | `NUXT_OPENCODE_PASSWORD` | *(empty)* | basic-auth password |
+| `NUXT_OPENCODE_PROTOCOL` | `auto` | `auto` / `legacy` (1.x API) / `v2` (`/api/*` only): which opencode API to speak |
 | `NUXT_API_TOKEN` | *(empty)* | bearer token for `/api/v1/*`, `/mcp` and the proxy when set |
 | `NUXT_ALLOWED_ORIGINS` | *(empty)* | extra browser origins allowed to send POSTs (comma separated), e.g. an MCP inspector |
 | `NUXT_PUBLIC_DEMO_MCP_URL` | *(browser origin)* | URL at which opencode reaches the built-in `/mcp-demo` server (`http://web:3000/mcp-demo` in compose) |
@@ -189,6 +192,8 @@ npm run typecheck   # vue-tsc
 npm run test:unit   # vitest: MCP client (HTTP + SSE), redaction, directory encoding
 npm run build && npm run test:e2e   # playwright e2e against the mock, incl. MCP UI apps and mobile
 SCREENSHOTS=1 npm run test:e2e      # also regenerate docs/screenshots
+# real opencode (any version) + a mock model; COMPAT_PROTOCOL=v2 forces the v2 protocol
+OPENCODE_VERSION=1.18.34 npx playwright test -c playwright.compat.config.ts
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Conventional commits drive [semantic-release](https://github.com/semantic-release/semantic-release).
@@ -197,7 +202,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Conventional commits drive [semantic-rel
 
 | workflow | runs on | does |
 | --- | --- | --- |
-| **CI** | every PR and push to `main` | actionlint, typecheck, unit tests, Playwright e2e (+ screenshots), Docker build of both images with a smoke test (health, SSR, demo MCP, non-root, healthcheck), conventional-commit lint on PRs |
+| **CI** | every PR, push to `main` and weekly | actionlint, typecheck, unit tests, Playwright e2e (+ screenshots), the compat suite against real opencode servers (several 1.x versions + the v2 protocol), Docker build of both images with a smoke test (health, SSR, demo MCP, non-root, healthcheck), conventional-commit lint on PRs |
 | **Release** | after CI passes on `main` | semantic-release (version, changelog, GitHub release). It then builds both images natively on amd64 and arm64 runners, from the release tag, with SBOM and provenance, and publishes multi-arch manifests (`latest`, `X.Y.Z`, `X.Y`). It also runs a Trivy scan into the Security tab and commits the screenshots CI captured |
 | **Dependabot** | weekly | npm, GitHub Actions and Docker base images |
 

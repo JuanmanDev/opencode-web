@@ -67,6 +67,20 @@ The opencode server image ships `node`/`npx`, `python3` and `uv`/`uvx`. The `ope
 
 The URL must be reachable **from the opencode container**. In the bundled compose file that is `http://web:3000/mcp-demo`, which the MCP page uses automatically through `NUXT_PUBLIC_DEMO_MCP_URL`. The web app itself always calls its own demo server over the loopback address of the socket the request arrived on, so it also works behind a reverse proxy with forward auth.
 
+### Browser automation (Playwright MCP)
+
+Browser MCP servers need a real browser, which the opencode image doesn't ship. The compose file has an optional service with Microsoft's headless Playwright MCP server instead:
+
+```sh
+docker compose --profile browser up -d
+```
+
+```json
+{ "mcp": { "playwright": { "type": "remote", "url": "http://playwright-mcp:8931/mcp" } } }
+```
+
+It runs on the internal network only, with an isolated profile per session.
+
 ## Tool discovery
 
 opencode's API exposes MCP connection status but no MCP tool ids. The MCP page and the prompt box's per-conversation MCP picker need tool names, so the web app asks each server itself:
