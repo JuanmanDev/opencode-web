@@ -81,7 +81,7 @@ const uiMessages = [
       { id: 'prt_ui3', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'tool', callID: 'c5', tool: 'widgets_card',
         state: { status: 'completed', title: 'Deploy card', input: { service: 'api' }, output: 'api deployed', time: { start: now - 485000, end: now - 484000 },
           metadata: { content: [{ type: 'resource', resource: { uri: 'ui://widgets/card', mimeType: 'text/html', text: '<!doctype html><body style="font-family:monospace;background:#17171a;color:#d4d4dc;margin:0;padding:12px"><h3 id="t" style="margin:0">api deployed to production</h3><p>build #1234 · 2 min ago</p><script>parent.postMessage({type:"ui-lifecycle-iframe-ready"},"*")</script></body>' } }] } } },
-      { id: 'prt_x2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'text', text: 'Rendered the three widgets above.' },
+      { id: 'prt_x2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'text', text: 'Rendered the three widgets above.\n\n![status chart](https://images.example.com/chart.png?q=leak)' },
       { id: 'prt_s2', messageID: 'msg_a2', sessionID: 'ses_mock2', type: 'step-finish', cost: 0.011, tokens: { input: 2100, output: 300 } }
     ]
   }

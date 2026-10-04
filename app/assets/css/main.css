@@ -309,3 +309,26 @@ body {
   padding-bottom: max(var(--oc-pad, 0.5rem), env(safe-area-inset-bottom));
   padding-left: max(var(--oc-pad, 0.5rem), env(safe-area-inset-left));
 }
+
+/* external image in agent output, loaded only on click (see Markdown.vue) */
+.oc-markdown .oc-img-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  margin: 0.25rem 0;
+  padding: 0.375rem 0.625rem;
+  border: 1px dashed var(--ui-border-accented);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--ui-text-muted);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.oc-markdown .oc-img-gate::before {
+  content: '🖼';
+}
+.oc-markdown .oc-img-gate:hover {
+  color: var(--ui-text-highlighted);
+  border-color: var(--ui-border-inverted);
+}

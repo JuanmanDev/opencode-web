@@ -58,3 +58,18 @@ test('MCP credentials in the opencode config never reach the browser', async ({ 
   // everything else passes through untouched
   expect(config.mcp['ui-demo'].url).toBe('http://127.0.0.1:1/mcp-demo')
 })
+
+test('external images in agent output load only after a click', async ({ page }) => {
+  const external: string[] = []
+  await page.route('https://images.example.com/**', (route) => {
+    external.push(route.request().url())
+    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>' })
+  })
+  await page.goto(`/p/${Buffer.from(DIR).toString('base64url')}/session/ses_mock2`)
+  const gate = page.getByRole('button', { name: /Load image from images\.example\.com/ })
+  await expect(gate).toBeVisible()
+  expect(external).toHaveLength(0)
+  await gate.click()
+  await expect(page.locator('.oc-markdown img[alt="status chart"]')).toBeVisible()
+  expect(external).toEqual(['https://images.example.com/chart.png?q=leak'])
+})

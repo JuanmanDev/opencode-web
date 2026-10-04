@@ -59,3 +59,11 @@ export function requireApiToken(event: H3Event) {
   if (cookie && safeEqual(cookie, uiCookieValue(token))) return
   throw createError({ statusCode: 401, statusMessage: 'Unauthorized', message: 'Invalid or missing API token' })
 }
+
+/** Reject request bodies above `max` bytes before reading them (413). */
+export function assertBodySize(event: H3Event, max: number) {
+  const length = Number(getHeader(event, 'content-length') || 0)
+  if (length > max) {
+    throw createError({ statusCode: 413, statusMessage: 'Payload Too Large', message: `Body exceeds ${Math.round(max / 1024)} KiB` })
+  }
+}
