@@ -24,7 +24,7 @@
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.139",
+    "@iconify-json/lucide": "^1.2.140",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.4",
     "typescript": "^5.9.0",
