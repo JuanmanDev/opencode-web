@@ -20,7 +20,7 @@
     "@nuxt/ui": "^4.11.3",
     "isomorphic-dompurify": "^3.22.0",
     "marked": "^18.0.14",
-    "nuxt": "^4.5.2",
+    "nuxt": "^4.6.0",
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
