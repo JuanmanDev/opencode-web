@@ -528,14 +528,42 @@ function applyPartDelta(props: Record<string, any>) {
   scrollToBottom()
 }
 
+// Some servers (opencode 1.14.x) stream text deltas but never send
+// message.updated / message.part.updated: user messages and tool cards would
+// only appear after a reload. While a run is busy without part events, and
+// once it goes idle, the REST list is the source of truth.
+let lastPartEventAt = 0
+let syncTimer: ReturnType<typeof setTimeout> | undefined
+let syncing = false
+function syncMessages(delay = 0) {
+  if (syncTimer) return
+  syncTimer = setTimeout(async () => {
+    syncTimer = undefined
+    if (syncing || loading.value) return
+    syncing = true
+    try {
+      const msgs = await api.messages(sessionId.value)
+      if (msgs.length >= messages.value.filter((m) => !m.info.id.startsWith('local-')).length) {
+        messages.value = msgs
+        scrollToBottom()
+      }
+    } catch { /* keep the live view */ } finally {
+      syncing = false
+    }
+  }, delay)
+}
+onBeforeUnmount(() => clearTimeout(syncTimer))
+
 useOpencodeEvents(directory, (event) => {
   const props = (event.properties || {}) as Record<string, any>
   switch (event.type) {
     case 'message.updated':
       if (props.info) upsertMessage(props.info as MessageInfo)
+      if (props.info?.sessionID === sessionId.value) lastPartEventAt = Date.now()
       break
     case 'message.part.updated':
       if (props.part) upsertPart(props.part as Part)
+      if (props.part?.sessionID === sessionId.value) lastPartEventAt = Date.now()
       break
     case 'message.part.delta':
       // opencode >= 1.2 streams text as deltas; message.part.updated only
@@ -548,11 +576,19 @@ useOpencodeEvents(directory, (event) => {
       }
       break
     case 'session.idle':
-      if (props.sessionID === sessionId.value) onSessionIdle()
+      if (props.sessionID === sessionId.value) {
+        onSessionIdle()
+        syncMessages(300)
+      }
       break
     case 'session.status':
       // newer servers: { sessionID, status: { type: 'idle' | 'busy' | 'retry' } }
-      if (props.sessionID === sessionId.value && props.status?.type === 'idle') onSessionIdle()
+      if (props.sessionID === sessionId.value && props.status?.type === 'idle') {
+        onSessionIdle()
+        syncMessages(300)
+      } else if (props.sessionID === sessionId.value && Date.now() - lastPartEventAt > 2500) {
+        syncMessages(1500)
+      }
       break
     case 'session.error': {
       const sid = props.sessionID
