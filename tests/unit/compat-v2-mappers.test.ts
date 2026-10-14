@@ -4,6 +4,7 @@ import {
   assistantInfo,
   deriveTitle,
   expandCommand,
+  formAnswerFromLegacy,
   isDefaultTitle,
   mapContent,
   mapError,
@@ -20,6 +21,7 @@ import {
   toLegacyMessages,
   toLegacyPermission,
   toLegacyProviders,
+  toLegacyQuestionFromForm,
   toLegacySession,
   toolTitle,
   userMessage
@@ -496,5 +498,104 @@ describe('prompts and commands', () => {
       cost: 0,
       tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
     })
+  })
+})
+
+// ---- opencode 2.x (`@opencode/cli` 2.0.29) REST shapes ----
+const raw2x = (name: string) =>
+  JSON.parse(readFileSync(new URL(`../fixtures/opencode-2x/${name}`, import.meta.url), 'utf8'))
+
+describe('opencode 2.x messages', () => {
+  it('hides idle markers and maps tool metadata (`metadata` instead of `structured`)', () => {
+    const sessionID = 'ses_parent'
+    const out = toLegacyMessages(raw2x('messages-subagent.json').data, { sessionID, active: false })
+    expect(out.map((m) => m.info.role)).toEqual(['user', 'assistant', 'assistant'])
+    const tool = out[1]!.parts.find((p) => p.type === 'tool')
+    const child = 'ses_ec3795a17ffed0XFOMqn70Fq8P'
+    expect(tool).toMatchObject({
+      tool: 'subagent',
+      state: { status: 'completed', title: 'probe', metadata: { sessionID: child, sessionId: child, status: 'completed' } }
+    })
+    expect(tool.state.output).toContain('Hello from the mock model.')
+  })
+
+  it('maps the shell tool and its permission request', () => {
+    const out = toLegacyMessages(raw2x('messages-shell-tool.json').data, { sessionID: 's', active: false })
+    expect(out[1]!.parts.find((p) => p.type === 'tool')).toMatchObject({
+      tool: 'shell',
+      state: { status: 'completed', output: 'hello-v2\n', title: 'echo hello-v2', metadata: { exit: 0 } }
+    })
+    const [request] = raw2x('permission-request-list.json').data
+    expect(toLegacyPermission(request)).toMatchObject({
+      id: request.id,
+      permission: 'shell',
+      title: 'Run: echo hello-v2',
+      tool: { messageID: request.source.messageID, callID: request.source.id },
+      callID: request.source.id
+    })
+  })
+
+  it('a dismissed question is an abort, not an error', () => {
+    const out = toLegacyMessages(raw2x('messages-reject.json').data, { sessionID: 's', active: false })
+    expect(out[1]!.info.error).toEqual({ name: 'MessageAbortedError', data: { message: 'Step interrupted' } })
+    expect(out[1]!.parts.find((p) => p.type === 'tool')!.state).toMatchObject({ status: 'error', error: 'The user dismissed this question' })
+    expect(mapError({ type: 'unknown', message: 'boom' })).toEqual({ name: 'UnknownError', data: { message: 'boom' } })
+  })
+
+  it('maps user-run shells (`shell` messages with status/output objects) and compactions', () => {
+    const out = toLegacyMessages([
+      { id: 'msg_1', type: 'user', text: 'hi', time: { created: 1 } },
+      { id: 'msg_2', type: 'shell', shellID: 'sh_1', command: 'ls', status: 'exited', exit: 0, output: { output: 'a\nb\n', cursor: 4, size: 4, truncated: false }, time: { created: 2, completed: 3 } },
+      { id: 'msg_3', type: 'compaction', status: 'completed', reason: 'manual', summary: 'Summary.', recent: '', time: { created: 4 } },
+      { id: 'msg_4', type: 'compaction', status: 'failed', reason: 'auto', error: { type: 'unknown', message: 'too big' }, time: { created: 5 } },
+      { id: 'msg_5', type: 'skill', skill: 'sk', name: 'sk', text: '…', time: { created: 6 } },
+      { id: 'msg_6', type: 'idle', outcome: 'succeeded', time: { created: 7 } }
+    ], { sessionID: 's', active: false })
+    expect(out.map((m) => m.info.id)).toEqual(['msg_1', 'msg_2', 'msg_3', 'msg_4'])
+    expect(out[1]!.parts[0]).toMatchObject({ tool: 'bash', callID: 'sh_1', state: { status: 'completed', output: 'a\nb\n', input: { command: 'ls' } } })
+    expect(out[2]!.parts[0]).toMatchObject({ type: 'text', text: 'Summary.' })
+    expect(out[2]!.info).toMatchObject({ summary: true, finish: 'stop' })
+    expect(out[3]!.info).toMatchObject({ summary: true, finish: 'error', error: { data: { message: 'too big' } } })
+  })
+
+  it('a running 2.x tool (`streaming`) is pending', () => {
+    expect(mapToolState('shell', { status: 'streaming', input: '{"comm' })).toEqual({ status: 'pending', input: {}, raw: '{"comm' })
+  })
+
+  it('session rows: children carry parentID and agent, forks do not', () => {
+    const [child] = raw2x('session-list-children.json').data
+    expect(toLegacySession(child)).toMatchObject({ parentID: expect.stringMatching(/^ses_/), agent: 'general', title: 'probe' })
+    const fork = toLegacySession(raw2x('session-fork.json').data)
+    expect(fork.parentID).toBeUndefined()
+    expect(fork.title).toMatch(/\(fork #1\)$/)
+    expect(toLegacySession(raw2x('session-get.json').data)).toMatchObject({ tokens: { input: 360, output: 36 } })
+  })
+})
+
+describe('opencode 2.x forms <-> legacy questions', () => {
+  const form = raw2x('form-get.json').data
+
+  it('turns a question form into the question card request', () => {
+    expect(toLegacyQuestionFromForm(form)).toEqual({
+      id: form.id,
+      sessionID: form.sessionID,
+      questions: [{ question: 'Pick one?', header: 'Pick', options: [{ label: 'A', description: 'first' }, { label: 'B', description: 'second' }], custom: true }],
+      tool: { messageID: form.metadata.tool.messageID, callID: form.metadata.tool.id }
+    })
+  })
+
+  it('turns card answers back into a form answer (labels -> values, typed fields)', () => {
+    expect(formAnswerFromLegacy(form, [['A']])).toEqual({ q0: 'A' })
+    expect(formAnswerFromLegacy(form, [['my own answer']])).toEqual({ q0: 'my own answer' })
+    const typed = {
+      fields: [
+        { key: 'many', type: 'multiselect', options: [{ value: 'v1', label: 'One' }, { value: 'v2', label: 'Two' }] },
+        { key: 'ok', type: 'boolean' },
+        { key: 'n', type: 'integer' },
+        { key: 'skip', type: 'string', hidden: true },
+        { key: 'link', type: 'external', url: 'https://x' }
+      ]
+    }
+    expect(formAnswerFromLegacy(typed, [['One', 'Two'], ['yes'], ['3']])).toEqual({ many: ['v1', 'v2'], ok: true, n: 3 })
   })
 })

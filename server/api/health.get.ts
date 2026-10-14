@@ -7,6 +7,8 @@ export default defineEventHandler(async () => {
     ok: true,
     opencode: Boolean(profile?.reachable),
     protocol: profile?.protocol,
-    version: profile?.version
+    version: profile?.version,
+    // '1.18' = the /api of 1.x hybrids, '2' = opencode 2.x
+    dialect: (profile as { dialect?: string } | null)?.dialect
   }
 })

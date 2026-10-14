@@ -1,0 +1,214 @@
+{
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/provider",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "id": "opencode",
+      "integrationID": "opencode",
+      "name": "OpenCode",
+      "activation": "enabled",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+       "apiKey": "public",
+       "baseURL": "https://opencode.ai/inference/v1"
+      }
+     },
+     {
+      "id": "mock",
+      "name": "Mock",
+      "activation": "enabled",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+       "apiKey": "sk-mock",
+       "baseURL": "http://127.0.0.1:4951/v1",
+       "provider": "mock"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/model",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "id": "cat-jam-free",
+      "modelID": "cat-jam-free",
+      "providerID": "opencode",
+      "name": "Cat Jam Free",
+      "compatibility": {
+       "reasoningField": "reasoning_content"
+      },
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+       "apiKey": "public",
+       "baseURL": "https://opencode.ai/inference/v1",
+       "provider": "opencode"
+      },
+      "capabilities": {
+       "tools": true,
+       "input": [
+        "text"
+       ],
+       "output": [
+        "text"
+       ]
+      },
+      "variants": [
+       {
+        "id": "low",
+        "settings": {
+         "reasoningEffort": "low"
+        }
+       },
+       {
+        "id": "medium",
+        "settings": {
+         "reasoningEffort": "medium"
+        }
+       },
+       {
+        "id": "high",
+        "settings": {
+         "reasoningEffort": "high"
+        }
+       },
+       {
+        "id": "xhigh",
+        "settings": {
+         "reasoningEffort": "xhigh"
+        }
+       },
+       {
+        "id": "max",
+        "settings": {
+         "reasoningEffort": "max"
+        }
+       }
+      ],
+      "time": {
+       "released": 1791763200000
+      },
+      "cost": [
+       {
+        "input": 0,
+        "output": 0,
+        "cache": {
+         "read": 0,
+         "write": 0
+        }
+       }
+      ],
+      "status": "active",
+      "enabled": true,
+      "limit": {
+       "context": 262144,
+       "output": 131072
+      }
+     },
+     {
+      "id": "mock-model",
+      "modelID": "mock-model",
+      "providerID": "mock",
+      "name": "Mock Model",
+      "compatibility": {
+       "reasoningField": "reasoning_content"
+      },
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+       "apiKey": "public",
+       "baseURL": "https://opencode.ai/inference/v1",
+       "provider": "opencode"
+      },
+      "capabilities": {
+       "tools": true,
+       "input": [
+        "text"
+       ],
+       "output": [
+        "text"
+       ]
+      },
+      "variants": [
+       {
+        "id": "low",
+        "settings": {
+         "reasoningEffort": "low"
+        }
+       },
+       {
+        "id": "medium",
+        "settings": {
+         "reasoningEffort": "medium"
+        }
+       },
+       {
+        "id": "high",
+        "settings": {
+         "reasoningEffort": "high"
+        }
+       },
+       {
+        "id": "xhigh",
+        "settings": {
+         "reasoningEffort": "xhigh"
+        }
+       },
+       {
+        "id": "max",
+        "settings": {
+         "reasoningEffort": "max"
+        }
+       }
+      ],
+      "time": {
+       "released": 1791763200000
+      },
+      "cost": [
+       {
+        "input": 0,
+        "output": 0,
+        "cache": {
+         "read": 0,
+         "write": 0
+        }
+       }
+      ],
+      "status": "active",
+      "enabled": true,
+      "limit": {
+       "context": 262144,
+       "output": 131072
+      }
+     }
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/agent",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": []
+   }
+  }
+ ]
+}

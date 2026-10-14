@@ -1,0 +1,193 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "mcp": {
+    "probe2": {
+     "enabled": true
+    }
+   }
+  }
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/config",
+   "directory": "WORK",
+   "status": 200,
+   "response": [
+    {
+     "type": "document",
+     "path": "C:\\cfg\\opencode.json",
+     "info": {
+      "$schema": "https://opencode.ai/config.json",
+      "model": {
+       "providerID": "mock",
+       "model": "mock-model"
+      },
+      "update": "disable",
+      "share": "disabled",
+      "permissions": [
+       {
+        "action": "shell",
+        "resource": "*",
+        "effect": "ask"
+       },
+       {
+        "action": "probe2_*",
+        "resource": "*",
+        "effect": "ask"
+       }
+      ],
+      "agents": {
+       "title": {
+        "model": {
+         "providerID": "mock",
+         "model": "mock-model"
+        }
+       }
+      },
+      "mcp": {
+       "servers": {
+        "probe": {
+         "type": "local",
+         "command": [
+          "node",
+          "C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs"
+         ]
+        },
+        "remote1": {
+         "type": "remote",
+         "url": "http://127.0.0.1:1/mcp",
+         "headers": {
+          "Authorization": "Bearer x"
+         },
+         "oauth": false,
+         "disabled": true
+        },
+        "probe2": {
+         "type": "remote",
+         "url": "http://127.0.0.1:1/mcp",
+         "headers": {
+          "Authorization": "Bearer zzz"
+         },
+         "oauth": false,
+         "disabled": true
+        }
+       }
+      },
+      "providers": {
+       "mock": {
+        "name": "Mock",
+        "package": "aisdk:@ai-sdk/openai-compatible",
+        "settings": {
+         "apiKey": "sk-mock",
+         "baseURL": "http://127.0.0.1:4951/v1"
+        },
+        "models": {
+         "mock-model": {
+          "name": "Mock Model",
+          "capabilities": {
+           "tools": true,
+           "input": [
+            "text",
+            "image"
+           ],
+           "output": [
+            "text"
+           ]
+          },
+          "limit": {
+           "context": 100000,
+           "output": 4096
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    {
+     "type": "directory",
+     "path": "C:\\cfg"
+    }
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/fs/read/opencode.json",
+   "directory": "WORK",
+   "status": 404,
+   "response": {
+    "_tag": "FileNotFoundError",
+    "path": "opencode.json",
+    "message": "File not found: opencode.json"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/experimental/fs/write",
+   "query": {
+    "path": "C:\\work\\opencode.json"
+   },
+   "body": "{\n  \"mcp\": {\n    \"probe2\": {\n      \"type\": \"remote\",\n      \"url\": \"http://127.0.0.1:1/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer zzz\"\n      },\n      \"oauth\": false,\n      \"enabled\": true\n    }\n  },\n  \"$schema\": \"https://opencode.ai/config.json\"\n}\n",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": {
+     "path": "C:\\work\\opencode.json"
+    }
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/location/reload",
+   "status": 204
+  },
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": []
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "name": "probe",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "probe2",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "remote1",
+      "status": {
+       "status": "disabled"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

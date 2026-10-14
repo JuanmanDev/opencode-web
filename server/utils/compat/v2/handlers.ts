@@ -25,6 +25,23 @@ import {
   userMessage,
   type LegacyModelRef
 } from './mappers'
+import {
+  answersToForm,
+  applyLegacyPatch,
+  configTarget,
+  configToLegacy,
+  flatPromptBody,
+  formToQuestion,
+  mcpStatusToLegacy,
+  mcpToNative,
+  mergeInfos,
+  parseJsonc,
+  permissionTo118,
+  splitConfig,
+  type ConfigEntry,
+  type LegacyMcp,
+  type V2Dialect
+} from './next'
 
 /** MetaStore keys owned by the v2 adapter. */
 export const META_KEYS = {
@@ -47,8 +64,29 @@ export interface SessionMeta {
   lastActivity?: number
 }
 
-/** What an opencode v2 server (1.18.34) supports behind this adapter. */
-export function v2Capabilities(): Capabilities {
+/** What an opencode v2 server supports behind this adapter (1.18/1.19 `/api`, or 2.x). */
+export function v2Capabilities(dialect?: V2Dialect): Capabilities {
+  if (dialect === '2') {
+    // verified against opencode 2.0.29
+    return {
+      protocol: 'v2',
+      dialect: '2',
+      mcp: true,
+      config: true,
+      sessionRename: true,
+      sessionDelete: true,
+      fork: true,
+      share: false,
+      diff: true,
+      shell: true,
+      compact: true,
+      revert: true,
+      questions: true,
+      permissions: true,
+      todos: true,
+      cost: true
+    }
+  }
   return {
     protocol: 'v2',
     mcp: false,
@@ -230,9 +268,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Legacy request in, legacy-shaped answer out (throws CompatError / V2HttpError). */
-export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?: () => number }): (req: LegacyRequest) => Promise<unknown> {
+export function createV2Handler(deps: {
+  client: V2Client
+  meta: MetaStore
+  now?: () => number
+  /** which `/api` dialect the server speaks (default '1.18') */
+  dialect?: () => V2Dialect | undefined
+}): (req: LegacyRequest) => Promise<unknown> {
   const { client, meta } = deps
   const now = deps.now ?? Date.now
+  /** opencode 2.x: real MCP/config/session routes, flat prompt bodies, forms */
+  const two = () => deps.dialect?.() === '2'
   const locations = new Map<string, { at: number; value: Promise<V2Location> }>()
   const commandLists = new Map<string, { at: number; value: Promise<{ commands: any[]; skills: any[] }> }>()
   /** question/permission request id -> sessionID (replies are session-scoped in v2) */
@@ -351,7 +397,9 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
         ctx.call('/api/command', at(dir)),
         ctx.call('/api/skill', at(dir)).catch(() => undefined)
       ])
-      return { commands: asArray(commands?.data), skills: asArray(skills?.data) }
+      // 2.x skills have an id (the slash name) next to a display name
+      const skillList = asArray(skills?.data).map((s) => two() && s?.id ? { ...s, name: s.id } : s)
+      return { commands: asArray(commands?.data), skills: skillList }
     })
   }
 
@@ -454,8 +502,10 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     if (agent && agent !== session.agent) await ctx.call(`${base}/agent`, { method: 'POST', body: { agent } })
 
     const payload = promptBody(body)
-    const res = await ctx.call(`${base}/prompt`, { method: 'POST', body: payload })
+    const res = await ctx.call(`${base}/prompt`, { method: 'POST', body: two() ? flatPromptBody(payload) : payload })
     const admitted = res?.data ?? {}
+    // 2.x answers with the inbox entry: the prompt sits under `payload`
+    if (isObject(admitted.payload) && !admitted.prompt) admitted.prompt = admitted.payload
 
     // bookkeeping must never fail an admitted prompt
     const dir = session.location?.directory
@@ -499,6 +549,10 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
   // ---- routes ----
 
   const health = async (ctx: Ctx) => {
+    if (two()) {
+      const info = await ctx.call('/api/info')
+      return clean({ healthy: typeof info?.version === 'string', version: info?.version })
+    }
     const res = await ctx.call('/api/health')
     return { healthy: res?.healthy === true }
   }
@@ -558,10 +612,15 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     const title = typeof ctx.body.title === 'string' ? ctx.body.title.trim() : ''
     const res = await ctx.call('/api/session', {
       method: 'POST',
-      body: ctx.dir ? { location: { directory: ctx.dir } } : {}
+      body: clean({
+        location: ctx.dir ? { directory: ctx.dir } : undefined,
+        // 2.x stores titles itself
+        title: two() && title ? title : undefined,
+        parentID: two() && typeof ctx.body.parentID === 'string' ? ctx.body.parentID : undefined
+      })
     })
     const session = res?.data
-    if (title) await patchSessionMeta(session.id, { title, titleDerived: undefined })
+    if (title && !two()) await patchSessionMeta(session.id, { title, titleDerived: undefined })
     if (ctx.dir) {
       const dir = ctx.dir
       await updateMeta<string[]>(META_KEYS.directories, [], (list) =>
@@ -579,6 +638,10 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
 
   async function deleteSession(ctx: Ctx) {
     const id = ctx.params.id!
+    if (two()) {
+      await ctx.call(`/api/session/${enc(id)}`, { method: 'DELETE' })
+      return true
+    }
     await getSession(ctx, id) // unknown ids answer 404 like legacy
     await patchSessionMeta(id, { hidden: true })
     return true
@@ -586,6 +649,12 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
 
   async function renameSession(ctx: Ctx) {
     const id = ctx.params.id!
+    if (two() && typeof ctx.body.title === 'string' && ctx.body.title.trim()) {
+      await ctx.call(`/api/session/${enc(id)}`, { method: 'PATCH', body: { title: ctx.body.title.trim() } })
+      // a real title now wins over anything opencode-web stored
+      await patchSessionMeta(id, { title: undefined, titleDerived: undefined })
+      return legacySession(await getSession(ctx, id), await sessionMetas())
+    }
     const session = await getSession(ctx, id)
     if (typeof ctx.body.title === 'string') {
       await patchSessionMeta(id, { title: ctx.body.title.trim() || undefined, titleDerived: undefined })
@@ -627,6 +696,13 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     // v2 exposes no default model: last used here -> build agent's -> first listed
     let pick: { providerID: string; modelID: string } | undefined =
       last && exists(last.providerID, last.modelID) ? last : undefined
+    if (!pick && two()) {
+      // 2.x knows its configured default
+      const def = (await ctx.call('/api/model/default', at(ctx.dir)).catch(() => undefined))?.data
+      const providerID = def?.providerID
+      const modelID = def?.modelID ?? def?.id
+      if (exists(providerID, modelID)) pick = { providerID, modelID }
+    }
     if (!pick) {
       const agents = await ctx.call('/api/agent', at(ctx.dir)).catch(() => undefined)
       const model = asArray(agents?.data).find((a) => a?.id === 'build')?.model
@@ -662,7 +738,8 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
 
   async function compact(ctx: Ctx) {
     try {
-      await ctx.call(`/api/session/${enc(ctx.params.id!)}/compact`, { method: 'POST' })
+      // 2.x validates the (empty) body
+      await ctx.call(`/api/session/${enc(ctx.params.id!)}/compact`, { method: 'POST', ...(two() ? { body: {} } : {}) })
     } catch (error) {
       const http = httpError(error)
       if (http?.status === 503) throw new CompatError(503, http.body?.message || 'Session compact is not available yet')
@@ -689,9 +766,10 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     if (reply !== 'once' && reply !== 'always' && reply !== 'reject') {
       throw new CompatError(400, 'reply must be once, always or reject')
     }
+    const text = typeof message === 'string' && message ? message : undefined
     await ctx.call(`/api/session/${enc(sessionID)}/permission/${enc(requestID)}/reply`, {
       method: 'POST',
-      body: clean({ reply, message: typeof message === 'string' && message ? message : undefined })
+      body: two() ? clean({ decision: reply, message: text }) : clean({ reply, message: text })
     })
     owners.delete(requestID)
     return true
@@ -700,6 +778,18 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
   async function answerQuestion(ctx: Ctx, action: 'reply' | 'reject') {
     const requestID = ctx.params.requestID!
     if (action === 'reply' && !Array.isArray(ctx.body.answers)) throw new CompatError(400, 'answers must be an array')
+    if (two()) {
+      // 2.x: questions are forms owned by a session
+      const forms = asArray((await ctx.call('/api/form', at(ctx.dir)))?.data)
+      const form = forms.find((f) => f?.id === requestID)
+      const sessionID = form?.sessionID ?? owners.get(requestID)
+      if (!sessionID) throw new CompatError(404, `No pending request ${requestID}`)
+      const path = `/api/session/${enc(sessionID)}/form/${enc(requestID)}`
+      if (action === 'reply') await ctx.call(`${path}/reply`, { method: 'POST', body: { answer: answersToForm(form ?? {}, ctx.body.answers) } })
+      else await ctx.call(path, { method: 'DELETE' })
+      owners.delete(requestID)
+      return true
+    }
     const sessionID = await ownerOf(ctx, requestID, '/api/question/request')
     await ctx.call(`/api/session/${enc(sessionID)}/question/${enc(requestID)}/${action}`, {
       method: 'POST',
@@ -708,6 +798,231 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     owners.delete(requestID)
     return true
   }
+
+  // ---- opencode 2.x only ----
+
+  /** `GET /api/config` entries of a location (lowest priority first). */
+  async function configEntries(ctx: Ctx, dir: string | undefined): Promise<ConfigEntry[]> {
+    return asArray(await ctx.call('/api/config', at(dir))) as ConfigEntry[]
+  }
+
+  async function scopedConfig(ctx: Ctx) {
+    // the opened folder itself, not its project root: 2.x loads config from
+    // every folder above it, and a file up there may be the user's own (or
+    // with no git, the "project" is the whole drive). Only files inside the
+    // folder are written as project config, like 1.x did; files above it
+    // are inherited and never written; global = the global config folders.
+    // Without a directory (global routes) the server's own folder applies.
+    const loc = await location(ctx, ctx.dir).catch(() => undefined)
+    const projectDir = loc?.directory ?? ctx.dir
+    const entries = await configEntries(ctx, ctx.dir)
+    const { global, project } = splitConfig(entries, projectDir)
+    return { entries, global, project, projectDir }
+  }
+
+  const documents = (entries: ConfigEntry[]) =>
+    entries.filter((e) => e.type === 'document' && isObject(e.info)).map((e) => e.info!)
+
+  /** Legacy-shaped config: the merged view of a project, or the global documents only. */
+  async function getConfigNext(ctx: Ctx, scope: 'project' | 'global') {
+    const { entries, global } = await scopedConfig(ctx)
+    return configToLegacy(mergeInfos(documents(scope === 'global' ? global : entries)))
+  }
+
+  /** Raw document: fs/read is confined to a location, so read from the file's own folder. */
+  async function readDocument(ctx: Ctx, path: string): Promise<Dict> {
+    const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    const text = await ctx.call<string>(`/api/fs/read/${enc(path.slice(slash + 1))}`, {
+      directory: path.slice(0, slash),
+      text: true
+    }).catch((error) => {
+      if (httpError(error)?.status === 404) return ''
+      throw error
+    })
+    if (!String(text).trim()) return {}
+    try {
+      return parseJsonc(String(text))
+    } catch {
+      throw new CompatError(409, `${path} is not valid JSON: edit it by hand`)
+    }
+  }
+
+  /** Reload every loaded location; MCP status lists stay empty for a moment after. */
+  async function reloadNext(ctx: Ctx) {
+    await ctx.call('/api/location/reload', { method: 'POST' })
+    for (let i = 0; i < 10; i++) {
+      const res = await ctx.call('/api/mcp', at(ctx.dir)).catch(() => undefined)
+      if (asArray(res?.data).length) break
+      await sleep(300, ctx.req.signal)
+    }
+    return true
+  }
+
+  /**
+   * Legacy PATCH /config: merge into the scope's highest-priority document
+   * (or a new opencode.json), write it with fs/write and reload. 2.x reads
+   * v1-shaped documents, so the patch keeps the document's own dialect.
+   */
+  async function patchConfigNext(ctx: Ctx, scope: 'project' | 'global') {
+    const { entries, global, project, projectDir } = await scopedConfig(ctx)
+    const effective = configToLegacy(mergeInfos(documents(entries)))
+    const patches: Array<{ scope: 'project' | 'global'; body: Dict }> = []
+    if (scope === 'project' && isObject(ctx.body.mcp)) {
+      // 2.x drops enabled-only entries, and completing them here would copy a
+      // global server's credentials into the project's opencode.json: toggles
+      // of servers only the global config defines go to the global document
+      const projectMcp = configToLegacy(mergeInfos(documents(project))).mcp || {}
+      const globalMcp = configToLegacy(mergeInfos(documents(global))).mcp || {}
+      const moved: Dict = {}
+      const kept: Dict = {}
+      for (const [name, entry] of Object.entries(ctx.body.mcp as Dict)) {
+        const partial = isObject(entry) && !entry.type
+        if (partial && !(name in projectMcp) && name in globalMcp) moved[name] = entry
+        else kept[name] = entry
+      }
+      if (Object.keys(moved).length) patches.push({ scope: 'global', body: { mcp: moved } })
+      const rest: Dict = { ...ctx.body, mcp: kept }
+      if (!Object.keys(kept).length) delete rest.mcp
+      if (Object.keys(rest).length) patches.push({ scope: 'project', body: rest })
+    } else {
+      patches.push({ scope, body: ctx.body })
+    }
+    for (const patch of patches) {
+      const target = configTarget(patch.scope === 'global' ? global : project, patch.scope === 'project' ? projectDir : undefined)
+      if (!target) throw new CompatError(501, `opencode did not report a ${patch.scope} config location to write to`)
+      const doc = await readDocument(ctx, target)
+      const next = applyLegacyPatch(doc, patch.body, (effective.mcp || {}) as Record<string, LegacyMcp>)
+      if (!next.$schema) next.$schema = 'https://opencode.ai/config.json'
+      await ctx.call('/api/experimental/fs/write', {
+        method: 'POST',
+        query: { path: target },
+        body: `${JSON.stringify(next, null, 2)}\n`,
+        raw: true
+      })
+    }
+    await reloadNext(ctx)
+    return ctx.body
+  }
+
+  /** Whole-session diff: from the first user turn to the newest one. */
+  async function diffNext(ctx: Ctx) {
+    const id = ctx.params.id!
+    const raw = await rawMessages(ctx, id)
+    const users = raw.filter((m) => m?.type === 'user' && typeof m.id === 'string')
+    if (!users.length) return []
+    const res = await ctx.call(`/api/session/${enc(id)}/diff`, {
+      query: clean({ from: users[0].id, to: users.length > 1 ? users[users.length - 1].id : undefined })
+    })
+    return asArray(res?.data)
+  }
+
+  /** Newest message id of a session: replies to a 204 route are the ones after it. */
+  async function newestMessageID(ctx: Ctx, id: string): Promise<string> {
+    const res = await ctx.call(`/api/session/${enc(id)}/message`, { query: { order: 'desc', limit: 1 } })
+    return String(asArray(res?.data)[0]?.id ?? 'msg_')
+  }
+
+  /** Slash command through the server's own route (the command's agent/model apply). */
+  async function commandNext(ctx: Ctx) {
+    const id = ctx.params.id!
+    const name = String(ctx.body.command ?? '').replace(/^\//, '').trim()
+    if (!name) throw new CompatError(400, 'command is required')
+    const session = await getSession(ctx, id)
+    const base = `/api/session/${enc(id)}`
+    const model = modelRef(ctx.body.model, ctx.body.variant)
+    if (model && !sameModel(model, session.model)) await ctx.call(`${base}/model`, { method: 'POST', body: { model } })
+    const agent = typeof ctx.body.agent === 'string' && ctx.body.agent ? ctx.body.agent : undefined
+    if (agent && agent !== session.agent) await ctx.call(`${base}/agent`, { method: 'POST', body: { agent } })
+    const before = ctx.req.wait === false ? '' : await newestMessageID(ctx, id)
+    const files = promptBody({ parts: asArray(ctx.body.parts).filter((p) => p?.type === 'file') }).prompt.files
+    await ctx.call(`${base}/command`, {
+      method: 'POST',
+      body: clean({ name, text: typeof ctx.body.arguments === 'string' ? ctx.body.arguments : '', files, delivery: 'steer' })
+    })
+    await noteActivity(session, `/${name}`).catch(() => {})
+    if (ctx.req.wait === false) return {}
+    return waitForReply(ctx, { ...session, revert: undefined }, before)
+  }
+
+  const mcpAuth = unsupported('MCP OAuth from the web UI: sign in with `opencode mcp auth <name>` on the server')
+
+  const nextRoutes: Route[] = [
+    ['GET', 'config', (ctx) => getConfigNext(ctx, 'project')],
+    ['GET', 'global/config', (ctx) => getConfigNext(ctx, 'global')],
+    ['PATCH', 'config', (ctx) => patchConfigNext(ctx, 'project')],
+    ['PATCH', 'global/config', (ctx) => patchConfigNext(ctx, 'global')],
+    ['POST', 'instance/dispose', reloadNext],
+    ['POST', 'global/dispose', reloadNext],
+    // MCP
+    ['GET', 'mcp', async (ctx) => mcpStatusToLegacy((await ctx.call('/api/mcp', at(ctx.dir)))?.data)],
+    ['POST', 'mcp', async (ctx) => {
+      const name = typeof ctx.body.name === 'string' ? ctx.body.name.trim() : ''
+      if (!name || !isObject(ctx.body.config)) throw new CompatError(400, 'name and config are required')
+      // runtime only (until the next reload), like legacy POST /mcp; PATCH /config persists
+      await ctx.call(`/api/experimental/mcp/${enc(name)}`, { method: 'PUT', ...at(ctx.dir), body: { config: mcpToNative(ctx.body.config) } })
+      return mcpStatusToLegacy((await ctx.call('/api/mcp', at(ctx.dir)))?.data)
+    }],
+    ['DELETE', 'mcp/:name', async (ctx) => {
+      await ctx.call(`/api/experimental/mcp/${enc(ctx.params.name!)}`, { method: 'DELETE', ...at(ctx.dir) })
+      return true
+    }],
+    ['POST', 'mcp/:name/connect', async (ctx) => {
+      await ctx.call(`/api/experimental/mcp/${enc(ctx.params.name!)}/connect`, { method: 'POST', ...at(ctx.dir) })
+      return true
+    }],
+    ['POST', 'mcp/:name/disconnect', async (ctx) => {
+      await ctx.call(`/api/experimental/mcp/${enc(ctx.params.name!)}/disconnect`, { method: 'POST', ...at(ctx.dir) })
+      return true
+    }],
+    ['POST', 'mcp/:name/auth', mcpAuth],
+    ['POST', 'mcp/:name/auth/*', mcpAuth],
+    ['DELETE', 'mcp/:name/auth', mcpAuth],
+    // sessions
+    ['GET', 'session/:id/children', async (ctx) => {
+      const [list, metas] = await Promise.all([
+        pageAll(ctx, '/api/session', { parentID: ctx.params.id!, limit: PAGE }, MAX_SESSIONS),
+        sessionMetas()
+      ])
+      return list.filter((s) => !metas[s?.id]?.hidden).map((s) => legacySession(s, metas))
+    }],
+    ['POST', 'session/:id/fork', async (ctx) => {
+      const before = typeof ctx.body.messageID === 'string' && ctx.body.messageID ? ctx.body.messageID : undefined
+      const res = await ctx.call(`/api/session/${enc(ctx.params.id!)}/fork`, { method: 'POST', body: clean({ before }) })
+      return legacySession(res?.data, await sessionMetas())
+    }],
+    ['GET', 'session/:id/diff', diffNext],
+    ['POST', 'session/:id/diff', diffNext],
+    ['POST', 'session/:id/shell', async (ctx) => {
+      const command = typeof ctx.body.command === 'string' ? ctx.body.command.trim() : ''
+      if (!command) throw new CompatError(400, 'command is required')
+      await ctx.call(`/api/session/${enc(ctx.params.id!)}/shell`, { method: 'POST', body: { command } })
+      return true
+    }],
+    ['POST', 'session/:id/command', commandNext],
+    ['POST', 'session/:id/unrevert', async (ctx) => {
+      await ctx.call(`/api/session/${enc(ctx.params.id!)}/revert`, { method: 'DELETE' })
+      return true
+    }],
+    // questions are forms in 2.x
+    ['GET', 'question', async (ctx) => {
+      const forms = asArray((await ctx.call('/api/form', at(ctx.dir)))?.data)
+      const out: Dict[] = []
+      for (const form of forms) {
+        const question = formToQuestion(form)
+        if (!question) continue
+        remember(question.id, question.sessionID)
+        out.push(question)
+      }
+      return out
+    }],
+    ['GET', 'permission', async (ctx) => {
+      const data = asArray((await ctx.call('/api/permission/request', at(ctx.dir)))?.data)
+      for (const p of data) remember(p?.id, p?.sessionID)
+      return data.map((p) => toLegacyPermission(permissionTo118(p)))
+    }],
+    ['GET', 'skill', async (ctx) => asArray((await ctx.call('/api/skill', at(ctx.dir)))?.data)
+      .map((s) => ({ name: s.id ?? s.name, description: s.description, location: s.location ?? s.path ?? '', content: s.content ?? '' }))]
+  ]
 
   const routes: Route[] = [
     // discovery / config
@@ -734,6 +1049,11 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
       const { commands, skills } = await commandList(ctx, ctx.dir)
       return toLegacyCommands(commands, skills)
     }],
+    ['GET', 'skill', async (ctx) => asArray((await commandList(ctx, ctx.dir)).skills)
+      .map((s) => ({ name: s.name, description: s.description, location: s.location ?? s.path ?? '', content: s.content ?? '' }))],
+    // reloading the config: v2 has no instance lifecycle API
+    ['POST', 'instance/dispose', unsupported('config reload')],
+    ['POST', 'global/dispose', unsupported('config reload')],
     // MCP: absent in v2
     ['GET', 'mcp', () => ({})],
     ['POST', 'mcp', unsupported('MCP servers')],
@@ -747,7 +1067,13 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
     ['GET', 'session/:id', getSessionRoute],
     ['DELETE', 'session/:id', deleteSession],
     ['PATCH', 'session/:id', renameSession],
-    ['GET', 'session/:id/children', () => []],
+    ['GET', 'session/:id/children', async (ctx) => {
+      // no parent filter on 1.18/1.19: list the parent's project and pick its children
+      const parent = await getSession(ctx, ctx.params.id!)
+      const dir = parent?.location?.directory ?? parent?.directory ?? ctx.dir
+      const all = await listSessions({ ...ctx, dir })
+      return all.filter((s: { parentID?: string }) => s.parentID === ctx.params.id)
+    }],
     ['POST', 'session/:id/abort', async (ctx) => {
       await ctx.call(`/api/session/${enc(ctx.params.id!)}/interrupt`, { method: 'POST' })
       return true
@@ -812,7 +1138,7 @@ export function createV2Handler(deps: { client: V2Client; meta: MetaStore; now?:
   return async function handle(req: LegacyRequest): Promise<unknown> {
     const method = req.method.toUpperCase()
     const segments = req.path.split('?')[0]!.split('/').filter(Boolean).map(decode)
-    for (const [routeMethod, pattern, handler] of routes) {
+    for (const [routeMethod, pattern, handler] of two() ? [...nextRoutes, ...routes] : routes) {
       if (routeMethod !== method) continue
       const params = match(pattern, segments)
       if (!params) continue

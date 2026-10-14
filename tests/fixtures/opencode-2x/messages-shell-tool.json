@@ -1,0 +1,113 @@
+{
+ "data": [
+  {
+   "id": "msg_13c8783520019Wd9MJXPJxPN9X",
+   "time": {
+    "created": 1792016876378
+   },
+   "text": "call shell {\"command\":\"echo hello-v2\",\"description\":\"Echo\"}",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c878361001Ahze8SCjS8jHyg",
+   "time": {
+    "created": 1792016876391,
+    "streamed": 1792016876401,
+    "completed": 1792016877244
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "tool",
+     "id": "call_1792016876393",
+     "name": "shell",
+     "executed": false,
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "echo hello-v2",
+       "description": "Echo"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "hello-v2\n"
+       }
+      ],
+      "metadata": {
+       "status": "completed",
+       "truncated": false,
+       "exit": 0
+      }
+     },
+     "time": {
+      "created": 1792016876398,
+      "ran": 1792016876401,
+      "completed": 1792016877243
+     }
+    }
+   ],
+   "finish": "tool-calls",
+   "rawFinish": "tool_calls",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c8786c2001Wu5QUQka6Sw1xn",
+   "time": {
+    "created": 1792016877256,
+    "streamed": 1792016877531,
+    "completed": 1792016877532
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "text",
+     "text": "Tool finished OK."
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c8787dd001fKmqGhTOoqzfzR",
+   "time": {
+    "created": 1792016877533
+   },
+   "type": "idle",
+   "outcome": "succeeded"
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NzgzNTIwMDE5V2Q5TUpYUEp4UE45WCIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4Nzg3ZGQwMDFmS21xR2hUT29xemZ6UiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}

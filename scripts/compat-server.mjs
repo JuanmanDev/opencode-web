@@ -3,18 +3,27 @@
 // published version in an isolated home, so nothing touches your own config.
 //
 //   OPENCODE_VERSION=1.18.34 node scripts/compat-server.mjs
+//   OPENCODE_VERSION=2.0.29 node scripts/compat-server.mjs   # opencode 2.x (v2 API only)
+//   OPENCODE_VERSION=2-latest ...                            # newest 2.x
 //
-// The project directory the tests open is test-results/compat/work.
+// 1.x ships as `opencode-ai`, 2.x as `@opencode/cli`.
+// The project directory the tests open is <tmp>/opencode-web-compat/work
+// (COMPAT_ROOT overrides): outside any checkout on purpose, because opencode
+// 2.x loads opencode.json from every folder above the project, which must
+// never pick up (or receive writes meant for) someone's real config.
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
 const VERSION = process.env.OPENCODE_VERSION || 'latest'
+const IS_2X = /^2(\.|-latest$)/.test(VERSION)
+const PACKAGE = IS_2X ? `@opencode/cli@${VERSION === '2-latest' ? 'latest' : VERSION}` : `opencode-ai@${VERSION}`
 const PORT = Number(process.env.OPENCODE_PORT || 4810)
 const LLM_PORT = Number(process.env.MOCK_LLM_PORT || 4811)
 const PASSWORD = process.env.OPENCODE_SERVER_PASSWORD || 'compat-secret'
-const root = path.resolve('test-results/compat')
+const root = path.resolve(process.env.COMPAT_ROOT || path.join(os.tmpdir(), 'opencode-web-compat'))
 
 fs.rmSync(root, { recursive: true, force: true })
 const dirs = Object.fromEntries(
@@ -80,6 +89,6 @@ function shutdown(code) {
 process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
 
-console.log(`[compat] opencode-ai@${VERSION} on :${PORT}, mock model on :${LLM_PORT}, project ${dirs.work}`)
+console.log(`[compat] ${PACKAGE} on :${PORT}, mock model on :${LLM_PORT}, project ${dirs.work}`)
 run(process.execPath, [path.resolve('scripts/mock-llm.mjs')], { env, shell: false })
-run('npx', ['-y', `opencode-ai@${VERSION}`, 'serve', '--port', String(PORT), '--hostname', '127.0.0.1'], { env, cwd: dirs.work })
+run('npx', ['-y', PACKAGE, 'serve', '--port', String(PORT), '--hostname', '127.0.0.1'], { env, cwd: dirs.work })

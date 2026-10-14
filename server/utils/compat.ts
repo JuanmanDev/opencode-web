@@ -3,7 +3,9 @@
 //
 // - legacy: every opencode 1.x server (`/session`, `/event`, …). Default, and
 //   preferred whenever available, also on 1.18 hybrids that serve both.
-// - v2: servers that only speak the new `/api/*` protocol (opencode 2.x).
+// - v2: servers that only speak the new `/api/*` protocol. Two dialects:
+//   '1.18' (the `/api` of 1.18/1.19 hybrids, forced with NUXT_OPENCODE_PROTOCOL=v2)
+//   and '2' (opencode 2.x, `@opencode/cli`: `/api/info`, MCP, config, forms).
 //   Requests are translated by compat/v2/handlers, events by compat/v2/events.
 //
 // Detection is cached; NUXT_OPENCODE_PROTOCOL=legacy|v2 skips it.
@@ -13,11 +15,14 @@ import { joinURL } from 'ufo'
 import { createV2EventHub } from './compat/v2/events'
 import { createV2Handler, v2Capabilities } from './compat/v2/handlers'
 import { toLegacyMessages } from './compat/v2/mappers'
+import type { V2Dialect } from './compat/v2/next'
 import { CompatError, V2HttpError, type Capabilities, type LegacyRequest, type MetaStore, type V2Client, type V2RequestOptions } from './compat/v2/types'
 
 export interface ServerProfile {
   protocol: 'legacy' | 'v2'
-  /** from /global/health; v2-only servers report none */
+  /** v2 only: hybrid-era `/api` ('1.18') or opencode 2.x ('2') */
+  dialect?: V2Dialect
+  /** from /global/health, or /api/info on 2.x */
   version?: string
   /** a legacy server that also serves the v2 `/api/*` protocol (1.18+) */
   hybrid: boolean
@@ -51,11 +56,27 @@ async function probeJson(path: string): Promise<{ status: number; body?: any }> 
 let profile: ServerProfile | undefined
 let detecting: Promise<ServerProfile> | undefined
 
+/** opencode 2.x answers `/api/info` with its version; 1.18/1.19 have `/api/health` instead. */
+async function probeV2(now: number): Promise<ServerProfile | undefined> {
+  const info = await probeJson('/api/info')
+  if (info.status === 200 && typeof info.body?.version === 'string') {
+    return { protocol: 'v2', dialect: '2', version: info.body.version, hybrid: false, reachable: true, checkedAt: now }
+  }
+  const api = await probeJson('/api/health')
+  if (api.status === 200 && api.body?.healthy === true) {
+    return { protocol: 'v2', dialect: '1.18', hybrid: false, reachable: true, checkedAt: now }
+  }
+  return undefined
+}
+
 async function detect(): Promise<ServerProfile> {
   const forced = String(useRuntimeConfig().opencodeProtocol || 'auto')
   const now = Date.now()
-  if (forced === 'v2') return { protocol: 'v2', hybrid: false, reachable: true, checkedAt: now }
+  if (forced === 'v2') {
+    return (await probeV2(now)) ?? { protocol: 'v2', dialect: '1.18', hybrid: false, reachable: false, checkedAt: now }
+  }
 
+  // 2.x serves its web app on unknown paths: /global/health is then HTML (= missing)
   const health = await probeJson('/global/health')
   if (health.status === 200 && health.body?.healthy) {
     const api = forced === 'legacy' ? undefined : await probeJson('/api/health')
@@ -68,10 +89,8 @@ async function detect(): Promise<ServerProfile> {
     }
   }
   if (forced !== 'legacy') {
-    const api = await probeJson('/api/health')
-    if (api.status === 200 && api.body?.healthy === true) {
-      return { protocol: 'v2', hybrid: false, reachable: true, checkedAt: now }
-    }
+    const v2 = await probeV2(now)
+    if (v2) return v2
   }
   // early 1.0 servers have no /global/health: any answer from a legacy route
   const legacy = await probeJson('/config')
@@ -113,16 +132,17 @@ function createRealV2Client(): V2Client {
       const res = await fetch(url(path, opts), {
         method: opts.method || 'GET',
         headers: {
-          accept: 'application/json',
-          ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
+          accept: opts.text ? '*/*' : 'application/json',
+          ...(opts.body !== undefined ? { 'content-type': opts.raw ? 'application/octet-stream' : 'application/json' } : {}),
           ...authHeaders()
         },
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        body: opts.body !== undefined ? (opts.raw ? String(opts.body) : JSON.stringify(opts.body)) : undefined,
         signal: opts.signal
           ? AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs ?? 30_000)])
           : AbortSignal.timeout(opts.timeoutMs ?? 30_000)
       })
       const text = await res.text()
+      if (opts.text && res.ok) return text
       let body: any
       try { body = text ? JSON.parse(text) : undefined } catch { body = { message: text.slice(0, 300) } }
       if (!res.ok) throw new V2HttpError(res.status, body)
@@ -152,7 +172,7 @@ let v2: { client: V2Client; handle: ReturnType<typeof createV2Handler>; hub: Ret
 function v2Runtime() {
   if (!v2) {
     const client = createRealV2Client()
-    const handle = createV2Handler({ client, meta: nitroMetaStore() })
+    const handle = createV2Handler({ client, meta: nitroMetaStore(), dialect: () => profile?.dialect ?? '1.18' })
     v2 = {
       client,
       handle,
@@ -190,7 +210,7 @@ export async function v2MessagesFallback(sessionID: string, directory?: string) 
 /** Feature map for the UI (GET /api/v1/capabilities). */
 export async function getCapabilities(): Promise<Capabilities> {
   const p = await getServerProfile()
-  if (p.protocol === 'v2') return v2Capabilities()
+  if (p.protocol === 'v2') return { ...v2Capabilities(p.dialect), ...(p.version ? { version: p.version } : {}) }
   return legacyCapabilities(p.version)
 }
 

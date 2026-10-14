@@ -22,6 +22,14 @@ flowchart LR
 
 Both are multi-arch (`linux/amd64`, `linux/arm64`) and ship SBOM and provenance attestations.
 
+The server image ships opencode 1.x. To run **opencode 2.x** instead, build it yourself; the web app detects 2.x on its own:
+
+```sh
+docker build -f Dockerfile.opencode --build-arg OPENCODE_PACKAGE=@opencode/cli --build-arg OPENCODE_VERSION=2.0.29 -t opencode-server:2 .
+```
+
+opencode 2.x reads `opencode.json` from the project folder and from **every folder above it**, so a config file in a parent of `/projects` applies to every project.
+
 ## With Traefik + tinyauth
 
 The repository's [`docker-compose.yml`](../docker-compose.yml) is ready for it: copy `.env.example` to `.env`, set `OPENCODE_SERVER_PASSWORD`, `PROJECTS_DIR`, `WEB_DOMAIN` and your provider keys, then:

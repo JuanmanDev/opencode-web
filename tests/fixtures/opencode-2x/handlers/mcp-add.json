@@ -1,0 +1,72 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "probe": {
+    "status": "pending"
+   },
+   "probe2": {
+    "status": "pending"
+   },
+   "remote1": {
+    "status": "disabled"
+   },
+   "rt": {
+    "status": "disabled"
+   }
+  }
+ },
+ "calls": [
+  {
+   "method": "PUT",
+   "path": "/api/experimental/mcp/rt",
+   "directory": "WORK",
+   "body": {
+    "config": {
+     "type": "remote",
+     "url": "http://127.0.0.1:1/mcp",
+     "disabled": true
+    }
+   },
+   "status": 204
+  },
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "name": "probe",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "probe2",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "remote1",
+      "status": {
+       "status": "disabled"
+      }
+     },
+     {
+      "name": "rt",
+      "status": {
+       "status": "disabled"
+      },
+      "integrationID": "mcp_198714c5c83009bd"
+     }
+    ]
+   }
+  }
+ ]
+}

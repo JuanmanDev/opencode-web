@@ -1,0 +1,64 @@
+{
+ "result": {
+  "ok": true,
+  "r": true
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/form",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "id": "frm_13c92455c001LOeqqgUATSWw4h",
+      "sessionID": "ses_ec36dbbc5ffe0rxqvuUP0gXTCG",
+      "title": "Questions",
+      "metadata": {
+       "kind": "question",
+       "tool": {
+        "messageID": "msg_13c92454d001qiwIKwvViD3Dm0",
+        "id": "call_1792017581396"
+       }
+      },
+      "fields": [
+       {
+        "key": "q0",
+        "title": "Pick",
+        "description": "Pick one?",
+        "type": "string",
+        "options": [
+         {
+          "value": "A",
+          "label": "A",
+          "description": "first"
+         },
+         {
+          "value": "B",
+          "label": "B",
+          "description": "second"
+         }
+        ],
+        "custom": true
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/session/ses_ec36dbbc5ffe0rxqvuUP0gXTCG/form/frm_13c92455c001LOeqqgUATSWw4h/reply",
+   "body": {
+    "answer": {
+     "q0": "A"
+    }
+   },
+   "status": 204
+  }
+ ]
+}

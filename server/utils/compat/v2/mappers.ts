@@ -63,11 +63,15 @@ export function normDir(directory: string | undefined): string {
   return windows ? out.toLowerCase() : out
 }
 
-/** v2 runner errors are plain `{type:'unknown', message}`: only interrupts get a name. */
-export function mapError(error: { message?: string } | undefined): { name: string; data: { message: string } } | undefined {
+/**
+ * v2 runner errors are plain `{type, message}`: only interrupts get a name
+ * (1.18 by message, 2.x by `type: 'aborted'`, e.g. "Step interrupted").
+ */
+export function mapError(error: { message?: string; type?: string } | undefined): { name: string; data: { message: string } } | undefined {
   if (!error) return undefined
   const message = String(error.message ?? 'Unknown error')
-  return { name: ABORTED.has(message) ? 'MessageAbortedError' : 'UnknownError', data: { message } }
+  const aborted = ABORTED.has(message) || error.type === 'aborted'
+  return { name: aborted ? 'MessageAbortedError' : 'UnknownError', data: { message } }
 }
 
 /** One-line summary shown next to the tool name (legacy `state.title`). */
@@ -76,7 +80,11 @@ export function toolTitle(name: string, input: unknown): string {
   const str = (value: unknown) => (typeof value === 'string' && value ? value : undefined)
   switch (name) {
     case 'bash':
+    case 'shell': // 2.x
       return str(args.command) ?? name
+    case 'subagent': // 2.x
+    case 'task':
+      return str(args.description) ?? name
     case 'read':
     case 'write':
     case 'edit':
@@ -132,17 +140,21 @@ export function mapToolState(
   const input = isObject(state?.input) ? state.input : {}
   const start = time?.ran ?? time?.created
   const end = time?.completed ?? time?.ran ?? start
+  // UI metadata: `structured` on 1.18, `metadata` on 2.x
+  const structured = (): Dict => withSessionAlias(
+    isObject(state?.structured) ? state.structured : isObject(state?.metadata) ? state.metadata : {}
+  )
   switch (state?.status) {
     case 'running':
       return {
         status: 'running',
         input,
         title: toolTitle(name, input),
-        metadata: isObject(state.structured) ? state.structured : {},
+        metadata: structured(),
         time: clean({ start })
       }
     case 'completed': {
-      const metadata: Dict = { ...(isObject(state.structured) ? state.structured : {}) }
+      const metadata: Dict = { ...structured() }
       if (asArray(state.outputPaths).length) metadata.outputPaths = state.outputPaths
       if (state.result !== undefined) metadata.result = state.result
       const files = [
@@ -173,13 +185,22 @@ export function mapToolState(
         status: 'error',
         input,
         error: String(state.error?.message ?? 'Tool failed'),
-        metadata: isObject(state.structured) ? state.structured : {},
+        metadata: structured(),
         time: clean({ start, end })
       }
     default:
-      // pending: `input` is the raw JSON text streamed so far
+      // pending (2.x: `streaming`): `input` is the raw JSON text streamed so far
       return { status: 'pending', input: {}, raw: typeof state?.input === 'string' ? state.input : '' }
   }
+}
+
+/**
+ * Subagent tool metadata names the child `sessionID` (2.x); the legacy `task`
+ * tool used `sessionId`. Both are set so the UI finds the child either way.
+ */
+function withSessionAlias(metadata: Dict): Dict {
+  if (typeof metadata.sessionID === 'string' && metadata.sessionId === undefined) return { ...metadata, sessionId: metadata.sessionID }
+  return metadata
 }
 
 /** One v2 assistant content item -> one legacy part (ids included). */
@@ -357,6 +378,11 @@ export function toLegacyMessages(
       case 'agent-switched':
         lastAgent = m.agent
         return
+      // 2.x: run boundaries, skill activations and location moves are not chat turns
+      case 'idle':
+      case 'skill':
+      case 'location-switched':
+        return
       case 'model-switched':
         lastModel = toLegacyModel(m.model) ?? lastModel
         return
@@ -435,6 +461,9 @@ export function toLegacyMessages(
         const dead = zombie(m, index)
         const completed: number | undefined = m.time?.completed ?? (dead ? created : undefined)
         const command = String(m.command ?? '')
+        // 2.x: `status` (running | exited | timeout | killed) and `output: {output, …}`
+        const output = typeof m.output === 'string' ? m.output : String(m.output?.output ?? '')
+        const finished = m.time?.completed !== undefined || (typeof m.status === 'string' && m.status !== 'running')
         const info = clean({
           ...assistantInfo(
             { id: m.id, time: { created, completed }, agent, model: lastModel && { id: lastModel.modelID, providerID: lastModel.providerID } },
@@ -443,21 +472,32 @@ export function toLegacyMessages(
           finish: completed !== undefined ? 'stop' : undefined,
           error: dead ? { ...INTERRUPTED, data: { ...INTERRUPTED.data } } : undefined
         })
-        const state = m.time?.completed !== undefined
-          ? { status: 'completed', input: { command }, output: String(m.output ?? ''), title: command, metadata: { output: String(m.output ?? '') }, time: { start: created, end: m.time.completed } }
+        const state = finished
+          ? { status: 'completed', input: { command }, output, title: command, metadata: clean({ output, exit: m.exit }), time: { start: created, end: m.time?.completed ?? created } }
           : dead
             ? { status: 'error', input: { command }, error: 'Interrupted', time: { start: created, end: created } }
             : { status: 'running', input: { command }, title: command, time: { start: created } }
         out.push({
           info,
-          parts: [{ id: partId(m.id, String(m.callID || 'shell')), sessionID, messageID: m.id, type: 'tool', callID: m.callID, tool: 'bash', state }]
+          parts: [{ id: partId(m.id, String(m.callID || m.shellID || 'shell')), sessionID, messageID: m.id, type: 'tool', callID: m.callID ?? m.shellID, tool: 'bash', state }]
         })
         return
       }
       case 'compaction': {
         const created = m.time?.created ?? 0
+        // 2.x: `status` running | completed | failed (+ error, cost, tokens)
+        const running = m.status === 'running' && ctx.active && index === list.length - 1
         const info = assistantInfo(
-          { id: m.id, time: { created, completed: created }, agent: 'compaction', model: lastModel && { id: lastModel.modelID, providerID: lastModel.providerID }, finish: 'stop' },
+          {
+            id: m.id,
+            time: clean({ created, completed: running ? undefined : created }),
+            agent: 'compaction',
+            model: m.model ?? (lastModel && { id: lastModel.modelID, providerID: lastModel.providerID }),
+            finish: m.status === 'failed' ? 'error' : running ? undefined : 'stop',
+            error: m.error,
+            cost: m.cost,
+            tokens: m.tokens
+          },
           { sessionID, parentID: lastUserID, directory, root: ctx.root }
         )
         info.summary = true
@@ -558,7 +598,8 @@ export function toLegacySession(v2: any, overrides: { title?: string; lastActivi
 export function toLegacyPermission(req: any): any {
   const resources = asArray(req?.resources).map(String)
   const action = String(req?.action ?? 'permission')
-  const tool = req?.source?.type === 'tool' ? { messageID: req.source.messageID, callID: req.source.callID } : undefined
+  // the tool call is `source.callID` on 1.18, `source.id` on 2.x
+  const tool = req?.source?.type === 'tool' ? { messageID: req.source.messageID, callID: req.source.callID ?? req.source.id } : undefined
   return clean({
     id: req?.id,
     sessionID: req?.sessionID,
@@ -567,12 +608,54 @@ export function toLegacyPermission(req: any): any {
     always: asArray(req?.save),
     metadata: isObject(req?.metadata) ? req.metadata : {},
     tool,
-    title: action === 'bash' ? `Run: ${resources.join(' ')}` : `${action}: ${resources.join(', ')}`,
+    title: action === 'bash' || action === 'shell' ? `Run: ${resources.join(' ')}` : `${action}: ${resources.join(', ')}`,
     type: action,
     pattern: resources,
     messageID: tool?.messageID,
     callID: tool?.callID
   })
+}
+
+/**
+ * opencode 2.x asks questions through forms (`form.created`, GET /api/form):
+ * one form field per question. Legacy question request shape for the UI's
+ * question card (`{id, sessionID, questions: [{question, header, options,
+ * multiSelect}], tool}`); fields without options become free-text questions.
+ */
+export function toLegacyQuestionFromForm(form: any): any {
+  const fields = asArray(form?.fields).filter((f) => f && !f.hidden && f.type !== 'external')
+  const tool = form?.metadata?.tool
+  return clean({
+    id: form?.id,
+    sessionID: form?.sessionID,
+    questions: fields.map((f) => clean({
+      question: String(f.description ?? f.title ?? f.key ?? ''),
+      header: f.title,
+      options: asArray(f.options).map((o) => clean({ label: String(o.label ?? o.value), description: o.description })),
+      multiSelect: f.type === 'multiselect' || undefined,
+      custom: f.custom
+    })),
+    tool: isObject(tool) ? { messageID: tool.messageID, callID: tool.callID ?? tool.id } : undefined
+  })
+}
+
+/**
+ * Legacy question answers (`string[][]`, option labels or free text, one list
+ * per question) -> a 2.x form answer keyed by field, labels turned back into
+ * option values.
+ */
+export function formAnswerFromLegacy(form: any, answers: string[][]): Record<string, unknown> {
+  const fields = asArray(form?.fields).filter((f) => f && !f.hidden && f.type !== 'external')
+  const out: Record<string, unknown> = {}
+  fields.forEach((f, i) => {
+    const picked = asArray(answers?.[i]).map(String)
+    const value = (label: string) => asArray(f.options).find((o) => o.label === label || o.value === label)?.value ?? label
+    if (f.type === 'multiselect') out[f.key] = picked.map(value)
+    else if (f.type === 'boolean') out[f.key] = /^(true|yes|y|1)$/i.test(picked[0] ?? '')
+    else if (f.type === 'number' || f.type === 'integer') out[f.key] = Number(picked[0])
+    else if (picked.length) out[f.key] = value(picked[0]!)
+  })
+  return out
 }
 
 const SECRET_KEY = /key|token|secret|password|authorization|credential/i

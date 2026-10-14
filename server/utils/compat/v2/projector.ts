@@ -20,6 +20,8 @@ import {
   occurrenceKey,
   partId,
   toLegacyPermission,
+  toLegacyQuestionFromForm,
+  toLegacySession,
   userMessage,
   type LegacyModelRef
 } from './mappers'
@@ -136,6 +138,10 @@ interface SessionState {
   lastUserID?: string
   /** last user info, while its agent/model are still guesses */
   pendingUser?: { info: any; agent: boolean; model: boolean }
+  /** 2.x: prompts queued in the session inbox, by inbox (= user message) id */
+  inbox?: Map<string, any>
+  /** 2.x: compaction events carry no message id; the running one's stand-in */
+  compactionID?: string
   messages: Map<string, MessageState>
   /** every message id seen, for revert commits (message.removed) */
   ids: string[]
@@ -164,6 +170,73 @@ const PASS_THROUGH = new Set([
   'message.part.removed'
 ])
 
+// opencode 2.x renamed the v2 vocabulary: `session.next.X` became `session.X`
+// (a few with new names), tool events say `id`/`metadata` instead of
+// `callID`/`structured`, text and reasoning lifecycles are numbered by
+// `ordinal` instead of carrying ids, timestamps moved to the envelope
+// (`created`), and permissions/questions use the plain names (`permission.*`,
+// `form.*`). normalizeEvent() rewrites a 2.x event into the 1.18 dialect the
+// reducer below speaks; 1.18 events pass through untouched.
+const RENAMED_2X: Record<string, string> = {
+  'session.agent.selected': 'session.next.agent.switched',
+  'session.model.selected': 'session.next.model.switched',
+  'session.retry.scheduled': 'session.next.retried',
+  'session.compaction.failed': 'session.next.compaction.ended'
+}
+const PREFIXED_2X = /^session\.(step|text|reasoning|tool|compaction|revert|shell)\.|^session\.(synthetic|moved)$/
+
+/** 2.x event -> its 1.18 (`session.next.*`) equivalent; anything else unchanged. */
+export function normalizeEvent(event: V2Event): V2Event {
+  const type = event?.type
+  if (typeof type !== 'string' || type.startsWith('session.next.')) return event
+  const raw = event.data && typeof event.data === 'object' ? event.data : {}
+
+  // plain-named permission events of 2.x carry the v2 request shape
+  if ((type === 'permission.asked' && 'action' in raw && 'resources' in raw)
+    || (type === 'permission.replied' && 'requestID' in raw && !('permissionID' in raw))) {
+    return { ...event, type: type.replace('permission.', 'permission.v2.') }
+  }
+
+  const renamed = RENAMED_2X[type] ?? (PREFIXED_2X.test(type) ? type.replace(/^session\./, 'session.next.') : undefined)
+  if (!renamed) return event
+  const d: Record<string, any> = { ...raw }
+  if (d.timestamp === undefined && typeof (event as { created?: unknown }).created === 'number') d.timestamp = (event as { created?: number }).created
+
+  if (renamed.startsWith('session.next.tool.')) {
+    if (d.callID === undefined && typeof d.id === 'string') d.callID = d.id
+    if (d.structured === undefined && d.metadata !== undefined) d.structured = d.metadata
+    if (d.provider === undefined && typeof d.executed === 'boolean') d.provider = { executed: d.executed }
+  } else if (renamed.startsWith('session.next.text.') || renamed.startsWith('session.next.reasoning.')) {
+    // no content ids in 2.x: one lifecycle per ordinal, counted per type
+    // like the REST snapshot counts content without ids
+    const kind = renamed.startsWith('session.next.text.') ? 'text' : 'reasoning'
+    const field = kind === 'text' ? 'textID' : 'reasoningID'
+    if (d[field] === undefined && typeof d.ordinal === 'number') {
+      d[field] = `${kind}#${d.ordinal}`
+      d.countKey = kind
+    }
+    if (kind === 'reasoning' && d.providerMetadata === undefined && d.state !== undefined) d.providerMetadata = d.state
+  } else if (renamed === 'session.next.revert.committed') {
+    if (d.messageID === undefined && typeof d.to === 'string') d.messageID = d.to
+  } else if (renamed === 'session.next.moved') {
+    if (d.subdirectory === undefined && d.subpath !== undefined) d.subdirectory = d.subpath
+  } else if (renamed === 'session.next.shell.started' || renamed === 'session.next.shell.ended') {
+    // 2.x: `{shell: Shell.Info, output?: {output}}`, no message id in the event
+    const shell = d.shell && typeof d.shell === 'object' ? d.shell : undefined
+    if (shell) {
+      d.callID ??= shell.id
+      d.messageID ??= `shell_${shell.id}`
+      d.command ??= shell.command
+      if (d.output && typeof d.output === 'object') d.output = d.output.output
+    }
+  } else if (renamed === 'session.next.compaction.ended' && type === 'session.compaction.failed') {
+    d.failed = true
+  } else if (renamed === 'session.next.compaction.delta' && typeof d.delta === 'string' && d.text === undefined) {
+    d.text = d.delta
+  }
+  return { ...event, type: renamed, data: d }
+}
+
 /** Event types that only exist in the v2 vocabulary. */
 export function isV2EventType(type: string) {
   return type.startsWith('session.next.') || type.startsWith('permission.v2.') || type.startsWith('question.v2.')
@@ -180,7 +253,7 @@ function toMs(value: unknown, fallback: number) {
 }
 
 function isInterrupted(error: any) {
-  return error?.message === INTERRUPTED_TOOL
+  return error?.message === INTERRUPTED_TOOL || error?.type === 'aborted'
 }
 
 function legacyModel(model: any): LegacyModelRef | undefined {
@@ -208,13 +281,21 @@ function fromLegacyInfo(info: any): any {
  * a queued prompt may start right after - the hub confirms with
  * GET /api/session/active before emitting idle.
  */
-export function busyTransitions(event: V2Event): BusySignal[] {
+export function busyTransitions(raw: V2Event): BusySignal[] {
+  const event = normalizeEvent(raw)
   const d = event?.data || {}
   const sessionID = typeof d.sessionID === 'string' ? d.sessionID : undefined
   if (!sessionID) return []
   const busy = [{ sessionID, status: 'busy' as const }]
   const idle = [{ sessionID, status: 'idle' as const }]
   switch (event.type) {
+    // 2.x publishes run boundaries
+    case 'session.execution.started':
+      return busy
+    case 'session.execution.succeeded':
+    case 'session.execution.failed':
+    case 'session.execution.interrupted':
+      return idle
     case 'session.next.prompt.admitted':
       return d.delivery === 'steer' ? busy : []
     case 'session.next.prompted':
@@ -240,9 +321,14 @@ export function busyTransitions(event: V2Event): BusySignal[] {
 }
 
 /** Events after which a run is certainly over (no confirmation available). */
-function endsRun(event: V2Event) {
+function endsRun(raw: V2Event) {
+  const event = normalizeEvent(raw)
   const d = event.data || {}
   switch (event.type) {
+    case 'session.execution.succeeded':
+    case 'session.execution.failed':
+    case 'session.execution.interrupted':
+      return true
     case 'session.next.step.ended':
       return d.finish !== 'tool-calls'
     case 'session.next.step.failed':
@@ -345,8 +431,9 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
     return createMessage(s, id, 'assistant', { created: ts }, true)
   }
 
-  function newPart(msg: MessageState, v2id: string, item: any, live: boolean): PartState {
-    const key = occurrenceKey(msg.count, v2id)
+  /** `countKey`: what the REST snapshot counts this content by (2.x: its type). */
+  function newPart(msg: MessageState, v2id: string, item: any, live: boolean, countKey = v2id): PartState {
+    const key = occurrenceKey(msg.count, countKey)
     const p: PartState = { msg, id: partId(msg.id, key), key, item, live, done: false, emitted: -Infinity }
     msg.parts.set(key, p)
     msg.latest.set(v2id, p)
@@ -354,8 +441,8 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
   }
 
   /** Current lifecycle of `v2id`, or a mid-stream stand-in for it. */
-  function partFor(msg: MessageState, v2id: string, make: () => any): PartState {
-    return msg.latest.get(v2id) ?? newPart(msg, v2id, make(), false)
+  function partFor(msg: MessageState, v2id: string, make: () => any, countKey?: string): PartState {
+    return msg.latest.get(v2id) ?? newPart(msg, v2id, make(), false, countKey)
   }
 
   function complete(msg: MessageState, patch: Record<string, unknown>, ts: number) {
@@ -446,8 +533,28 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
 
   // ---- events ----
 
-  function push(event: V2Event): LegacyEvent[] {
+  /** A prompt became part of the conversation (1.18 `prompted`, 2.x inbox delivery). */
+  function prompted(out: LegacyEvent[], s: SessionState, messageID: string, prompt: any, synthetic: boolean, ts: number, dir?: string) {
+    const agent = agentOf(s)
+    const model = legacyModel(modelOf(s))
+    const { info, parts } = userMessage(
+      { id: messageID, time: { created: ts }, text: prompt.text ?? '', files: prompt.files, agents: prompt.agents },
+      { sessionID: s.id, agent, model }
+    )
+    s.lastUserID = messageID
+    // a session without its own agent/model resolves them per run: the step tells
+    s.pendingUser = agent && model ? undefined : { info, agent: !agent, model: !model }
+    remember(s, messageID)
+    out.push({ type: 'message.updated', properties: { sessionID: s.id, info }, directory: dir })
+    for (const part of parts) out.push(partEvent(s, synthetic ? { ...part, synthetic: true } : part))
+    s.activity = ts
+    if (!synthetic && s.created && s.title === undefined) s.title = deriveTitle(prompt.text) ?? ''
+    emitSession(out, s)
+  }
+
+  function push(input: V2Event): LegacyEvent[] {
     const out: LegacyEvent[] = []
+    const event = normalizeEvent(input)
     const type = event?.type
     if (typeof type !== 'string') return out
     const d = event.data && typeof event.data === 'object' ? event.data : {}
@@ -455,10 +562,74 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
     const sid: string | undefined = typeof d.sessionID === 'string' ? d.sessionID : undefined
     const s = sid ? session(sid, directory) : undefined
     const dir = directory ?? s?.directory
-    const ts = toMs(d.timestamp, now())
+    const ts = toMs(d.timestamp ?? (event as { created?: unknown }).created, now())
 
     if (type === 'server.connected') {
       out.push({ type, properties: {} })
+      return out
+    }
+
+    // ---- 2.x session lifecycle ----
+    if (type === 'session.created' && !d.info && sid) {
+      // 2.x: the event data is the session row itself
+      const info = toLegacySession({ ...d, id: sid })
+      setInfo(s!, info)
+      s!.created = true
+      out.push({ type, properties: { sessionID: sid, info }, directory: dir })
+      emitSession(out, s!)
+      return out
+    }
+    if (type === 'session.deleted' && !d.info && sid) {
+      out.push({ type, properties: { sessionID: sid, info: { id: sid, ...(s?.info ?? {}) } }, directory: dir ?? s?.directory })
+      dropSession(s!)
+      return out
+    }
+    if (type === 'session.renamed' && s) {
+      if (typeof d.title === 'string') {
+        if (s.info) s.info = { ...s.info, title: d.title }
+        s.title = d.title
+      }
+      emitSession(out, s)
+      return out
+    }
+    if (type === 'session.usage.updated' && s) {
+      // running totals of the session (legacy: SessionInfo cost/tokens)
+      if (s.info) s.info = { ...s.info, cost: d.cost ?? s.info.cost, tokens: d.tokens ?? s.info.tokens }
+      emitSession(out, s)
+      return out
+    }
+    if (type === 'session.forked' && sid) {
+      // the new session: its row comes from REST (session.updated)
+      emitSession(out, session(sid, directory))
+      return out
+    }
+    if (type === 'session.inbox.enqueued' && s) {
+      if (typeof d.inboxID === 'string' && d.item) (s.inbox ??= new Map()).set(d.inboxID, d.item)
+      return out
+    }
+    if (type === 'session.inbox.cancelled' && s) {
+      s.inbox?.delete(d.inboxID)
+      return out
+    }
+    if (type === 'session.inbox.delivered' && s) {
+      const item = s.inbox?.get(d.inboxID)
+      s.inbox?.delete(d.inboxID)
+      // joined after the enqueue: the stored message arrives with the next REST load
+      if (!item || typeof d.inboxID !== 'string') return out
+      const payload = item.payload && typeof item.payload === 'object' ? item.payload : item
+      prompted(out, s, d.inboxID, payload, item.type === 'synthetic', ts, dir)
+      return out
+    }
+    if (type === 'form.created' && d.form) {
+      out.push({ type: 'question.asked', properties: toLegacyQuestionFromForm(d.form), directory: dir })
+      return out
+    }
+    if (type === 'form.replied' || type === 'form.cancelled') {
+      out.push({
+        type: type === 'form.replied' ? 'question.replied' : 'question.rejected',
+        properties: { sessionID: d.sessionID, requestID: d.id },
+        directory: dir
+      })
       return out
     }
 
@@ -510,24 +681,11 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
     switch (type) {
       case 'session.next.prompted':
       case 'session.next.synthetic': {
-        if (typeof d.messageID !== 'string') break
         const synthetic = type === 'session.next.synthetic'
-        const prompt = synthetic ? { text: d.text } : d.prompt || {}
-        const agent = agentOf(s)
-        const model = legacyModel(modelOf(s))
-        const { info, parts } = userMessage(
-          { id: d.messageID, time: { created: ts }, text: prompt.text ?? '', files: prompt.files, agents: prompt.agents },
-          { sessionID: s.id, agent, model }
-        )
-        s.lastUserID = d.messageID
-        // a session without its own agent/model resolves them per run: the step tells
-        s.pendingUser = agent && model ? undefined : { info, agent: !agent, model: !model }
-        remember(s, d.messageID)
-        out.push({ type: 'message.updated', properties: { sessionID: s.id, info }, directory: dir })
-        for (const part of parts) out.push(partEvent(s, synthetic ? { ...part, synthetic: true } : part))
-        s.activity = ts
-        if (!synthetic && s.created && s.title === undefined) s.title = deriveTitle(prompt.text) ?? ''
-        emitSession(out, s)
+        // 2.x synthetic events carry no message id: the event id stands in
+        const messageID = typeof d.messageID === 'string' ? d.messageID : synthetic && event.id ? `syn_${event.id}` : undefined
+        if (!messageID) break
+        prompted(out, s, messageID, synthetic ? { text: d.text } : d.prompt || {}, synthetic, ts, dir)
         break
       }
 
@@ -607,15 +765,16 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
       case 'session.next.reasoning.started': {
         if (typeof d.assistantMessageID !== 'string') break
         const msg = assistant(s, d.assistantMessageID, ts)
+        const countKey = typeof d.countKey === 'string' ? d.countKey : undefined
         const p = type === 'session.next.text.started'
-          ? newPart(msg, String(d.textID), { type: 'text', id: d.textID, text: '' }, true)
+          ? newPart(msg, String(d.textID), { type: 'text', ...(countKey ? {} : { id: d.textID }), text: '' }, true, countKey)
           : newPart(msg, String(d.reasoningID), {
             type: 'reasoning',
-            id: d.reasoningID,
+            ...(countKey ? {} : { id: d.reasoningID }),
             text: '',
             ...(d.providerMetadata !== undefined ? { providerMetadata: d.providerMetadata } : {}),
             time: { created: ts }
-          }, true)
+          }, true, countKey)
         p.start = ts
         emitPart(out, p)
         break
@@ -628,9 +787,11 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
         if (typeof d.assistantMessageID !== 'string') break
         const msg = assistant(s, d.assistantMessageID, ts)
         const text = type.startsWith('session.next.text.')
-        const p = partFor(msg, String(text ? d.textID : d.reasoningID), () => text
-          ? { type: 'text', id: d.textID, text: '' }
-          : { type: 'reasoning', id: d.reasoningID, text: '', time: { created: ts } })
+        const countKey = typeof d.countKey === 'string' ? d.countKey : undefined
+        const v2id = text ? d.textID : d.reasoningID
+        const p = partFor(msg, String(v2id), () => text
+          ? { type: 'text', ...(countKey ? {} : { id: v2id }), text: '' }
+          : { type: 'reasoning', ...(countKey ? {} : { id: v2id }), text: '', time: { created: ts } }, countKey)
         if (type.endsWith('.delta')) {
           // mid-stream stand-ins wait for `ended`: partial text would overwrite what the UI loaded
           if (!p.live || p.done) break
@@ -699,9 +860,13 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
           emitPart(out, p)
         } else if (type === 'session.next.tool.progress') {
           if (state.status !== 'running') break
-          state.structured = d.structured ?? {}
+          const next = d.structured ?? {}
+          // new keys (a subagent's child sessionID, a shell id) are links: never throttled
+          const fresh = Object.keys(next).some((key) => !(key in (state.structured ?? {})))
+          state.structured = next
           state.content = [...(d.content ?? [])]
-          touch(out, p)
+          if (fresh) emitPart(out, p)
+          else touch(out, p)
         } else {
           const input = typeof state.input === 'string' || !state.input ? {} : state.input
           const running = state.status === 'running'
@@ -738,10 +903,13 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
       case 'session.next.compaction.started':
       case 'session.next.compaction.delta':
       case 'session.next.compaction.ended': {
-        if (typeof d.messageID !== 'string') break
-        let msg = s.messages.get(d.messageID)
+        // 2.x: no message id in compaction events; one stand-in per compaction
+        if (typeof d.messageID !== 'string' && type === 'session.next.compaction.started') s.compactionID = `compaction_${event.id ?? ts}`
+        const messageID = typeof d.messageID === 'string' ? d.messageID : s.compactionID
+        if (!messageID) break
+        let msg = s.messages.get(messageID)
         const fresh = !msg
-        if (!msg) msg = createMessage(s, d.messageID, 'compaction', { created: ts, agent: 'compaction' })
+        if (!msg) msg = createMessage(s, messageID, 'compaction', { created: ts, agent: 'compaction' })
         if (type === 'session.next.compaction.started' && !msg.latest.has('summary')) {
           newPart(msg, 'summary', { type: 'text', id: 'summary', text: '' }, true).start = ts
         }
@@ -763,7 +931,13 @@ export function createProjector(opts: ProjectorOptions = {}): Projector {
         p.done = true
         p.live = true
         emitPart(out, p)
-        complete(msg, { finish: 'stop' }, ts)
+        s.compactionID = undefined
+        if (d.failed) {
+          complete(msg, { finish: 'error', error: d.error }, ts)
+          out.push(messageEvent(msg))
+          break
+        }
+        complete(msg, { finish: 'stop', ...(d.cost !== undefined ? { cost: d.cost } : {}), ...(d.tokens ? { tokens: d.tokens } : {}) }, ts)
         out.push(messageEvent(msg))
         out.push({ type: 'session.compacted', properties: { sessionID: s.id }, directory: dir })
         s.activity = ts

@@ -15,6 +15,10 @@ export interface V2RequestOptions {
   directory?: string
   timeoutMs?: number
   signal?: AbortSignal
+  /** send `body` as-is (string) with `application/octet-stream`, e.g. fs/write */
+  raw?: boolean
+  /** resolve with the response text instead of parsed JSON, e.g. fs/read */
+  text?: boolean
 }
 
 /** Thin authenticated client for `/api/*` of an opencode server. */
@@ -78,8 +82,10 @@ export interface MetaStore {
 /** What the connected server can do; drives UI gating (GET /api/v1/capabilities). */
 export interface Capabilities {
   protocol: 'legacy' | 'v2'
-  /** server version when known (`/global/health`); v2-only servers report none */
+  /** server version when known (`/global/health`, or `/api/info` on 2.x) */
   version?: string
+  /** v2 only: hybrid-era `/api` (1.18/1.19) or opencode 2.x */
+  dialect?: '1.18' | '2'
   mcp: boolean
   config: boolean
   sessionRename: boolean

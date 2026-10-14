@@ -14,7 +14,10 @@ export interface SessionInfo {
   title?: string
   version?: string
   directory?: string
+  /** set on subagent sessions (the `task` tool): the conversation that started it */
   parentID?: string
+  /** agent the session runs (subagents: general, explore, …) */
+  agent?: string
   time?: { created?: number; updated?: number }
   share?: { url?: string }
   revert?: unknown

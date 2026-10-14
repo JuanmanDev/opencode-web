@@ -1,0 +1,29 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "healthy": true,
+   "version": "2.0.29"
+  }
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/info",
+   "status": 200,
+   "response": {
+    "version": "2.0.29",
+    "pid": 8724,
+    "urls": [
+     "http://127.0.0.1:4950"
+    ],
+    "paths": {
+     "tmp": "C:\\tmp\\opencode"
+    },
+    "capabilities": {
+     "persistentPty": false
+    }
+   }
+  }
+ ]
+}

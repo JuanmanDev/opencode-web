@@ -870,6 +870,23 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     <!-- session header: title + actions; phones get a compact row with the
          actions in an overflow menu (sound toggle is in the mobile app bar) -->
     <div class="flex items-center gap-2 h-10 md:h-12 pl-3 pr-1 md:px-4 bg-muted/50 shrink-0">
+      <!-- subagent session: way back to the conversation that started it -->
+      <UTooltip v-if="session?.parentID" text="Back to the parent conversation">
+        <UButton
+          :to="`/p/${route.params.dir}/session/${session.parentID}`"
+          icon="i-lucide-corner-left-up"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          class="oc-tap shrink-0 oc-appear"
+          label="Parent"
+          :ui="{ label: 'hidden sm:inline' }"
+          aria-label="Back to the parent conversation"
+        />
+      </UTooltip>
+      <UBadge v-if="session?.parentID" color="primary" variant="subtle" size="sm" icon="i-lucide-bot" class="shrink-0">
+        {{ session.agent || 'subagent' }}
+      </UBadge>
       <UInput
         v-if="renamingTitle"
         id="session-title-input"

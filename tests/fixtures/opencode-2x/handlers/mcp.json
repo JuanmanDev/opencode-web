@@ -1,0 +1,49 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "probe": {
+    "status": "pending"
+   },
+   "probe2": {
+    "status": "disabled"
+   },
+   "remote1": {
+    "status": "disabled"
+   }
+  }
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "name": "probe",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "probe2",
+      "status": {
+       "status": "disabled"
+      }
+     },
+     {
+      "name": "remote1",
+      "status": {
+       "status": "disabled"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,159 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "$schema": "https://opencode.ai/config.json",
+   "share": "disabled",
+   "model": "mock/mock-model",
+   "mcp": {
+    "probe": {
+     "type": "local",
+     "command": [
+      "node",
+      "C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs"
+     ]
+    },
+    "remote1": {
+     "type": "remote",
+     "url": "http://127.0.0.1:1/mcp",
+     "headers": {
+      "Authorization": "Bearer x"
+     },
+     "oauth": false,
+     "enabled": false
+    }
+   },
+   "permission": {
+    "shell": "ask"
+   },
+   "agent": {
+    "title": {
+     "model": {
+      "providerID": "mock",
+      "model": "mock-model"
+     }
+    }
+   },
+   "provider": {
+    "mock": {
+     "name": "Mock",
+     "options": {
+      "apiKey": "sk-mock",
+      "baseURL": "http://127.0.0.1:4951/v1"
+     },
+     "models": {
+      "mock-model": {
+       "name": "Mock Model",
+       "capabilities": {
+        "tools": true,
+        "input": [
+         "text",
+         "image"
+        ],
+        "output": [
+         "text"
+        ]
+       },
+       "limit": {
+        "context": 100000,
+        "output": 4096
+       }
+      }
+     }
+    }
+   },
+   "autoupdate": false
+  }
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/config",
+   "directory": "WORK",
+   "status": 200,
+   "response": [
+    {
+     "type": "document",
+     "path": "C:\\cfg\\opencode.json",
+     "info": {
+      "$schema": "https://opencode.ai/config.json",
+      "model": {
+       "providerID": "mock",
+       "model": "mock-model"
+      },
+      "update": "disable",
+      "share": "disabled",
+      "permissions": [
+       {
+        "action": "shell",
+        "resource": "*",
+        "effect": "ask"
+       }
+      ],
+      "agents": {
+       "title": {
+        "model": {
+         "providerID": "mock",
+         "model": "mock-model"
+        }
+       }
+      },
+      "mcp": {
+       "servers": {
+        "probe": {
+         "type": "local",
+         "command": [
+          "node",
+          "C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs"
+         ]
+        },
+        "remote1": {
+         "type": "remote",
+         "url": "http://127.0.0.1:1/mcp",
+         "headers": {
+          "Authorization": "Bearer x"
+         },
+         "oauth": false,
+         "disabled": true
+        }
+       }
+      },
+      "providers": {
+       "mock": {
+        "name": "Mock",
+        "package": "aisdk:@ai-sdk/openai-compatible",
+        "settings": {
+         "apiKey": "sk-mock",
+         "baseURL": "http://127.0.0.1:4951/v1"
+        },
+        "models": {
+         "mock-model": {
+          "name": "Mock Model",
+          "capabilities": {
+           "tools": true,
+           "input": [
+            "text",
+            "image"
+           ],
+           "output": [
+            "text"
+           ]
+          },
+          "limit": {
+           "context": 100000,
+           "output": 4096
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    {
+     "type": "directory",
+     "path": "C:\\cfg"
+    }
+   ]
+  }
+ ]
+}

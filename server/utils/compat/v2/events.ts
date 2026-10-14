@@ -3,9 +3,11 @@
 // (`data: {"id","type","properties"}`). v2 has a single unfiltered global
 // stream, a bounded per-subscriber queue upstream (slow consumers are cut
 // off) and no replay, so the hub reads it promptly, filters per project
-// directory, projects `session.next.*` into legacy message/part events
-// (projector.ts) and synthesizes busy/idle, which v2 does not publish:
-// candidates from the stream, confirmed with GET /api/session/active.
+// directory, projects `session.next.*` (1.18/1.19) and the renamed
+// `session.*` / `form.*` vocabulary of opencode 2.x into legacy message/part
+// events (projector.ts) and synthesizes busy/idle: candidates from the
+// stream (2.x also publishes `session.execution.*` run boundaries),
+// confirmed with GET /api/session/active.
 
 import { normDir, toLegacySession } from './mappers'
 import { busyTransitions, createMirrorProjector, createProjector } from './projector'
