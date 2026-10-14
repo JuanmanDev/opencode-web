@@ -263,6 +263,15 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
           :to="`/p/${route.params.dir}/mcp`"
         />
       </UTooltip>
+      <UTooltip text="Scheduled prompts" :content="{ side: 'right' }">
+        <UButton
+          icon="i-lucide-alarm-clock"
+          color="neutral"
+          variant="ghost"
+          aria-label="Scheduled prompts"
+          :to="`/p/${route.params.dir}/schedules`"
+        />
+      </UTooltip>
       <UTooltip text="Usage & cost" :content="{ side: 'right' }">
         <UButton
           icon="i-lucide-chart-column"

@@ -32,11 +32,14 @@ One origin means no CORS, no double auth, and SSE streaming included. **It works
 | 🗂️ **Project picker** | Start page with known projects and recents. Open any folder by path or browse the server filesystem. Everything is scoped per project via opencode's `?directory=` API. |
 | 💬 **Live chat** | SSE streaming with markdown, collapsible thinking, tool calls with input/output, per-step tokens & cost, timestamps, abort, a prompt queue, and permission and question prompts that survive reloads. Message actions: copy, read aloud, edit & resend, fork. |
 | 🧠 **Model + think level** | Model picker across all providers with pricing & context details, think-level selector for reasoning models, agent picker. Persisted per project. |
-| 🔌 **MCP manager** | Per-project and global MCP status, off / ask / auto modes per server and per tool, presets, and add remote or local servers from a catalog, a URL, a command line or pasted JSON. **Per-conversation MCP selection** in the prompt box. Tool lists are discovered from the servers themselves over **Streamable HTTP, legacy SSE or stdio**. Broken servers get inline **Retry** and OAuth **Sign in** actions. [More →](docs/mcp.md) |
+| 🔌 **MCP manager** | Per-project and global MCP status, off / ask / auto modes per server and per tool, presets, and add remote or local servers from a catalog, a URL, a command line, pasted JSON or a form. **Per-conversation MCP selection** in the prompt box. Tool lists are discovered from the servers themselves over **Streamable HTTP, legacy SSE or stdio**. Every server has a **details view**: why it fails and how to fix it, its tools with full descriptions and parameters, an **editor** that never exposes stored secrets, and a step-by-step **connection test**. [More →](docs/mcp.md) |
+| 🤖 **Agent control** | One click registers this app's MCP server with opencode, so **the chat can manage opencode itself**: test, add and reconnect MCP servers, reload the config (after running replies finish), read and prompt other chats, see task lists, and manage schedules. State-changing tools ask first. [More →](docs/mcp.md#agent-control) |
+| ⏰ **Scheduled prompts** | Cron-timed prompts per project (every weekday at 08:00, every 30 minutes…), in a new session each run or always the same one, with run history and links to the chats. [More →](docs/mcp.md#scheduled-prompts) |
 | 🧩 **MCP UI apps** | Tool results render live in sandboxed iframes: **MCP Apps** (SEP-1865 JSON-RPC host, theme & display-mode aware), mcp-ui **raw HTML**, **external URLs** and **remote-dom** components. Apps can move to a side panel or fullscreen, with shareable `?app=` links. Tools aren't re-run silently: only read-only ones are, and the rest get a **Render UI** button. A built-in demo server (`/mcp-demo`) showcases every flavour. [More →](docs/mcp.md#mcp-ui-apps) |
 | 🔑 **Provider config from the UI** | "Configure providers…" right inside the model dropdown adds or updates API keys without touching the server. Keys are never sent back to the browser. |
 | 📱 **Mobile first** | The desktop sidebar (resizable, collapsible to an icon rail, optional projects panel) becomes a slideover on phones. There are touch-sized controls, safe-area aware layouts and a prompt box that stays above the keyboard, so you can continue any session from your phone. Installable as a PWA. |
-| 🔄 **Any opencode version** | Works with every opencode 1.x server (1.0 → 1.18) and with servers that only speak the new **v2 protocol** (`/api/*`): the server detects which one it talks to and translates, so the UI behaves the same. Features a server lacks are hidden instead of failing. [More →](docs/compatibility.md) |
+| 🔄 **Any opencode version** | Works with every opencode 1.x server (1.0 → 1.19) and with **opencode 2.x** (`@opencode/cli`), which only speaks the new **v2 API** (`/api/*`): the web app detects which one it talks to and translates, so the UI behaves the same, MCP, config and subagents included. Features a server lacks are hidden instead of failing. [More →](docs/compatibility.md) |
+| 🤖 **Subagents** | When the agent hands work to a subagent, the chat shows a live card (agent, steps, result) with a link into the subagent's own conversation and back; the sidebar nests subagent sessions under their parent. |
 | 🤖 **Scriptable** | REST API with an OpenAPI spec, an MCP server (`/mcp`) to drive opencode from Claude, Cursor or n8n, and WebMCP tools in the page. |
 | 🛡️ **Safe by default** | Fail-fast proxy with health states everywhere, CSRF origin checks, optional API token, secret redaction and strict iframe sandboxing. [More →](docs/security.md) |
 
@@ -150,7 +153,7 @@ curl -X POST https://opencode.example.com/api/v1/sessions/$SESSION/prompt \
 
 `model` takes `"provider/model"` or `{ "providerID", "modelID" }`. Omit it to use opencode's configured default.
 
-Endpoints: projects, sessions (list/create/delete), messages, prompt (waits for the full reply), abort, models, agents, MCP status and tools.
+Endpoints: projects, sessions (list/create/delete), messages, prompt (waits for the full reply), abort, models, agents, MCP status, tools, server details/edit/test, config reload, scheduled prompts and a status overview.
 
 **MCP server** (Streamable HTTP at `POST /mcp`) plugs opencode-web into Claude, Cursor, or any MCP client:
 
@@ -158,7 +161,17 @@ Endpoints: projects, sessions (list/create/delete), messages, prompt (waits for 
 { "mcpServers": { "opencode": { "url": "https://opencode.example.com/mcp" } } }
 ```
 
-Tools: `list_projects`, `create_project`, `list_sessions`, `create_session`, `send_prompt` (waits for the reply and auto-creates sessions), `get_messages`, `abort_session`, `fork_session`, `list_models`, `mcp_status`, `list_mcp`, `set_mcp_mode`, `set_tool_mode`.
+Tools:
+
+| area | tools |
+| --- | --- |
+| overview | `server_info` (version, protocol, features, busy sessions, schedules, last reload) |
+| chats | `list_projects`, `create_project`, `list_sessions`, `session_status`, `read_session`, `get_messages`, `create_session`, `send_prompt` (waits for the reply, or `wait: false`), `abort_session`, `fork_session`, `list_tasks` |
+| opencode | `list_models`, `list_agents`, `list_commands`, `list_skills`, `get_config` (redacted), `reload_opencode` |
+| MCP | `list_mcp` (status, errors with a fix, tools), `mcp_status`, `test_mcp`, `add_mcp`, `connect_mcp`, `disconnect_mcp`, `set_mcp_mode`, `set_tool_mode` |
+| schedules | `list_schedules`, `create_schedule`, `update_schedule`, `delete_schedule`, `run_schedule` |
+
+Read-only tools carry `readOnlyHint`. Register the same server **with opencode itself** (MCP page → *Agent control*) and the agent in any chat gets these tools: see [docs/mcp.md](docs/mcp.md#agent-control).
 
 **WebMCP:** on browsers with `navigator.modelContext`, the page registers its own tools (`opencode_send_prompt`, `opencode_open_project`, …) so in-browser agents can drive the UI directly.
 
@@ -176,6 +189,9 @@ Tools: `list_projects`, `create_project`, `list_sessions`, `create_session`, `se
 | `NUXT_ALLOWED_ORIGINS` | *(empty)* | extra browser origins allowed to send POSTs (comma separated), e.g. an MCP inspector |
 | `NUXT_PUBLIC_DEMO_MCP_URL` | *(browser origin)* | URL at which opencode reaches the built-in `/mcp-demo` server (`http://web:3000/mcp-demo` in compose) |
 | `NUXT_MCP_LOCAL_DISCOVERY` | `always` | `always` / `same-host` / `never`: whether the web app spawns local MCP servers to list their tools |
+| `NUXT_SELF_URL` | *(origin of the demo URL, else the request)* | URL at which opencode reaches this app; agent control registers `<url>/mcp` (`http://web:3000` in compose) |
+| `NUXT_SCHEDULER` | `on` | `off` stops firing scheduled prompts (e.g. a second replica on the same data volume) |
+| `TZ` | *(container default, UTC)* | time zone of scheduled prompts, e.g. `Europe/Madrid` |
 
 Health endpoint: `GET /api/health` → `{ ok, opencode }` (used by the Docker healthcheck).
 

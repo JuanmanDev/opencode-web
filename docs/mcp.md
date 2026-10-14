@@ -81,6 +81,71 @@ docker compose --profile browser up -d
 
 It runs on the internal network only, with an isolated profile per session.
 
+## Server details: diagnose, edit, test
+
+The sliders button on every row of the MCP page (or **Diagnose & fix** on a broken one) opens the server's details. When enabling, adding or retrying a server leaves it broken, this view opens by itself instead of a bare error toast.
+
+| tab | shows |
+| --- | --- |
+| **Overview** | status, where the server is defined (project or global config), its URL or command, and for errors: what went wrong in plain words, the fix, and a one-click action (*Use a token instead*, *Sign in*, *Edit settings*). A broken server is also tested directly from the web app, because opencode only reports the error of its **last** transport attempt |
+| **Tools** | every tool with its full description, parameters (type, required, allowed values), MCP Apps / read-only / destructive badges and the tool id to copy. Resources and prompts are counted too |
+| **Edit** | type, URL or command, headers or environment variables, OAuth on/off, timeout, enabled, and which config to save to. A JSON view edits the raw opencode entry. Stored secrets show as `•••• stored`: leave them to keep the value, type to replace it. They never reach the browser |
+| **Test** | connects the way opencode would (Streamable HTTP, then legacy SSE, or spawning the command) and lists each step with timings, the server's name, version and capabilities, or the failure with its fix. Nothing is saved; edited settings can be tested before saving |
+
+**Save & reconnect** writes the entry to the chosen config and reconnects it in the running opencode, so there is nothing to restart.
+
+### Home Assistant (and other token-only servers)
+
+Home Assistant's *MCP Server* integration answers unauthenticated requests with an OAuth challenge but doesn't support the dynamic client registration opencode tries, so enabling it fails with `Incompatible auth server: does not support dynamic client registration`, or with `SSE error: Non-200 status code (405)` when the token is wrong. The fix:
+
+1. In Home Assistant, create a **long-lived access token** (your profile → *Security*).
+2. MCP page → **Add server** → **Home Assistant** → *Set up*, or open the existing server and press *Use a token instead*.
+3. URL `https://<your-home-assistant>/api/mcp` (Streamable HTTP; the older `/mcp_server/sse` also works), header `Authorization: Bearer <token>`, **OAuth auto-detection off**. *Test*, then *Add & connect*.
+
+```jsonc
+{
+  "mcp": {
+    "home-assistant": {
+      "type": "remote",
+      "url": "https://homeassistant.example.com/api/mcp",
+      "headers": { "Authorization": "Bearer <long-lived token>" },
+      "oauth": false
+    }
+  }
+}
+```
+
+## Agent control
+
+The web app is itself an MCP server (`POST /mcp`, see the README for the tool list). The **Agent control** card on the MCP page registers it in opencode's **global** config, so the agent in every new chat can manage opencode:
+
+- list, **test**, add, reconnect and switch MCP servers (with the same plain-language fixes as the UI)
+- **reload opencode's config** for one project or all of them, the API's equivalent of restarting `opencode serve`
+- see which sessions are busy, **read other chats**, prompt them (`wait: false` to dispatch work), abort them
+- read the **task lists** (todos) of busy and recent sessions
+- create, run and change **scheduled prompts**
+- version, models, agents, commands, skills, git/LSP status and the (redacted) config
+
+The URL must be reachable **from the opencode host**: `http://web:3000/mcp` in the bundled compose file (`NUXT_SELF_URL`), editable in the card. When `NUXT_API_TOKEN` is set, the token is added as a header automatically.
+
+Safety:
+
+- tools that change something (reload, add/switch MCP servers, prompt or abort sessions, schedules) are registered with the **ask** permission, so the chat shows a permission prompt first. Change that per tool on the MCP page
+- a reload interrupts replies that are running in the reloaded project. `reload_opencode` therefore waits by default until no session there is busy, **including the agent's own reply**: it asks for the reload, finishes its answer, and the reload happens right after
+- a session can't be prompted while it is busy, so an agent can't deadlock by prompting its own session
+
+`GET /api/v1/reload` and `server_info` show the state of the last reload. v2-only opencode servers have no reload API: restart the process instead.
+
+## Scheduled prompts
+
+The **Schedules** tile in the project sidebar manages prompts that the web app sends on a timetable: every N minutes, hourly, daily, on weekdays, weekly on chosen days, or any 5-field cron expression (`minute hour day month weekday`, plus `@hourly`, `@daily`, `@weekly`, `@monthly`).
+
+- **New session each run** keeps runs apart; **always the same session** continues one conversation (a run is skipped while that session is busy)
+- optional model (`provider/model`) and agent per schedule
+- *Run now*, pause/resume, and a history of the last 20 runs with status, duration, the start of the reply and a link to the chat
+
+Schedules are stored in the web app's data volume and fire in the **web container's time zone** (`TZ`, UTC by default; the editor warns when your browser's zone differs). Runs missed while the app was down are not replayed. `NUXT_SCHEDULER=off` disables firing, for example on a second replica sharing the same volume.
+
 ## Tool discovery
 
 opencode's API exposes MCP connection status but no MCP tool ids. The MCP page and the prompt box's per-conversation MCP picker need tool names, so the web app asks each server itself:

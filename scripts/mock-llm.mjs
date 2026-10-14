@@ -2,7 +2,8 @@
 // the compat e2e suite: real opencode servers of any version talk to it.
 // The reply is keyed on the last user message: "bash" -> bash tool call,
 // "ask" -> question tool, "todo" -> todowrite, "read" -> read tool,
-// "slow" -> a long streamed answer, anything else -> "Hello from the mock model."
+// "slow" -> a long streamed answer, "call <tool> {json}" -> that tool (e.g. an
+// MCP tool such as opencode-web_server_info), anything else -> "Hello from the mock model."
 import http from 'node:http'
 import fs from 'node:fs'
 
@@ -72,7 +73,19 @@ http.createServer(async (req, res) => {
     res.write('data: [DONE]\n\n')
     res.end()
   }
-  if (/\bbash\b/i.test(userText)) return toolCall('bash', { command: 'echo hello-from-bash', description: 'Echo test' })
+  const named = /\bcall ([\w.-]+)(?:\s+(\{.*\}))?/s.exec(userText)
+  if (named) {
+    let args = {}
+    try { args = named[2] ? JSON.parse(named[2]) : {} } catch { /* not JSON: call without arguments */ }
+    return toolCall(named[1], args)
+  }
+  // opencode 2.x calls its shell tool `shell`
+  const offered = (body.tools || []).map((t) => t.function?.name)
+  if (/\bbash\b/i.test(userText)) {
+    return offered.includes('bash') || !offered.includes('shell')
+      ? toolCall('bash', { command: 'echo hello-from-bash', description: 'Echo test' })
+      : toolCall('shell', { command: 'echo hello-from-bash' })
+  }
   if (/\bask\b/i.test(userText)) return toolCall('question', { questions: [{ question: 'Pick one?', header: 'Pick', options: [{ label: 'A', description: 'first' }, { label: 'B', description: 'second' }] }] })
   if (/\btodo\b/i.test(userText)) return toolCall('todowrite', { todos: [{ content: 'Write spec', status: 'in_progress', priority: 'high' }] })
   if (/\bread\b/i.test(userText)) return toolCall('read', { filePath: 'README.md' })

@@ -48,6 +48,10 @@ services:
       NUXT_OPENCODE_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?set in .env}
       # how opencode reaches this app's built-in MCP UI demo server
       NUXT_PUBLIC_DEMO_MCP_URL: http://web:3000/mcp-demo
+      # how opencode reaches this app (agent control MCP server at /mcp)
+      NUXT_SELF_URL: http://web:3000
+      # scheduled prompts run in this time zone
+      TZ: ${TZ:-UTC}
       # optional: bearer token for /api/v1, /mcp and the proxy (see README)
       NUXT_API_TOKEN: ${API_TOKEN:-}
     volumes:

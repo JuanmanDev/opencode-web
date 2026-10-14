@@ -125,6 +125,142 @@ export default defineEventHandler(() => ({
         ],
         responses: { 200: { description: 'true' } }
       }
+    },
+    '/api/v1/status': {
+      get: {
+        summary: 'Overview: opencode version/protocol, capabilities, busy sessions, schedules, last reload, control MCP, server time zone',
+        parameters: [{ $ref: '#/components/parameters/directory' }],
+        responses: { 200: { description: '{ opencode, capabilities, busy, schedules, reload, control, time }' } }
+      }
+    },
+    '/api/v1/reload': {
+      get: { summary: 'State of the last config reload', responses: { 200: { description: 'ReloadState | null' } } },
+      post: {
+        summary: 'Make opencode re-read its config (one project or all); waits for idle sessions by default',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  scope: { type: 'string', enum: ['project', 'all'] },
+                  directory: { type: 'string' },
+                  when: { type: 'string', enum: ['idle', 'now'] }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'ReloadState' }, 501: { description: 'v2 servers cannot reload' } }
+      }
+    },
+    '/api/v1/mcp-server': {
+      get: {
+        summary: 'One MCP server: config (secrets redacted), where it is defined, status and a fix for errors',
+        parameters: [
+          { name: 'name', in: 'query', required: true, schema: { type: 'string' } },
+          { $ref: '#/components/parameters/directory' }
+        ],
+        responses: { 200: { description: '{ name, definedIn, config, status, hint }' } }
+      },
+      put: {
+        summary: 'Create or update an MCP server and reconnect it; "***" values keep the stored secret',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'config'],
+                properties: {
+                  name: { type: 'string' },
+                  scope: { type: 'string', enum: ['project', 'global'] },
+                  directory: { type: 'string' },
+                  config: { type: 'object' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: '{ name, scope, config, status, hint }' } }
+      }
+    },
+    '/api/v1/mcp-test': {
+      post: {
+        summary: 'Test an MCP server (stored by name, or an edited config) without saving: step log, tools with parameters, resources, prompts',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: { name: { type: 'string' }, directory: { type: 'string' }, config: { type: 'object' } }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'McpInspectResult' } }
+      }
+    },
+    '/api/v1/control-mcp': {
+      get: { summary: 'Is this app\'s MCP server registered with opencode (agent control)?', responses: { 200: { description: '{ installed, enabled, url, suggestedUrl }' } } },
+      post: {
+        summary: 'Register this app\'s MCP server in opencode\'s global config so chats can manage opencode',
+        requestBody: {
+          content: { 'application/json': { schema: { type: 'object', properties: { url: { type: 'string' }, enabled: { type: 'boolean' } } } } }
+        },
+        responses: { 200: { description: 'save result with status' } }
+      }
+    },
+    '/api/v1/schedules': {
+      get: {
+        summary: 'List scheduled prompts',
+        parameters: [{ $ref: '#/components/parameters/directory' }],
+        responses: { 200: { description: 'Schedule[]' } }
+      },
+      post: {
+        summary: 'Create a scheduled prompt (5-field cron in the server time zone)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'directory', 'prompt', 'cron'],
+                properties: {
+                  name: { type: 'string' },
+                  directory: { type: 'string' },
+                  prompt: { type: 'string' },
+                  cron: { type: 'string', description: 'e.g. "0 8 * * 1-5" or @daily' },
+                  session: { type: 'string', enum: ['new', 'reuse'] },
+                  model: { type: 'string', description: '"provider/model"' },
+                  agent: { type: 'string' },
+                  enabled: { type: 'boolean' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Schedule' }, 400: { description: 'invalid cron or missing field' } }
+      }
+    },
+    '/api/v1/schedules/{id}': {
+      patch: {
+        summary: 'Update a scheduled prompt',
+        parameters: [{ $ref: '#/components/parameters/id' }],
+        responses: { 200: { description: 'Schedule' } }
+      },
+      delete: {
+        summary: 'Delete a scheduled prompt',
+        parameters: [{ $ref: '#/components/parameters/id' }],
+        responses: { 200: { description: 'true' } }
+      }
+    },
+    '/api/v1/schedules/{id}/run': {
+      post: {
+        summary: 'Run a scheduled prompt now (answers once the prompt is sent)',
+        parameters: [{ $ref: '#/components/parameters/id' }],
+        responses: { 200: { description: 'ScheduleRun' } }
+      }
     }
   }
 }))

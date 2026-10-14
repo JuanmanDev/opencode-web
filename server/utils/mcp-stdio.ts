@@ -9,7 +9,7 @@
 
 import { spawn } from 'node:child_process'
 import process from 'node:process'
-import { toToolInfo, type McpToolInfo } from './mcp-client'
+import { toToolInfo, type McpConnection, type McpToolInfo } from './mcp-client'
 
 export type StdioTool = McpToolInfo
 
@@ -54,110 +54,148 @@ export function childEnv(environment?: Record<string, string>) {
   return { ...env, ...(environment || {}) }
 }
 
+/** An initialized stdio MCP session; `close()` kills the whole process tree. */
+export interface StdioSession extends McpConnection {
+  init: any
+  /** last lines the server wrote to stderr */
+  stderr(): string
+}
+
+/**
+ * Spawn a local MCP server and run `initialize`. Rejects with a short reason
+ * when it cannot start, exits, or stays silent past `timeoutMs`; the process
+ * is killed in every failure path.
+ */
+export function openStdio(
+  command: string[],
+  environment?: Record<string, string>,
+  timeoutMs = 25000
+): Promise<StdioSession> {
+  const [bin, ...args] = command
+  if (!bin) return Promise.reject(new Error('empty command'))
+
+  // Windows needs a shell for `npx`/`.cmd` shims; passing one pre-quoted
+  // command line (instead of argv) keeps node from warning about DEP0190
+  const child = IS_WINDOWS
+    ? spawn([bin, ...args].map(quote).join(' '), {
+        shell: true,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: childEnv(environment)
+      })
+    : spawn(bin, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: childEnv(environment),
+        detached: true
+      })
+
+  let stdout = ''
+  let stderr = ''
+  let dead: Error | undefined
+  let nextId = 1
+  const pending = new Map<number, { resolve: (msg: any) => void; reject: (error: Error) => void }>()
+
+  const die = (error: Error) => {
+    dead ??= error
+    for (const p of pending.values()) p.reject(dead)
+    pending.clear()
+  }
+  const kill = () => {
+    die(new Error('closed'))
+    killTree(child.pid)
+  }
+
+  const send = (msg: Record<string, unknown>) => {
+    try { child.stdin.write(`${JSON.stringify(msg)}\n`) } catch { /* dead pipe */ }
+  }
+
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => {
+    stdout += chunk
+    // newline-delimited JSON-RPC: keep the trailing partial line buffered
+    let idx: number
+    while ((idx = stdout.indexOf('\n')) >= 0) {
+      const line = stdout.slice(0, idx).trim()
+      stdout = stdout.slice(idx + 1)
+      if (!line.startsWith('{')) continue // servers often log plain text to stdout
+      try {
+        const msg = JSON.parse(line)
+        const waiter = msg?.id != null ? pending.get(msg.id) : undefined
+        if (waiter) {
+          pending.delete(msg.id)
+          waiter.resolve(msg)
+        }
+      } catch { /* not a JSON-RPC frame */ }
+    }
+  })
+
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-2000) })
+
+  child.on('error', (error) =>
+    die(new Error(`spawn failed: ${error instanceof Error ? error.message : error}`))
+  )
+  child.on('exit', (code) =>
+    die(new Error(`exited (${code})${stderr.trim() ? `: ${stderr.trim().split('\n').pop()}` : ''}`))
+  )
+
+  const request = (method: string, params: Record<string, unknown> = {}) => {
+    if (dead) return Promise.reject(dead)
+    const id = nextId++
+    return new Promise<any>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id)
+        reject(new Error(`timed out after ${Math.round(timeoutMs / 1000)}s`))
+      }, timeoutMs)
+      pending.set(id, {
+        resolve: (msg) => {
+          clearTimeout(timer)
+          if (msg?.error) reject(new Error(msg.error.message || `${method} failed`))
+          else resolve(msg?.result)
+        },
+        reject: (error) => { clearTimeout(timer); reject(error) }
+      })
+      send({ jsonrpc: '2.0', id, method, params })
+    })
+  }
+
+  return request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'opencode-web', version: '1' }
+  }).then((init) => {
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    return {
+      transport: 'stdio' as const,
+      init,
+      request,
+      async notify(method: string, params?: Record<string, unknown>) {
+        send({ jsonrpc: '2.0', method, ...(params ? { params } : {}) })
+      },
+      close: kill,
+      stderr: () => stderr.trim()
+    }
+  }, (error) => {
+    kill()
+    throw error
+  })
+}
+
 /**
  * Spawn a local MCP server, run initialize + tools/list, then kill it.
  * Resolves with the tool list or throws with a short reason.
  */
-export function fetchToolsStdio(
+export async function fetchToolsStdio(
   command: string[],
   environment?: Record<string, string>,
   timeoutMs = 25000
 ): Promise<StdioTool[]> {
-  const [bin, ...args] = command
-  if (!bin) return Promise.reject(new Error('empty command'))
-
-  return new Promise<StdioTool[]>((resolve, reject) => {
-    // Windows needs a shell for `npx`/`.cmd` shims; passing one pre-quoted
-    // command line (instead of argv) keeps node from warning about DEP0190
-    const child = IS_WINDOWS
-      ? spawn([bin, ...args].map(quote).join(' '), {
-          shell: true,
-          windowsHide: true,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: childEnv(environment)
-        })
-      : spawn(bin, args, {
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: childEnv(environment),
-          detached: true
-        })
-
-    let settled = false
-    let stdout = ''
-    let stderr = ''
-    const pending = new Map<number, (msg: any) => void>()
-
-    const done = (error: Error | null, tools?: StdioTool[]) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      killTree(child.pid)
-      if (error) reject(error)
-      else resolve(tools || [])
-    }
-
-    const timer = setTimeout(
-      () => done(new Error(`timed out after ${Math.round(timeoutMs / 1000)}s`)),
-      timeoutMs
-    )
-
-    const send = (msg: Record<string, unknown>) => {
-      try { child.stdin.write(`${JSON.stringify(msg)}\n`) } catch { /* dead pipe */ }
-    }
-
-    const call = (id: number, method: string, params: Record<string, unknown>) =>
-      new Promise<any>((ok) => {
-        pending.set(id, ok)
-        send({ jsonrpc: '2.0', id, method, params })
-      })
-
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk
-      // newline-delimited JSON-RPC: keep the trailing partial line buffered
-      let idx: number
-      while ((idx = stdout.indexOf('\n')) >= 0) {
-        const line = stdout.slice(0, idx).trim()
-        stdout = stdout.slice(idx + 1)
-        if (!line.startsWith('{')) continue // servers often log plain text to stdout
-        try {
-          const msg = JSON.parse(line)
-          const resolvePending = msg?.id != null ? pending.get(msg.id) : undefined
-          if (resolvePending) {
-            pending.delete(msg.id)
-            resolvePending(msg)
-          }
-        } catch { /* not a JSON-RPC frame */ }
-      }
-    })
-
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-500) })
-
-    child.on('error', (error) =>
-      done(new Error(`spawn failed: ${error instanceof Error ? error.message : error}`))
-    )
-    child.on('exit', (code) =>
-      done(new Error(`exited (${code})${stderr.trim() ? `: ${stderr.trim().split('\n').pop()}` : ''}`))
-    )
-
-    ;(async () => {
-      try {
-        const init = await call(1, 'initialize', {
-          protocolVersion: '2025-06-18',
-          capabilities: {},
-          clientInfo: { name: 'opencode-web', version: '1' }
-        })
-        if (init?.error) throw new Error(init.error.message || 'initialize failed')
-        send({ jsonrpc: '2.0', method: 'notifications/initialized' })
-
-        const list = await call(2, 'tools/list', {})
-        if (list?.error) throw new Error(list.error.message || 'tools/list failed')
-        const tools = Array.isArray(list?.result?.tools) ? list.result.tools : []
-        done(null, tools.map(toToolInfo).filter((t: StdioTool) => t.name))
-      } catch (error) {
-        done(error instanceof Error ? error : new Error(String(error)))
-      }
-    })()
-  })
+  const session = await openStdio(command, environment, timeoutMs)
+  try {
+    const list = await session.request('tools/list', {})
+    const tools = Array.isArray(list?.tools) ? list.tools : []
+    return tools.map((t: unknown) => toToolInfo(t)).filter((t: StdioTool) => t.name)
+  } finally {
+    session.close()
+  }
 }

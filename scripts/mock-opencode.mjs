@@ -186,7 +186,18 @@ createServer((req, res) => {
   }
   // pending permission requests (all sessions) - none in the mock
   if (p === '/permission' && req.method === 'GET') return json(res, [])
+  if (p === '/mcp' && req.method === 'POST') return json(res, true)
   if (p === '/mcp') return json(res, mcp)
+  if (/^\/mcp\/[^/]+\/(connect|disconnect)$/.test(p)) return json(res, true)
+  if (p === '/session/status') return json(res, {})
+  if ((p === '/instance/dispose' || p === '/global/dispose') && req.method === 'POST') return json(res, true)
+  if (p === '/skill') return json(res, [{ name: 'release-notes', description: 'Write release notes', location: '/skills/release-notes/SKILL.md', content: '' }])
+  if (p === '/path') return json(res, { home: '/home/node', directory: url.searchParams.get('directory') || '/', config: '/home/node/.config/opencode' })
+  if (/^\/session\/[^/]+\/todo$/.test(p)) {
+    return json(res, p.includes('ses_mock1')
+      ? [{ id: 't1', content: 'Add blink animation', status: 'in_progress', priority: 'high' }, { id: 't2', content: 'Write tests', status: 'completed', priority: 'medium' }]
+      : [])
+  }
   if (p === '/experimental/tool/ids') {
     return json(res, [
       'bash', 'read', 'edit', 'glob',
@@ -207,7 +218,9 @@ createServer((req, res) => {
   if (msgMatch && req.method === 'GET') {
     return json(res, msgMatch[1] === 'ses_mock1' ? messages : msgMatch[1] === 'ses_mock2' ? uiMessages : [])
   }
-  if (msgMatch && req.method === 'POST') return json(res, { info: {}, parts: [] })
+  if (msgMatch && req.method === 'POST') {
+    return json(res, { info: { role: 'assistant', time: { created: Date.now(), completed: Date.now() } }, parts: [{ type: 'text', text: 'Scheduled run done.' }] })
+  }
 
   const sesMatch = p.match(/^\/session\/([^/]+)$/)
   if (sesMatch) {

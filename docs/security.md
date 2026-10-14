@@ -40,6 +40,12 @@ Browser tools (for example the MCP Inspector) send an `Origin` header and are re
 NUXT_ALLOWED_ORIGINS=http://localhost:6274,https://inspector.example.com
 ```
 
+## Agent control and MCP tests
+
+- **Agent control** gives the agent in every chat this app's MCP tools. Tools that change state (reloads, adding or switching MCP servers, prompting or aborting other sessions, schedules, testing an ad-hoc server) are registered with the `ask` permission, so a prompt-injected agent cannot use them without your click. Relaxing them to `auto` on the MCP page is your call.
+- **Testing a local (stdio) MCP server** spawns its command on the **web app's** host, like tool discovery always has, with a minimal environment that excludes the app's own secrets. `NUXT_MCP_LOCAL_DISCOVERY=never` turns both off.
+- The server editor never receives stored header or environment values: they arrive as `***`, and the server substitutes the stored value when an untouched placeholder is saved or tested.
+
 ## LAN-only without any login
 
 Running on a LAN without a proxy (`ports: ["3000:3000"]`) means everyone on that network has full agent access. The Origin check stops other websites from using it through your browser. It does not stop DNS rebinding: if that matters to you, put the app behind a proxy that checks the `Host` header, or use the token.

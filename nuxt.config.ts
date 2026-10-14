@@ -58,6 +58,12 @@ export default defineNuxtConfig({
     //   same-host - only when opencodeUrl is localhost
     //   never     - never spawn; local servers list no tools
     mcpLocalDiscovery: 'always',
+    // scheduled prompts (NUXT_SCHEDULER): 'on' or 'off'
+    scheduler: 'on',
+    // URL at which *opencode* reaches this app (NUXT_SELF_URL), used to
+    // register the control MCP server (`<selfUrl>/mcp`) with opencode.
+    // Empty: the origin of NUXT_PUBLIC_DEMO_MCP_URL, else the request's own
+    selfUrl: '',
     public: {
       // URL at which *opencode* reaches this app's demo MCP server, used when
       // adding it from the MCP page (NUXT_PUBLIC_DEMO_MCP_URL). Empty: the

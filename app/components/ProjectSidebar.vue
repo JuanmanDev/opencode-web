@@ -5,7 +5,18 @@ const caps = useCapabilities()
 
 const route = useRoute()
 const dirParam = computed(() => encodeDir(props.directory))
-const { sessions, refreshing, refresh, remove } = useSessions(() => props.directory)
+const { sessions, children, refreshing, refresh, remove } = useSessions(() => props.directory)
+
+// subagent lists: open on demand, and by themselves while one works or is shown
+const subagentToggles = ref<Record<string, boolean>>({})
+function subagentsOpen(parentID: string) {
+  const manual = subagentToggles.value[parentID]
+  if (manual !== undefined) return manual
+  return (children.value[parentID] || []).some((c) => c.id === route.params.id || busySessions.value[c.id])
+}
+function toggleSubagents(parentID: string) {
+  subagentToggles.value = { ...subagentToggles.value, [parentID]: !subagentsOpen(parentID) }
+}
 const { busy: busySessions } = useBusySessions()
 const projectMeta = useProjectMeta()
 const globalSearch = useGlobalSearch()
@@ -68,6 +79,57 @@ async function deleteSession(id: string) {
   }
 }
 
+// ---- tool tiles ----
+const { reloading, menuItems } = useReload()
+const scheduleCount = ref(0)
+onMounted(() => {
+  $fetch<Array<{ enabled: boolean }>>('/api/v1/schedules', { query: { directory: props.directory }, timeout: 10000 })
+    .then((list) => { scheduleCount.value = list.filter((s) => s.enabled).length })
+    .catch(() => {})
+})
+
+interface Tile {
+  key: string
+  label: string
+  tip: string
+  icon: string
+  to?: string
+  action?: () => void
+  menu?: ReturnType<typeof menuItems>
+  badge?: string | number
+  spin?: boolean
+}
+
+const tiles = computed<Tile[]>(() => [
+  ...(caps.value.mcp ? [{ key: 'mcp', label: 'MCP', tip: 'MCP servers', icon: 'i-lucide-server-cog', to: `/p/${dirParam.value}/mcp` }] : []),
+  {
+    key: 'schedules',
+    label: 'Schedules',
+    tip: 'Scheduled prompts',
+    icon: 'i-lucide-alarm-clock',
+    to: `/p/${dirParam.value}/schedules`,
+    badge: scheduleCount.value || undefined
+  },
+  { key: 'stats', label: 'Usage', tip: 'Usage & cost', icon: 'i-lucide-chart-column', to: `/p/${dirParam.value}/stats` },
+  {
+    key: 'search',
+    label: 'Search',
+    tip: 'Search everything (Ctrl+K)',
+    icon: 'i-lucide-search',
+    action: () => { globalSearch.open.value = true; emit('navigate') }
+  },
+  ...(caps.value.config
+    ? [{
+        key: 'reload',
+        label: 'Reload',
+        tip: 'Reload opencode config',
+        icon: reloading.value ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw',
+        spin: reloading.value,
+        menu: menuItems(props.directory)
+      }]
+    : [])
+])
+
 function fmtTime(ts?: number) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -91,39 +153,50 @@ function fmtTime(ts?: number) {
         label="New chat"
         @click="newSession"
       />
-      <UButton
-        v-if="caps.mcp"
-        block
-        color="neutral"
-        variant="ghost"
-        class="justify-start"
-        :ui="{ leadingIcon: 'size-4' }"
-        icon="i-lucide-server-cog"
-        label="MCP servers"
-        :to="`/p/${dirParam}/mcp`"
-        @click="emit('navigate')"
-      />
-      <UButton
-        block
-        color="neutral"
-        variant="ghost"
-        class="justify-start"
-        :ui="{ leadingIcon: 'size-4' }"
-        icon="i-lucide-chart-column"
-        label="Usage & cost"
-        :to="`/p/${dirParam}/stats`"
-        @click="emit('navigate')"
-      />
-      <UButton
-        block
-        color="neutral"
-        variant="ghost"
-        class="justify-start"
-        :ui="{ leadingIcon: 'size-4' }"
-        icon="i-lucide-search"
-        label="Search everything"
-        @click="globalSearch.open.value = true; emit('navigate')"
-      />
+      <!-- project tools: one row of labelled tiles -->
+      <nav class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }" aria-label="Project tools">
+        <template v-for="tile in tiles" :key="tile.key">
+          <UDropdownMenu v-if="tile.menu" :items="tile.menu" :content="{ align: 'start' }">
+            <UTooltip :text="tile.tip">
+              <button
+                type="button"
+                class="oc-tile flex flex-col items-center gap-0.5 rounded-sm py-1.5 text-dimmed hover:bg-elevated hover:text-highlighted w-full"
+                :aria-label="tile.tip"
+              >
+                <UIcon :name="tile.icon" class="size-4" :class="tile.spin ? 'animate-spin' : ''" />
+                <span class="text-[10px] leading-none truncate max-w-full">{{ tile.label }}</span>
+              </button>
+            </UTooltip>
+          </UDropdownMenu>
+          <UTooltip v-else :text="tile.tip">
+            <NuxtLink
+              v-if="tile.to"
+              :to="tile.to"
+              class="oc-tile relative flex flex-col items-center gap-0.5 rounded-sm py-1.5 hover:bg-elevated hover:text-highlighted"
+              :class="route.path === tile.to ? 'bg-elevated text-highlighted' : 'text-dimmed'"
+              :aria-label="tile.tip"
+              @click="emit('navigate')"
+            >
+              <UIcon :name="tile.icon" class="size-4" />
+              <span class="text-[10px] leading-none truncate max-w-full">{{ tile.label }}</span>
+              <span
+                v-if="tile.badge"
+                class="absolute top-0.5 right-1.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-primary text-[9px] leading-3.5 text-inverted text-center oc-appear"
+              >{{ tile.badge }}</span>
+            </NuxtLink>
+            <button
+              v-else
+              type="button"
+              class="oc-tile flex flex-col items-center gap-0.5 rounded-sm py-1.5 text-dimmed hover:bg-elevated hover:text-highlighted"
+              :aria-label="tile.tip"
+              @click="tile.action?.()"
+            >
+              <UIcon :name="tile.icon" class="size-4" />
+              <span class="text-[10px] leading-none truncate max-w-full">{{ tile.label }}</span>
+            </button>
+          </UTooltip>
+        </template>
+      </nav>
     </div>
 
     <div class="flex items-center gap-1.5 px-3 pb-1 text-[10px] uppercase tracking-widest text-dimmed">
@@ -144,7 +217,7 @@ function fmtTime(ts?: number) {
         </template>
       </UInput>
     </div>
-    <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+    <div class="relative flex-1 overflow-y-auto overflow-x-hidden px-2 pb-2 space-y-0.5">
       <!-- first load (e.g. opening the mobile menu): skeleton rows -->
       <div v-if="refreshing && !sessions.length" class="px-1 pt-1 space-y-2.5">
         <div v-for="i in 6" :key="i" class="flex items-start gap-2">
@@ -155,6 +228,7 @@ function fmtTime(ts?: number) {
           </div>
         </div>
       </div>
+      <TransitionGroup name="oc-list">
       <div
         v-for="s in sortedSessions"
         :key="s.id"
@@ -212,7 +286,42 @@ function fmtTime(ts?: number) {
           aria-label="Delete session"
           @click.stop.prevent="requestDelete(s.id)"
         />
+        <!-- subagent sessions started by this conversation (task tool) -->
+        <template v-if="children[s.id]?.length">
+          <button
+            type="button"
+            class="flex items-center gap-1 ml-7 -mt-1 mb-0.5 px-1 py-0.5 rounded-sm text-[10px] text-dimmed hover:text-highlighted transition-colors"
+            :aria-expanded="subagentsOpen(s.id)"
+            @click="toggleSubagents(s.id)"
+          >
+            <UIcon name="i-lucide-chevron-right" class="size-3 transition-transform duration-200" :class="subagentsOpen(s.id) ? 'rotate-90' : ''" />
+            <UIcon name="i-lucide-bot" class="size-3" />
+            {{ children[s.id]!.length }} subagent{{ children[s.id]!.length === 1 ? '' : 's' }}
+            <UIcon v-if="children[s.id]!.some((c) => busySessions[c.id])" name="i-lucide-loader-circle" class="size-3 animate-spin text-highlighted" />
+          </button>
+          <CollapseTransition>
+            <div v-if="subagentsOpen(s.id)" class="ml-6 pl-2 border-l border-default space-y-0.5 mb-1">
+              <NuxtLink
+                v-for="c in children[s.id]"
+                :key="c.id"
+                :to="`/p/${dirParam}/session/${c.id}`"
+                class="oc-row flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs hover:bg-elevated"
+                :class="route.params.id === c.id ? 'bg-elevated text-highlighted' : 'text-muted'"
+                @click="emit('navigate')"
+              >
+                <UIcon
+                  :name="busySessions[c.id] ? 'i-lucide-loader-circle' : 'i-lucide-bot'"
+                  class="size-3 shrink-0"
+                  :class="busySessions[c.id] ? 'animate-spin text-highlighted' : 'text-dimmed'"
+                />
+                <span class="truncate">{{ (c.title || 'Subagent').replace(/\s*\(@[\w-]+ subagent\)$/, '') }}</span>
+                <span v-if="c.agent" class="ml-auto shrink-0 text-[9px] font-mono text-dimmed">@{{ c.agent }}</span>
+              </NuxtLink>
+            </div>
+          </CollapseTransition>
+        </template>
       </div>
+      </TransitionGroup>
       <div v-if="!sessions.length && !refreshing && serverDegraded" class="flex items-center gap-1.5 px-2.5 py-4 text-xs text-error">
         <UIcon name="i-lucide-plug-zap" class="size-3.5 shrink-0" />
         Server not responding

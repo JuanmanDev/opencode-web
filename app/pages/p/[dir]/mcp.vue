@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { McpStatus } from '#shared/types/opencode'
+import { mcpErrorHint } from '#shared/utils/mcp-hints'
 
 const route = useRoute()
 const caps = useCapabilities()
@@ -27,6 +28,55 @@ const configTools = ref<Record<string, boolean>>({})
 const configPermission = ref<Record<string, string>>({})
 const loading = ref(true)
 const toggling = ref<string | null>(null)
+
+// ---- server detail modal (diagnose, tools, edit, test) ----
+type DetailTab = 'overview' | 'tools' | 'config' | 'test'
+const details = reactive({
+  open: false,
+  name: null as string | null,
+  tab: 'overview' as DetailTab,
+  preset: null as { name?: string; config: Record<string, unknown>; note?: string } | null
+})
+
+function openDetails(name: string, tab: DetailTab = 'overview') {
+  details.name = name
+  details.tab = tab
+  details.preset = null
+  details.open = true
+}
+
+function openCreate(preset?: { name?: string; config: Record<string, unknown>; note?: string }) {
+  details.name = null
+  details.tab = 'config'
+  details.preset = preset || null
+  addOpen.value = false
+  details.open = true
+}
+
+const BROKEN_STATUS = ['failed', 'error', 'needs_auth', 'needs_client_registration']
+
+/** After an action: a broken server gets the details modal, not just a toast. */
+function reportBroken(name: string, action: string) {
+  const entry = entries.value.find((e) => e.name === name)
+  if (!entry || !BROKEN_STATUS.includes(entry.status)) return false
+  const hint = mcpErrorHint(entry.error, entry.status)
+  toast.add({
+    title: `${name}: ${action}, but it cannot connect`,
+    description: hint ? hint.title : entry.error || entry.status,
+    color: 'warning',
+    actions: [{ label: 'Details', icon: 'i-lucide-stethoscope', onClick: () => openDetails(name) }]
+  })
+  openDetails(name)
+  return true
+}
+
+const { reloading, menuItems } = useReload()
+const reloadMenu = computed(() => menuItems(directory.value))
+
+function errorMessage(e: unknown) {
+  const data = (e as { data?: { message?: string; data?: { message?: string } } })?.data
+  return data?.data?.message || data?.message || (e instanceof Error ? e.message : String(e))
+}
 
 // scope: this project's config, or the global opencode config (all projects)
 const scope = ref<'project' | 'global'>('project')
@@ -243,14 +293,21 @@ async function setServerMode(entry: McpEntry, mode: ServerMode) {
       })
       configPermission.value = { ...configPermission.value, [`${entry.name}_*`]: mode }
     }
-    toast.add({
-      title: `${entry.name}: ${mode === 'off' ? 'disabled' : mode === 'ask' ? 'enabled (asks first)' : 'enabled (no ask)'}`,
-      description: 'Applies to new sessions.',
-      color: 'success'
-    })
     await refresh()
+    if (mode === 'off' || !reportBroken(entry.name, 'enabled')) {
+      toast.add({
+        title: `${entry.name}: ${mode === 'off' ? 'disabled' : mode === 'ask' ? 'enabled (asks first)' : 'enabled (no ask)'}`,
+        description: 'Applies to new sessions.',
+        color: 'success'
+      })
+    }
   } catch (e) {
-    toast.add({ title: `Failed to update ${entry.name}`, description: String(e), color: 'error' })
+    toast.add({
+      title: `Failed to update ${entry.name}`,
+      description: errorMessage(e),
+      color: 'error',
+      actions: [{ label: 'Details', icon: 'i-lucide-stethoscope', onClick: () => openDetails(entry.name) }]
+    })
   } finally {
     toggling.value = null
   }
@@ -315,15 +372,15 @@ function onSetServer(name: string, mode: 'off' | 'ask' | 'allow') {
 async function retryServer(name: string) {
   toggling.value = name
   try {
-    await api.mcpConnect(name)
+    await api.mcpConnect(name).catch(() => {})
     await refresh(true)
-    const status = entries.value.find((e) => e.name === name)?.status
-    toast.add({
-      title: `${name}: ${status || 'reconnected'}`,
-      color: status === 'connected' ? 'success' : 'warning'
-    })
+    if (!reportBroken(name, 'retried')) {
+      const status = entries.value.find((e) => e.name === name)?.status
+      toast.add({ title: `${name}: ${status || 'reconnected'}`, color: status === 'connected' ? 'success' : 'warning' })
+    }
   } catch (e) {
-    toast.add({ title: `Could not connect ${name}`, description: String(e), color: 'error' })
+    toast.add({ title: `Could not connect ${name}`, description: errorMessage(e), color: 'error' })
+    openDetails(name)
   } finally {
     toggling.value = null
   }
@@ -388,6 +445,8 @@ interface CatalogEntry {
   icon: string
   badge?: string
   config: Record<string, unknown>
+  /** needs details first (URL, token): opens the editor instead of adding */
+  form?: string
 }
 
 // curated suggestions; the MCP-UI demo showcases interactive UI apps in chat
@@ -407,6 +466,21 @@ const CATALOG: CatalogEntry[] = [
     icon: 'i-lucide-app-window',
     badge: 'MCP UI',
     config: { type: 'remote', url: 'https://remote-mcp-server-authless.idosalomon.workers.dev/mcp', enabled: true }
+  },
+  {
+    name: 'home-assistant',
+    title: 'Home Assistant',
+    description: 'Control your smart home through Home Assistant\'s MCP Server integration (needs a long-lived access token).',
+    icon: 'i-lucide-house',
+    badge: 'token',
+    form: 'Set your Home Assistant URL and paste a long-lived access token (Profile → Security). OAuth stays off: Home Assistant does not support the dynamic client registration opencode would try.',
+    config: {
+      type: 'remote',
+      url: 'https://homeassistant.local:8123/api/mcp',
+      headers: { Authorization: 'Bearer ' },
+      oauth: false,
+      enabled: true
+    }
   },
   {
     name: 'context7',
@@ -463,14 +537,13 @@ async function addEntry(name: string, config: Record<string, unknown>) {
     // POST /mcp only registers in memory; persist so it survives restarts
     await patchScoped({ mcp: { [name]: config } }).catch(() => {})
     await refresh()
-    const status = entries.value.find((e) => e.name === name)?.status
-    toast.add({
-      title: `Added ${name}`,
-      description: status ? `Status: ${status}` : undefined,
-      color: status === 'failed' || status === 'error' ? 'warning' : 'success'
-    })
+    addOpen.value = false
+    if (!reportBroken(name, 'added')) {
+      const status = entries.value.find((e) => e.name === name)?.status
+      toast.add({ title: `Added ${name}`, description: status ? `Status: ${status}` : undefined, color: 'success' })
+    }
   } catch (e) {
-    toast.add({ title: `Failed to add ${name}`, description: String(e), color: 'error' })
+    toast.add({ title: `Failed to add ${name}`, description: errorMessage(e), color: 'error' })
   } finally {
     addingName.value = null
   }
@@ -575,15 +648,30 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       <div class="flex items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">MCP servers</h1>
         <span class="flex-1" />
-        <UButton
-          size="xs"
-          variant="soft"
-          icon="i-lucide-refresh-cw"
-          class="oc-tap"
-          :loading="loading"
-          aria-label="Rescan servers and tools"
-          @click="refresh(true)"
-        />
+        <UTooltip text="Rescan servers and tools">
+          <UButton
+            size="xs"
+            variant="soft"
+            icon="i-lucide-refresh-cw"
+            class="oc-tap"
+            :loading="loading"
+            aria-label="Rescan servers and tools"
+            @click="refresh(true)"
+          />
+        </UTooltip>
+        <UDropdownMenu v-if="caps.config" :items="reloadMenu" :content="{ align: 'end' }">
+          <UButton
+            size="xs"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-rotate-ccw"
+            label="Reload opencode"
+            class="oc-tap"
+            :loading="reloading"
+            :ui="{ label: 'hidden sm:inline' }"
+            aria-label="Reload opencode config"
+          />
+        </UDropdownMenu>
         <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" class="oc-tap" @click="addOpen = true" />
       </div>
       <p class="text-sm text-muted mb-4">
@@ -591,6 +679,8 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
           ? 'Global opencode config — applies to every project.'
           : `Enabled servers for ${dirName(directory)} — saved to this project's opencode config.` }}
       </p>
+
+      <AgentControlCard v-if="caps.mcp" @changed="refresh(true)" @details="(n) => openDetails(n, 'tools')" />
 
       <!-- scope: project vs global -->
       <div class="flex items-center gap-1 mb-3">
@@ -648,11 +738,13 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         :toggling-name="toggling"
         :loading="loading"
         repairable
+        inspectable
         list-class="grow"
         @set-server="onSetServer"
         @set-tool="setToolMode"
         @retry="retryServer"
         @authenticate="startAuth"
+        @details="openDetails"
       >
         <!-- saved presets share the filter row -->
         <template #actions>
@@ -774,6 +866,16 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
                   disabled
                 />
                 <UButton
+                  v-else-if="entry.form"
+                  size="xs"
+                  color="primary"
+                  variant="soft"
+                  icon="i-lucide-settings-2"
+                  label="Set up"
+                  class="oc-tap"
+                  @click="openCreate({ name: entry.name, config: entry.config, note: entry.form })"
+                />
+                <UButton
                   v-else
                   size="xs"
                   color="primary"
@@ -812,8 +914,16 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         </div>
       </template>
       <template #footer>
-        <div class="flex justify-end gap-2 w-full">
+        <div class="flex flex-wrap justify-end gap-2 w-full">
           <UButton variant="ghost" color="neutral" label="Close" @click="addOpen = false" />
+          <span class="flex-1" />
+          <UButton
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-settings-2"
+            label="Set up with a form"
+            @click="openCreate()"
+          />
           <UButton
             color="primary"
             icon="i-lucide-plus"
@@ -825,5 +935,16 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         </div>
       </template>
     </UModal>
+
+    <McpServerModal
+      v-model:open="details.open"
+      :name="details.name"
+      :directory="directory"
+      :scope="scope"
+      :initial-tab="details.tab"
+      :preset="details.preset"
+      @saved="refresh(true)"
+      @authenticate="(n) => { details.open = false; startAuth(n) }"
+    />
   </div>
 </template>
