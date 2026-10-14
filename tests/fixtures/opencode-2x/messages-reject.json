@@ -1,0 +1,84 @@
+{
+ "data": [
+  {
+   "id": "msg_13c878bcc0017ryLlg3TEshRD7",
+   "time": {
+    "created": 1792016878548
+   },
+   "text": "ask me",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c878bda001YhX5rhOHxuY7d1",
+   "time": {
+    "created": 1792016878559,
+    "streamed": 1792016878572,
+    "completed": 1792016879361
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "tool",
+     "id": "call_1792016878560",
+     "name": "question",
+     "executed": false,
+     "state": {
+      "status": "error",
+      "input": {
+       "questions": [
+        {
+         "question": "Pick one?",
+         "header": "Pick",
+         "options": [
+          {
+           "label": "A",
+           "description": "first"
+          },
+          {
+           "label": "B",
+           "description": "second"
+          }
+         ]
+        }
+       ]
+      },
+      "error": {
+       "type": "aborted",
+       "message": "The user dismissed this question"
+      }
+     },
+     "time": {
+      "created": 1792016878568,
+      "ran": 1792016878571,
+      "completed": 1792016879360
+     }
+    }
+   ],
+   "finish": "error",
+   "rawFinish": "tool_calls",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   },
+   "error": {
+    "type": "aborted",
+    "message": "Step interrupted"
+   }
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NzhiY2MwMDE3cnlMbGczVEVzaFJENyIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4NzhiZGEwMDFZaFg1cmhPSHh1WTdkMSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}

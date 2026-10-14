@@ -555,3 +555,28 @@ Paths contain the scratch project dir `…\compat-v2\work`; credentials are fake
 
 Re-run against any server: `OPENCODE_VERSION=<v> COMPAT_PROTOCOL=v2 npx playwright test -c playwright.compat.config.ts`
 (real opencode + `scripts/mock-llm.mjs`, see `scripts/compat-server.mjs`).
+
+---
+
+## Z. opencode 2.x (`@opencode/cli`, researched against 2.0.29)
+
+2.x is v2-only: the 1.x routes are gone (`/global/health` and every unknown path answer the web UI as `200 text/html`). The adapter keeps one code path for both v2 dialects; `ServerProfile.dialect` is `'1.18'` (early `/api` of 1.18/1.19 hybrids) or `'2'`. Code: `server/utils/compat/v2/next.ts` (2.x mapping helpers), `handlers.ts` (2.x routes win when the dialect is `'2'`), `projector.ts` (`normalizeEvent()` rewrites 2.x events into the 1.18 vocabulary). Fixtures: `tests/fixtures/opencode-2x/`.
+
+| area | 1.18 / 1.19 `/api` | 2.x |
+| --- | --- | --- |
+| detection | `GET /api/health` → `{healthy}` | `GET /api/info` → `{version, pid, urls, paths, capabilities}`; no `/api/health` |
+| event names | `session.next.X` | `session.X`; renames `agent.selected`, `model.selected`, `retry.scheduled`, `compaction.failed` |
+| run state | derived | `session.execution.started/succeeded/failed/interrupted` |
+| user prompt events | `prompted` | inbox: `session.inbox.enqueued/delivered/cancelled` |
+| tool events | `callID`, `structured`, `provider` | `id`, `metadata`, `executed`; tool names `shell`, `subagent`, `execute` (MCP code mode), no `todowrite` |
+| text / reasoning | ids per content item | `ordinal`, no ids |
+| prompt body | `{prompt:{text, files, agents}, delivery?}` | flat `{text, files?, agents?, skills?, delivery?, resume?}` |
+| questions | `question.*` events, `/api/question/request` | forms: `form.*` events, `/api/form`, reply `{answer}`, dismiss `DELETE …/form/{id}` |
+| permission reply | `{reply}` | `{decision}`; requests carry `source.id` |
+| revert | `POST …/revert/clear` | `DELETE …/revert`; commit takes `to` |
+| sessions | no rename / delete / fork / diff / shell / command | `PATCH {title}`, `DELETE`, `POST …/fork {before?}`, `GET …/diff`, `POST …/shell`, `POST …/command`, `?parentID=` filter |
+| subagents | none | `subagent` tool `{agent, description, prompt, model?, sessionID?, background?}`; child `parentID`; `tool.progress` metadata `{sessionID, status}`; result `<subagent sessionID=… state=…>` |
+| MCP | none | `GET /api/mcp`, `PUT/DELETE /api/experimental/mcp/{name}` (runtime only), connect / disconnect, `mcp.*` events |
+| config | none | `GET /api/config` (documents + folders, lowest priority first), `POST /api/experimental/fs/write`, `POST /api/location/reload` |
+
+Config documents: 2.x walks **every folder above** the location for `opencode.json(c)`, `.opencode`, `.claude` and `.agents`. The adapter writes project config only inside the opened folder and global config only to the global config folder; ancestor files are read-only (`splitConfig()` → `inherited`). 1.x-style `mcp` entries are migrated by 2.x but lose 2.x-only keys such as `codemode`, so such entries are written under `mcp.servers` in the native schema (`disabled` instead of `enabled`, `timeout` as `{catalog, execution}`).

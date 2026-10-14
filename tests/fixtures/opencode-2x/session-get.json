@@ -1,0 +1,26 @@
+{
+ "data": {
+  "id": "ses_ec3795a3dffe3aW6uK79hxOCV8",
+  "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+  "cost": 0,
+  "tokens": {
+   "input": 360,
+   "output": 36,
+   "reasoning": 0,
+   "cache": {
+    "read": 0,
+    "write": 0
+   }
+  },
+  "outcome": "succeeded",
+  "time": {
+   "created": 1792016819653,
+   "updated": 1792016820448,
+   "idle": 1792016820449
+  },
+  "title": "Mock conversation",
+  "location": {
+   "directory": "C:\\Users\\dev\\project"
+  }
+ }
+}

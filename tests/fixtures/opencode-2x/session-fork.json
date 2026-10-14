@@ -1,0 +1,31 @@
+{
+ "data": {
+  "id": "ses_ec37953c3ffePoDQH58Ta1Yof7",
+  "fork": {
+   "sessionID": "ses_ec3795a3dffe3aW6uK79hxOCV8",
+   "boundary": {
+    "type": "through",
+    "messageID": "msg_13c86a8e1002mcMiugZpoyhlza"
+   }
+  },
+  "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+  "cost": 0,
+  "tokens": {
+   "input": 0,
+   "output": 0,
+   "reasoning": 0,
+   "cache": {
+    "read": 0,
+    "write": 0
+   }
+  },
+  "time": {
+   "created": 1792016821308,
+   "updated": 1792016821308
+  },
+  "title": "Renamed by capture (fork #1)",
+  "location": {
+   "directory": "C:\\Users\\dev\\project"
+  }
+ }
+}

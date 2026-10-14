@@ -1,0 +1,198 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "mcp": {
+    "probe2": {
+     "type": "remote",
+     "url": "http://127.0.0.1:1/mcp",
+     "enabled": false,
+     "oauth": false,
+     "headers": {
+      "Authorization": "Bearer zzz"
+     }
+    }
+   },
+   "permission": {
+    "probe2_*": "ask"
+   }
+  }
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/location",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "directory": "C:\\work",
+    "project": {
+     "id": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+     "directory": "C:\\work",
+     "canonical": "C:\\work"
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/config",
+   "directory": "WORK",
+   "status": 200,
+   "response": [
+    {
+     "type": "document",
+     "path": "C:\\cfg\\opencode.json",
+     "info": {
+      "$schema": "https://opencode.ai/config.json",
+      "model": {
+       "providerID": "mock",
+       "model": "mock-model"
+      },
+      "update": "disable",
+      "share": "disabled",
+      "permissions": [
+       {
+        "action": "shell",
+        "resource": "*",
+        "effect": "ask"
+       }
+      ],
+      "agents": {
+       "title": {
+        "model": {
+         "providerID": "mock",
+         "model": "mock-model"
+        }
+       }
+      },
+      "mcp": {
+       "servers": {
+        "probe": {
+         "type": "local",
+         "command": [
+          "node",
+          "C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs"
+         ]
+        },
+        "remote1": {
+         "type": "remote",
+         "url": "http://127.0.0.1:1/mcp",
+         "headers": {
+          "Authorization": "Bearer x"
+         },
+         "oauth": false,
+         "disabled": true
+        }
+       }
+      },
+      "providers": {
+       "mock": {
+        "name": "Mock",
+        "package": "aisdk:@ai-sdk/openai-compatible",
+        "settings": {
+         "apiKey": "sk-mock",
+         "baseURL": "http://127.0.0.1:4951/v1"
+        },
+        "models": {
+         "mock-model": {
+          "name": "Mock Model",
+          "capabilities": {
+           "tools": true,
+           "input": [
+            "text",
+            "image"
+           ],
+           "output": [
+            "text"
+           ]
+          },
+          "limit": {
+           "context": 100000,
+           "output": 4096
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    {
+     "type": "directory",
+     "path": "C:\\cfg"
+    }
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/fs/read/opencode.json",
+   "directory": "WORK",
+   "status": 200,
+   "response": "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"mock/mock-model\",\n  \"small_model\": \"mock/mock-model\",\n  \"autoupdate\": false,\n  \"share\": \"disabled\",\n  \"provider\": {\n    \"mock\": {\n      \"npm\": \"@ai-sdk/openai-compatible\",\n      \"name\": \"Mock\",\n      \"options\": {\n        \"baseURL\": \"http://127.0.0.1:4951/v1\",\n        \"apiKey\": \"sk-mock\"\n      },\n      \"models\": {\n        \"mock-model\": {\n          \"name\": \"Mock Model\",\n          \"tool_call\": true,\n          \"reasoning\": true,\n          \"limit\": {\n            \"context\": 100000,\n            \"output\": 4096\n          }\n        }\n      }\n    }\n  },\n  \"mcp\": {\n    \"probe\": {\n      \"type\": \"local\",\n      \"command\": [\n        \"node\",\n        \"C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs\"\n      ]\n    },\n    \"remote1\": {\n      \"type\": \"remote\",\n      \"url\": \"http://127.0.0.1:1/mcp\",\n      \"enabled\": false,\n      \"oauth\": false,\n      \"headers\": {\n        \"Authorization\": \"Bearer x\"\n      }\n    }\n  },\n  \"permission\": {\n    \"bash\": \"ask\"\n  }\n}"
+  },
+  {
+   "method": "POST",
+   "path": "/api/experimental/fs/write",
+   "query": {
+    "path": "C:\\cfg\\opencode.json"
+   },
+   "body": "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"mock/mock-model\",\n  \"small_model\": \"mock/mock-model\",\n  \"autoupdate\": false,\n  \"share\": \"disabled\",\n  \"provider\": {\n    \"mock\": {\n      \"npm\": \"@ai-sdk/openai-compatible\",\n      \"name\": \"Mock\",\n      \"options\": {\n        \"baseURL\": \"http://127.0.0.1:4951/v1\",\n        \"apiKey\": \"sk-mock\"\n      },\n      \"models\": {\n        \"mock-model\": {\n          \"name\": \"Mock Model\",\n          \"tool_call\": true,\n          \"reasoning\": true,\n          \"limit\": {\n            \"context\": 100000,\n            \"output\": 4096\n          }\n        }\n      }\n    }\n  },\n  \"mcp\": {\n    \"probe\": {\n      \"type\": \"local\",\n      \"command\": [\n        \"node\",\n        \"C:/code/opencode-juanma/scripts/mock-stdio-mcp.mjs\"\n      ]\n    },\n    \"remote1\": {\n      \"type\": \"remote\",\n      \"url\": \"http://127.0.0.1:1/mcp\",\n      \"enabled\": false,\n      \"oauth\": false,\n      \"headers\": {\n        \"Authorization\": \"Bearer x\"\n      }\n    },\n    \"probe2\": {\n      \"type\": \"remote\",\n      \"url\": \"http://127.0.0.1:1/mcp\",\n      \"enabled\": false,\n      \"oauth\": false,\n      \"headers\": {\n        \"Authorization\": \"Bearer zzz\"\n      }\n    }\n  },\n  \"permission\": {\n    \"bash\": \"ask\",\n    \"probe2_*\": \"ask\"\n  }\n}\n",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": {
+     "path": "C:\\cfg\\opencode.json"
+    }
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/location/reload",
+   "status": 204
+  },
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": []
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/mcp",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "name": "probe",
+      "status": {
+       "status": "pending"
+      }
+     },
+     {
+      "name": "probe2",
+      "status": {
+       "status": "disabled"
+      }
+     },
+     {
+      "name": "remote1",
+      "status": {
+       "status": "disabled"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,72 @@
+{
+ "result": {
+  "ok": true,
+  "r": [
+   {
+    "id": "ses_ec36f1056ffe7xFa1wRypCySY4",
+    "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+    "directory": "C:\\work",
+    "path": "",
+    "parentID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+    "title": "child",
+    "version": "v2",
+    "cost": 0,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "reasoning": 0,
+     "cache": {
+      "read": 0,
+      "write": 0
+     }
+    },
+    "time": {
+     "created": 1792017493932,
+     "updated": 1792017493932
+    }
+   }
+  ]
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/session",
+   "query": {
+    "parentID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+    "limit": 200
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": "ses_ec36f1056ffe7xFa1wRypCySY4",
+      "parentID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+      "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+      "cost": 0,
+      "tokens": {
+       "input": 0,
+       "output": 0,
+       "reasoning": 0,
+       "cache": {
+        "read": 0,
+        "write": 0
+       }
+      },
+      "time": {
+       "created": 1792017493932,
+       "updated": 1792017493932
+      },
+      "title": "child",
+      "location": {
+       "directory": "C:\\work"
+      }
+     }
+    ],
+    "cursor": {
+     "previous": "eyJwYXJlbnRJRCI6InNlc19lYzM2ZjZkNjZmZmVxMlJKNU5iSXR2QWlSNyIsImFuY2hvciI6eyJpZCI6InNlc19lYzM2ZjEwNTZmZmU3eEZhMXdSeXBDeVNZNCIsInRpbWUiOjE3OTIwMTc0OTM5MzIsImRpcmVjdGlvbiI6InByZXZpb3VzIn19",
+     "next": "eyJwYXJlbnRJRCI6InNlc19lYzM2ZjZkNjZmZmVxMlJKNU5iSXR2QWlSNyIsImFuY2hvciI6eyJpZCI6InNlc19lYzM2ZjEwNTZmZmU3eEZhMXdSeXBDeVNZNCIsInRpbWUiOjE3OTIwMTc0OTM5MzIsImRpcmVjdGlvbiI6Im5leHQifX0"
+    }
+   }
+  }
+ ]
+}

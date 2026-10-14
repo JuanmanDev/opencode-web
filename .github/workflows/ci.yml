@@ -88,6 +88,9 @@ jobs:
           - { opencode: 1.14.51, protocol: legacy }
           - { opencode: latest, protocol: legacy }
           - { opencode: latest, protocol: v2 }
+          # opencode 2.x (`@opencode/cli`): v2 API only, detected automatically
+          - { opencode: 2.0.29, protocol: auto }
+          - { opencode: 2-latest, protocol: auto }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

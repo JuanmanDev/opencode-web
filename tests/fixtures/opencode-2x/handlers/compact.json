@@ -1,0 +1,26 @@
+{
+ "result": {
+  "ok": true,
+  "r": true
+ },
+ "calls": [
+  {
+   "method": "POST",
+   "path": "/api/session/ses_ec36f6d66ffeq2RJ5NbItvAiR7/compact",
+   "body": {},
+   "status": 200,
+   "response": {
+    "data": {
+     "id": "msg_13c90f743001mDj36l8JjNxyP1",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "time": {
+      "created": 1792017495876
+     },
+     "type": "compaction",
+     "payload": {},
+     "delivery": "steer"
+    }
+   }
+  }
+ ]
+}

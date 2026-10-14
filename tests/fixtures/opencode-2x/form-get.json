@@ -1,0 +1,38 @@
+{
+ "data": {
+  "id": "frm_13c86909a001D4uBXLAAY4bu1V",
+  "sessionID": "ses_ec3796f95ffev3V081DsqtlNfz",
+  "title": "Questions",
+  "metadata": {
+   "kind": "question",
+   "tool": {
+    "messageID": "msg_13c869081001ehvL1M5vlhoYE2",
+    "id": "call_1792016814219"
+   }
+  },
+  "fields": [
+   {
+    "key": "q0",
+    "title": "Pick",
+    "description": "Pick one?",
+    "type": "string",
+    "options": [
+     {
+      "value": "A",
+      "label": "A",
+      "description": "first"
+     },
+     {
+      "value": "B",
+      "label": "B",
+      "description": "second"
+     }
+    ],
+    "custom": true
+   }
+  ],
+  "state": {
+   "status": "pending"
+  }
+ }
+}

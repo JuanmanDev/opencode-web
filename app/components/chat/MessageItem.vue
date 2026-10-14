@@ -143,6 +143,7 @@ const errorMessage = computed(() => {
           </CollapseTransition>
         </div>
 
+        <ChatSubagentCard v-else-if="part.type === 'tool' && ['task', 'subagent'].includes((part as any).tool)" :part="part as any" />
         <ChatToolPart v-else-if="part.type === 'tool'" :part="part as any" />
 
         <div

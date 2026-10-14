@@ -7,6 +7,7 @@ import {
   createMirrorProjector,
   createProjector,
   isV2EventType,
+  normalizeEvent,
   type LegacyEvent,
   type V2Event
 } from '../../server/utils/compat/v2/projector'
@@ -503,3 +504,151 @@ describe('mirror projector: v2 events on the legacy /event bus (1.18 hybrid)', (
     expect(statuses).toEqual(['busy', 'idle', 'idle!', 'busy', 'idle', 'idle!', 'busy', 'idle', 'idle!', 'busy', 'idle', 'idle!'])
   })
 })
+
+// ---- opencode 2.x (`@opencode/cli` 2.0.29): renamed vocabulary ----
+// Real `/api/event` captures from 2.0.29 driven by scripts/mock-llm.mjs.
+
+const FIXTURES_2X = new URL('../fixtures/opencode-2x/', import.meta.url)
+
+function read2x(name: string) {
+  return readFileSync(new URL(name, FIXTURES_2X), 'utf8')
+}
+function events2x(name: string): V2Event[] {
+  return read2x(`events-${name}.jsonl`).split('\n').filter(Boolean).map((l) => JSON.parse(l))
+}
+function messages2x(name: string): any[] {
+  return JSON.parse(read2x(`messages-${name}.json`)).data
+}
+
+/** 2.x timestamps live on the envelope (`created`). */
+function replay2x(events: V2Event[]) {
+  let clock = 0
+  const projector = createProjector({ throttleMs: 50, now: () => clock })
+  const all: LegacyEvent[] = []
+  for (const event of events) {
+    const created = (event as { created?: number }).created
+    if (typeof created === 'number') clock = created
+    all.push(...projector.push(event))
+  }
+  all.push(...projector.flush())
+  return { projector, all }
+}
+
+/** Assistant parts as the UI keeps them, without per-lifecycle times. */
+function partsOf(messages: Array<{ info: any; parts: any[] }>) {
+  return messages
+    .filter((m) => m.info.role === 'assistant')
+    .map((m) => m.parts.map((p) => ({ id: p.id, type: p.type, text: p.text, tool: p.tool, status: p.state?.status, output: p.state?.output })))
+}
+
+describe('normalizeEvent: opencode 2.x -> 1.18 dialect', () => {
+  it('renames session.X lifecycles and their fields, leaves 1.18 and unknown events alone', () => {
+    expect(normalizeEvent({ type: 'session.tool.success', created: 5, data: { sessionID: 's', id: 'call_1', metadata: { a: 1 }, executed: false } } as V2Event))
+      .toMatchObject({ type: 'session.next.tool.success', data: { callID: 'call_1', structured: { a: 1 }, provider: { executed: false }, timestamp: 5 } })
+    expect(normalizeEvent({ type: 'session.text.delta', data: { sessionID: 's', ordinal: 1, delta: 'x' } }))
+      .toMatchObject({ type: 'session.next.text.delta', data: { textID: 'text#1', countKey: 'text' } })
+    expect(normalizeEvent({ type: 'session.agent.selected', data: { sessionID: 's', agent: 'plan' } }).type).toBe('session.next.agent.switched')
+    expect(normalizeEvent({ type: 'session.retry.scheduled', data: { sessionID: 's' } }).type).toBe('session.next.retried')
+    expect(normalizeEvent({ type: 'session.revert.committed', data: { sessionID: 's', to: 'msg_1' } }).data.messageID).toBe('msg_1')
+    expect(normalizeEvent({ type: 'permission.asked', data: { id: 'per_1', action: 'shell', resources: [] } }).type).toBe('permission.v2.asked')
+    const legacyPermission = { type: 'permission.asked', data: { id: 'per_1', permission: 'bash', patterns: [] } }
+    expect(normalizeEvent(legacyPermission)).toBe(legacyPermission)
+    const next = { type: 'session.next.text.delta', data: { sessionID: 's' } }
+    expect(normalizeEvent(next)).toBe(next)
+    for (const type of ['session.created', 'session.deleted', 'session.renamed', 'session.compacted', 'session.diff']) {
+      expect(normalizeEvent({ type, data: {} }).type).toBe(type)
+    }
+  })
+})
+
+describe('projector: opencode 2.x capture', () => {
+  it('projects a text turn whose parts match the REST snapshot by id', () => {
+    const { all } = replay2x(events2x('text'))
+    const sessionID = messages2xSession('text')
+    const live = fold(all, sessionID)
+    const rest = toLegacyMessages(messages2x('text'), { sessionID, active: false })
+    // the prompt comes from the inbox delivery, under the stored user message id
+    expect(live[0]!.info).toMatchObject({ role: 'user', id: rest[0]!.info.id })
+    expect(live[0]!.parts[0]).toMatchObject({ type: 'text', text: 'hello there' })
+    expect(partsOf(live)).toEqual(partsOf(rest))
+    expect(live[1]!.info).toMatchObject({ role: 'assistant', finish: 'stop', time: { completed: expect.any(Number) } })
+    // generated title + running usage reach the session row
+    const updated = all.filter((e) => e.type === 'session.updated').at(-1)!
+    expect(updated.properties.info).toMatchObject({ id: sessionID, title: 'Mock conversation', tokens: { input: 240, output: 24 } })
+  })
+
+  it('maps the 2.x permission request (tool `shell`) and finishes the tool with its output', () => {
+    const { all } = replay2x(events2x('shell'))
+    const asked = all.find((e) => e.type === 'permission.asked')!
+    expect(asked.properties).toMatchObject({ permission: 'shell', patterns: ['echo hello-v2'], always: ['echo *'], tool: { callID: expect.stringMatching(/^call_/) } })
+    expect(all.find((e) => e.type === 'permission.replied')!.properties).toMatchObject({ reply: 'once' })
+    const sessionID = asked.properties.sessionID
+    const live = fold(all, sessionID)
+    const rest = toLegacyMessages(messages2x('shell-tool'), { sessionID, active: false })
+    expect(partsOf(live)).toEqual(partsOf(rest))
+    const tool = live.flatMap((m) => m.parts).find((p) => p.type === 'tool')
+    expect(tool).toMatchObject({ tool: 'shell', state: { status: 'completed', output: 'hello-v2\n', title: 'echo hello-v2' } })
+  })
+
+  it('turns question forms into the legacy question events', () => {
+    const { all } = replay2x(events2x('ask'))
+    const asked = all.find((e) => e.type === 'question.asked')!
+    expect(asked.properties).toMatchObject({
+      id: expect.stringMatching(/^frm_/),
+      questions: [{ question: 'Pick one?', header: 'Pick', options: [{ label: 'A', description: 'first' }, { label: 'B', description: 'second' }] }],
+      tool: { callID: expect.stringMatching(/^call_/) }
+    })
+    expect(all.find((e) => e.type === 'question.replied')!.properties).toEqual({ sessionID: asked.properties.sessionID, requestID: asked.properties.id })
+    const rejected = replay2x(events2x('reject')).all
+    expect(rejected.some((e) => e.type === 'question.rejected')).toBe(true)
+  })
+
+  it('a dismissed question or an interrupt is an abort: no error toast', () => {
+    for (const name of ['reject', 'interrupt']) {
+      const { all } = replay2x(events2x(name))
+      expect(all.some((e) => e.type === 'session.error')).toBe(false)
+      const last = all.filter((e) => e.type === 'message.updated' && e.properties.info.role === 'assistant').at(-1)!
+      expect(last.properties.info).toMatchObject({ error: { name: 'MessageAbortedError' }, time: { completed: expect.any(Number) } })
+    }
+    const rest = toLegacyMessages(messages2x('reject'), { sessionID: 's', active: false })
+    expect(rest.at(-1)!.info.error).toMatchObject({ name: 'MessageAbortedError', data: { message: 'Step interrupted' } })
+  })
+
+  it('links the subagent tool part to its child session while it runs', () => {
+    const events = events2x('subagent')
+    const { all } = replay2x(events)
+    const child = all.find((e) => e.type === 'session.created' && e.properties.info.parentID)!
+    const childID = child.properties.info.id
+    expect(child.properties.info).toMatchObject({ parentID: expect.stringMatching(/^ses_/), title: 'probe' })
+    const parts = all.filter((e) => e.type === 'message.part.updated' && e.properties.part.tool === 'subagent').map((e) => e.properties.part)
+    const running = parts.find((p) => p.state.status === 'running' && p.state.metadata.sessionId)
+    expect(running.state.metadata).toMatchObject({ sessionID: childID, sessionId: childID, status: 'running' })
+    const done = parts.at(-1)
+    expect(done.state).toMatchObject({ status: 'completed', title: 'probe', metadata: { sessionId: childID } })
+    expect(done.state.output).toContain(`<subagent sessionID="${childID}"`)
+    // the child streams like any session
+    expect(fold(all, childID).some((m) => m.parts.some((p) => p.type === 'text' && p.text === 'Hello from the mock model.'))).toBe(true)
+  })
+
+  it('renamed, forked and deleted sessions reach the session list', () => {
+    const { projector, all } = replay2x([...events2x('subagent'), ...events2x('lifecycle')])
+    const renamed = all.filter((e) => e.type === 'session.updated').at(-1)!
+    expect(renamed.properties.info.title).toBe('Renamed by capture')
+    const [forked] = events2x('lifecycle').filter((e) => e.type === 'session.forked')
+    expect(projector.takeSeedRequests()).toContainEqual({ sessionID: forked!.data.sessionID })
+    const deleted = all.find((e) => e.type === 'session.deleted')!
+    expect(deleted.properties).toMatchObject({ sessionID: forked!.data.sessionID, info: { id: forked!.data.sessionID } })
+  })
+
+  it('run boundaries drive busy/idle', () => {
+    const signals = events2x('text').flatMap((e) => busyTransitions(e)).map((s) => s.status)
+    expect(signals[0]).toBe('busy')
+    expect(signals.at(-1)).toBe('idle')
+    expect(busyTransitions({ type: 'session.execution.interrupted', data: { sessionID: 's', reason: 'user' } })).toEqual([{ sessionID: 's', status: 'idle' }])
+  })
+})
+
+function messages2xSession(name: string) {
+  const created = events2x(name).find((e) => e.type === 'session.created')!
+  return created.data.sessionID as string
+}

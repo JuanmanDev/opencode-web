@@ -429,3 +429,38 @@ describe('mirrorLegacyEvents (1.18 hybrid, legacy transport)', () => {
     expect(events.filter((e) => e.type === 'session.idle').length).toBeGreaterThan(0)
   })
 })
+
+describe('v2 event hub: opencode 2.x stream', () => {
+  // real capture from @opencode/cli 2.0.29 (tests/fixtures/opencode-2x)
+  const lines = readFileSync(new URL('../fixtures/opencode-2x/events-ask.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean)
+  const sessionID = JSON.parse(lines[0]!).data.sessionID as string
+
+  it('projects renamed events, forms and run boundaries into legacy frames', async () => {
+    const fake = fakeClient()
+    fake.sessions.set(sessionID, { id: sessionID, title: 'Mock conversation', location: { directory: 'C:\\Users\\dev\\project' }, time: { created: 1, updated: 1 } })
+    const hub = makeHub(fake)
+    const sub = subscriber(hub, 'C:/Users/dev/project')
+    await settle()
+    fake.last().push(connected)
+    let running = true
+    fake.setActive(() => (running ? { [sessionID]: { type: 'running' } } : {}))
+    for (const line of lines) fake.last().push(`data: ${line}\n\n`)
+    await vi.advanceTimersByTimeAsync(200)
+
+    const types = sub.types()
+    expect(types.some((t) => t.startsWith('session.next.') || t.startsWith('session.execution.') || t.startsWith('form.') || t.startsWith('session.inbox.'))).toBe(false)
+    for (const type of ['session.created', 'session.updated', 'message.updated', 'message.part.updated', 'question.asked', 'question.replied', 'session.status']) {
+      expect(types).toContain(type)
+    }
+    const user = sub.events().find((e) => e.type === 'message.updated' && e.properties.info.role === 'user')
+    expect(user.properties.info.id).toMatch(/^msg_/)
+
+    running = false
+    await vi.advanceTimersByTimeAsync(5000)
+    const statuses = sub.events()
+      .filter((e) => (e.type === 'session.status' || e.type === 'session.idle') && e.properties.sessionID === sessionID)
+      .map((e) => e.properties.status?.type ?? 'idle!')
+    expect(statuses[0]).toBe('busy')
+    expect(statuses.slice(-2)).toEqual(['idle', 'idle!'])
+  })
+})

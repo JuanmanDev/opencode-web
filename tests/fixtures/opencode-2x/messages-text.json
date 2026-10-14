@@ -1,0 +1,67 @@
+{
+ "data": [
+  {
+   "id": "msg_13c8683930019WhhAlNBC3tzGK",
+   "time": {
+    "created": 1792016810913
+   },
+   "text": "hello there",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c8683ab0012e4WOUe64hMW43",
+   "time": {
+    "created": 1792016810931,
+    "streamed": 1792016811395,
+    "completed": 1792016811396
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "reasoning",
+     "text": "Thinking about it.",
+     "state": {
+      "reasoningField": "reasoning_content"
+     },
+     "time": {
+      "created": 1792016810943,
+      "completed": 1792016811392
+     }
+    },
+    {
+     "type": "text",
+     "text": "Hello from the mock model."
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c868586001KeJqsZZMuNhFSk",
+   "time": {
+    "created": 1792016811398
+   },
+   "type": "idle",
+   "outcome": "succeeded"
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NjgzOTMwMDE5V2hoQWxOQkMzdHpHSyIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4Njg1ODYwMDFLZUpxc1paTXVOaEZTayIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}

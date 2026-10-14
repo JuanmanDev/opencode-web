@@ -1,0 +1,23 @@
+{
+ "location": {
+  "directory": "C:\\Users\\dev\\project"
+ },
+ "data": [
+  {
+   "id": "per_13c878391001TqYJi8aNrsonOL",
+   "sessionID": "ses_ec3787cb5ffeW66X4vBteYWaxm",
+   "action": "shell",
+   "resources": [
+    "echo hello-v2"
+   ],
+   "save": [
+    "echo *"
+   ],
+   "source": {
+    "type": "tool",
+    "messageID": "msg_13c878361001Ahze8SCjS8jHyg",
+    "id": "call_1792016876393"
+   }
+  }
+ ]
+}

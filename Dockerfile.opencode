@@ -10,8 +10,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /uvx /usr/local/bin/
 
 # pinned per build (CI passes the current release) so layer caches can never
 # freeze opencode at an old version
+# OPENCODE_PACKAGE=@opencode/cli installs opencode 2.x (v2 API only)
+ARG OPENCODE_PACKAGE=opencode-ai
 ARG OPENCODE_VERSION=latest
-RUN npm install -g opencode-ai@${OPENCODE_VERSION} --no-audit --no-fund \
+RUN npm install -g ${OPENCODE_PACKAGE}@${OPENCODE_VERSION} --no-audit --no-fund \
  && npm cache clean --force
 
 # non-root; state (auth, sessions, logs) lives under /home/node/.local and

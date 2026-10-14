@@ -1,0 +1,308 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "info": {
+    "id": "msg_13c9092b40012gXRvK3aVd3mnT",
+    "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+    "role": "assistant",
+    "parentID": "msg_13c9092a1001ch46Jmi6yrFaN6",
+    "time": {
+     "created": 1792017470139,
+     "completed": 1792017470601
+    },
+    "modelID": "mock-model",
+    "providerID": "mock",
+    "agent": "build",
+    "mode": "build",
+    "path": {
+     "cwd": "C:\\work",
+     "root": "C:\\work"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 132,
+     "input": 120,
+     "output": 12,
+     "reasoning": 0,
+     "cache": {
+      "read": 0,
+      "write": 0
+     }
+    },
+    "finish": "stop"
+   },
+   "parts": [
+    {
+     "id": "prt_msg_13c9092b40012gXRvK3aVd3mnT_start",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "messageID": "msg_13c9092b40012gXRvK3aVd3mnT",
+     "type": "step-start"
+    },
+    {
+     "id": "prt_msg_13c9092b40012gXRvK3aVd3mnT_reasoning",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "messageID": "msg_13c9092b40012gXRvK3aVd3mnT",
+     "type": "reasoning",
+     "text": "Thinking about it.",
+     "time": {
+      "start": 1792017470147,
+      "end": 1792017470597
+     }
+    },
+    {
+     "id": "prt_msg_13c9092b40012gXRvK3aVd3mnT_text",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "messageID": "msg_13c9092b40012gXRvK3aVd3mnT",
+     "type": "text",
+     "text": "Hello from the mock model.",
+     "time": {
+      "start": 1792017470139,
+      "end": 1792017470601
+     }
+    },
+    {
+     "id": "prt_msg_13c9092b40012gXRvK3aVd3mnT_finish",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "messageID": "msg_13c9092b40012gXRvK3aVd3mnT",
+     "type": "step-finish",
+     "reason": "stop",
+     "cost": 0,
+     "tokens": {
+      "total": 132,
+      "input": 120,
+      "output": 12,
+      "reasoning": 0,
+      "cache": {
+       "read": 0,
+       "write": 0
+      }
+     }
+    }
+   ]
+  }
+ },
+ "calls": [
+  {
+   "method": "POST",
+   "path": "/api/session",
+   "body": {
+    "location": {
+     "directory": "C:/work"
+    }
+   },
+   "status": 200,
+   "response": {
+    "data": {
+     "id": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+     "cost": 0,
+     "tokens": {
+      "input": 0,
+      "output": 0,
+      "reasoning": 0,
+      "cache": {
+       "read": 0,
+       "write": 0
+      }
+     },
+     "time": {
+      "created": 1792017470107,
+      "updated": 1792017470107
+     },
+     "location": {
+      "directory": "C:\\work"
+     }
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+   "status": 200,
+   "response": {
+    "data": {
+     "id": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+     "cost": 0,
+     "tokens": {
+      "input": 0,
+      "output": 0,
+      "reasoning": 0,
+      "cache": {
+       "read": 0,
+       "write": 0
+      }
+     },
+     "time": {
+      "created": 1792017470107,
+      "updated": 1792017470107
+     },
+     "location": {
+      "directory": "C:\\work"
+     }
+    }
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/session/ses_ec36f6d66ffeq2RJ5NbItvAiR7/prompt",
+   "body": {
+    "text": "hello adapter",
+    "delivery": "steer"
+   },
+   "status": 200,
+   "response": {
+    "data": {
+     "id": "msg_13c9092a1001ch46Jmi6yrFaN6",
+     "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+     "time": {
+      "created": 1792017470114
+     },
+     "type": "user",
+     "payload": {
+      "text": "hello adapter"
+     },
+     "delivery": "steer",
+     "prompt": {
+      "text": "hello adapter"
+     }
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/location",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "directory": "C:\\work",
+    "project": {
+     "id": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+     "directory": "C:\\work",
+     "canonical": "C:\\work"
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/active",
+   "status": 200,
+   "response": {
+    "data": {
+     "ses_ec36f6d66ffeq2RJ5NbItvAiR7": {
+      "type": "running"
+     }
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/active",
+   "status": 200,
+   "response": {
+    "data": {
+     "ses_ec36f6d66ffeq2RJ5NbItvAiR7": {
+      "type": "running"
+     }
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/active",
+   "status": 200,
+   "response": {
+    "data": {
+     "ses_ec36f6d66ffeq2RJ5NbItvAiR7": {
+      "type": "running"
+     }
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/active",
+   "status": 200,
+   "response": {
+    "data": {}
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/session/ses_ec36f6d66ffeq2RJ5NbItvAiR7/message",
+   "query": {
+    "order": "desc",
+    "limit": 50
+   },
+   "status": 200,
+   "response": {
+    "data": [
+     {
+      "id": "msg_13c90948a002B442x652QZBvnh",
+      "time": {
+       "created": 1792017470602
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+     },
+     {
+      "id": "msg_13c9092b40012gXRvK3aVd3mnT",
+      "time": {
+       "created": 1792017470139,
+       "streamed": 1792017470600,
+       "completed": 1792017470601
+      },
+      "type": "assistant",
+      "agent": "build",
+      "model": {
+       "id": "mock-model",
+       "providerID": "mock"
+      },
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Thinking about it.",
+        "state": {
+         "reasoningField": "reasoning_content"
+        },
+        "time": {
+         "created": 1792017470147,
+         "completed": 1792017470597
+        }
+       },
+       {
+        "type": "text",
+        "text": "Hello from the mock model."
+       }
+      ],
+      "finish": "stop",
+      "rawFinish": "stop",
+      "cost": 0,
+      "tokens": {
+       "input": 120,
+       "output": 12,
+       "reasoning": 0,
+       "cache": {
+        "read": 0,
+        "write": 0
+       }
+      }
+     },
+     {
+      "id": "msg_13c9092a1001ch46Jmi6yrFaN6",
+      "time": {
+       "created": 1792017470125
+      },
+      "text": "hello adapter",
+      "type": "user"
+     }
+    ],
+    "cursor": {
+     "previous": "eyJpZCI6Im1zZ18xM2M5MDk0OGEwMDJCNDQyeDY1MlFaQnZuaCIsIm9yZGVyIjoiZGVzYyIsImRpcmVjdGlvbiI6InByZXZpb3VzIn0",
+     "next": "eyJpZCI6Im1zZ18xM2M5MDkyYTEwMDFjaDQ2Sm1pNnlyRmFONiIsIm9yZGVyIjoiZGVzYyIsImRpcmVjdGlvbiI6Im5leHQifQ"
+    }
+   }
+  }
+ ]
+}

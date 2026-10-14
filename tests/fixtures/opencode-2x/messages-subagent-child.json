@@ -1,0 +1,67 @@
+{
+ "data": [
+  {
+   "id": "msg_13c86a5ec002ro7VPyKhqtDbCV",
+   "time": {
+    "created": 1792016819698
+   },
+   "text": "You are a subagent spawned by another session.\nsay hi",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c86a5f5001Qcg0G01lEdn36r",
+   "time": {
+    "created": 1792016819707,
+    "streamed": 1792016820156,
+    "completed": 1792016820156
+   },
+   "type": "assistant",
+   "agent": "general",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "reasoning",
+     "text": "Thinking about it.",
+     "state": {
+      "reasoningField": "reasoning_content"
+     },
+     "time": {
+      "created": 1792016819711,
+      "completed": 1792016820154
+     }
+    },
+    {
+     "type": "text",
+     "text": "Hello from the mock model."
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c86a7be0014MzaJxK1HduU26",
+   "time": {
+    "created": 1792016820158
+   },
+   "type": "idle",
+   "outcome": "succeeded"
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NmE1ZWMwMDJybzdWUHlLaHF0RGJDViIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4NmE3YmUwMDE0TXphSnhLMUhkdVUyNiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}

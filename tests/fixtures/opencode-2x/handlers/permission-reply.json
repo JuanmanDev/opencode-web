@@ -1,0 +1,45 @@
+{
+ "result": {
+  "ok": true,
+  "r": true
+ },
+ "calls": [
+  {
+   "method": "GET",
+   "path": "/api/permission/request",
+   "directory": "WORK",
+   "status": 200,
+   "response": {
+    "location": {
+     "directory": "C:\\work"
+    },
+    "data": [
+     {
+      "id": "per_13c9246bb001kfW0UYFicauVg0",
+      "sessionID": "ses_ec36dba6bffeon5ByJsqForHea",
+      "action": "shell",
+      "resources": [
+       "echo hi"
+      ],
+      "save": [
+       "echo *"
+      ],
+      "source": {
+       "type": "tool",
+       "messageID": "msg_13c9246a90014uoZ23mihE1uW3",
+       "id": "call_1792017581744"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/session/ses_ec36dba6bffeon5ByJsqForHea/permission/per_13c9246bb001kfW0UYFicauVg0/reply",
+   "body": {
+    "decision": "once"
+   },
+   "status": 204
+  }
+ ]
+}

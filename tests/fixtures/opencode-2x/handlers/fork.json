@@ -1,0 +1,66 @@
+{
+ "result": {
+  "ok": true,
+  "r": {
+   "id": "ses_ec36f43c5ffeHEy5wSzBX96M6v",
+   "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+   "directory": "C:\\work",
+   "path": "",
+   "title": "Renamed by adapter (fork #1)",
+   "version": "v2",
+   "cost": 0,
+   "tokens": {
+    "input": 0,
+    "output": 0,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   },
+   "time": {
+    "created": 1792017480763,
+    "updated": 1792017480763
+   }
+  }
+ },
+ "calls": [
+  {
+   "method": "POST",
+   "path": "/api/session/ses_ec36f6d66ffeq2RJ5NbItvAiR7/fork",
+   "body": {},
+   "status": 200,
+   "response": {
+    "data": {
+     "id": "ses_ec36f43c5ffeHEy5wSzBX96M6v",
+     "fork": {
+      "sessionID": "ses_ec36f6d66ffeq2RJ5NbItvAiR7",
+      "boundary": {
+       "type": "through",
+       "messageID": "msg_13c90948a002B442x652QZBvnh"
+      }
+     },
+     "projectID": "51d1854d8735a246ffcc7d21df9aa56c8e0c7fe0",
+     "cost": 0,
+     "tokens": {
+      "input": 0,
+      "output": 0,
+      "reasoning": 0,
+      "cache": {
+       "read": 0,
+       "write": 0
+      }
+     },
+     "time": {
+      "created": 1792017480763,
+      "updated": 1792017480763
+     },
+     "title": "Renamed by adapter (fork #1)",
+     "location": {
+      "directory": "C:\\work"
+     }
+    }
+   }
+  }
+ ]
+}

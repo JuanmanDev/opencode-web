@@ -1,0 +1,114 @@
+{
+ "data": [
+  {
+   "id": "msg_13c86a5c8001bsfGLSM4sf2CtB",
+   "time": {
+    "created": 1792016819664
+   },
+   "text": "call subagent {\"agent\":\"general\",\"description\":\"probe\",\"prompt\":\"say hi\"}",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c86a5d6001SpFsdrtJSNaoHh",
+   "time": {
+    "created": 1792016819676,
+    "streamed": 1792016819685,
+    "completed": 1792016820160
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "tool",
+     "id": "call_1792016819677",
+     "name": "subagent",
+     "executed": false,
+     "state": {
+      "status": "completed",
+      "input": {
+       "agent": "general",
+       "description": "probe",
+       "prompt": "say hi"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "<subagent sessionID=\"ses_ec3795a17ffed0XFOMqn70Fq8P\" state=\"completed\">\nHello from the mock model.\n</subagent>"
+       }
+      ],
+      "metadata": {
+       "sessionID": "ses_ec3795a17ffed0XFOMqn70Fq8P",
+       "status": "completed",
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1792016819682,
+      "ran": 1792016819684,
+      "completed": 1792016820159
+     }
+    }
+   ],
+   "finish": "tool-calls",
+   "rawFinish": "tool_calls",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c86a7c5001VKI6Ch94tb9vpi",
+   "time": {
+    "created": 1792016820171,
+    "streamed": 1792016820447,
+    "completed": 1792016820448
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "text",
+     "text": "Tool finished OK."
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c86a8e1002mcMiugZpoyhlza",
+   "time": {
+    "created": 1792016820449
+   },
+   "type": "idle",
+   "outcome": "succeeded"
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NmE1YzgwMDFic2ZHTFNNNHNmMkN0QiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4NmE4ZTEwMDJtY01pdWdacG95aGx6YSIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}

@@ -1,0 +1,130 @@
+{
+ "data": [
+  {
+   "id": "msg_13c869070001rAaj5F74axiFYb",
+   "time": {
+    "created": 1792016814202
+   },
+   "text": "ask me",
+   "type": "user"
+  },
+  {
+   "id": "msg_13c869081001ehvL1M5vlhoYE2",
+   "time": {
+    "created": 1792016814217,
+    "streamed": 1792016814229,
+    "completed": 1792016815013
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "tool",
+     "id": "call_1792016814219",
+     "name": "question",
+     "executed": false,
+     "state": {
+      "status": "completed",
+      "input": {
+       "questions": [
+        {
+         "question": "Pick one?",
+         "header": "Pick",
+         "options": [
+          {
+           "label": "A",
+           "description": "first"
+          },
+          {
+           "label": "B",
+           "description": "second"
+          }
+         ]
+        }
+       ]
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "User has answered your questions: \"Pick one?\"=\"A\". You can now continue with the user's answers in mind."
+       }
+      ],
+      "metadata": {
+       "answers": [
+        [
+         "A"
+        ]
+       ],
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1792016814225,
+      "ran": 1792016814228,
+      "completed": 1792016815011
+     }
+    }
+   ],
+   "finish": "tool-calls",
+   "rawFinish": "tool_calls",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c8693af001Ehq4GUz420ivMg",
+   "time": {
+    "created": 1792016815029,
+    "streamed": 1792016815299,
+    "completed": 1792016815299
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "mock-model",
+    "providerID": "mock"
+   },
+   "content": [
+    {
+     "type": "text",
+     "text": "Tool finished OK."
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 120,
+    "output": 12,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_13c8694c5001850YR94dmdU29f",
+   "time": {
+    "created": 1792016815301
+   },
+   "type": "idle",
+   "outcome": "succeeded"
+  }
+ ],
+ "cursor": {
+  "previous": "eyJpZCI6Im1zZ18xM2M4NjkwNzAwMDFyQWFqNUY3NGF4aUZZYiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoicHJldmlvdXMifQ",
+  "next": "eyJpZCI6Im1zZ18xM2M4Njk0YzUwMDE4NTBZUjk0ZG1kVTI5ZiIsIm9yZGVyIjoiYXNjIiwiZGlyZWN0aW9uIjoibmV4dCJ9"
+ }
+}
