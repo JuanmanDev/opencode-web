@@ -136,6 +136,18 @@ Safety:
 
 `GET /api/v1/reload` and `server_info` show the state of the last reload. v2-only opencode servers have no reload API: restart the process instead.
 
+## Subagent per MCP
+
+With many MCP servers, every tool description sits in the agent's context on every turn. The **Subagent per MCP** card on the MCP page turns that around:
+
+- every server of the **global** config gets a specialist subagent `@mcp-<server>` that only has that server's tools (`tools: { "*": false, "<server>_*": true }`)
+- a primary agent `@orchestrator` gets **none** of those tools; its prompt lists every specialist with a summary of what to send it, and it delegates through the subagent (`task`) tool
+- the summary of each specialist is generated from its tools; edit it in the card to steer the orchestrator (it is also the subagent's description opencode shows to the model). Servers can be left out, and the orchestrator can get extra instructions
+
+Pick `@orchestrator` in the chat's agent selector to use it. The agents are written to the global opencode config and opencode reloads once no session is busy. The nest stays in sync on its own: adding, removing or switching off a server (or a change in its tools) regenerates it within a few minutes. Turning it off disables the agents (`disable: true`; the config API cannot delete keys). On opencode 2.x, nested servers get `codemode: false` so their tools are offered directly instead of through the `execute` code tool.
+
+The agent can manage it too: `mcp_subagents` and `configure_mcp_subagents` in agent control.
+
 ## Scheduled prompts
 
 The **Schedules** tile in the project sidebar manages prompts that the web app sends on a timetable: every N minutes, hourly, daily, on weekdays, weekly on chosen days, or any 5-field cron expression (`minute hour day month weekday`, plus `@hourly`, `@daily`, `@weekly`, `@monthly`).

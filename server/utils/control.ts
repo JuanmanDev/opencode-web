@@ -232,7 +232,8 @@ export const CONTROL_MCP_NAME = 'opencode-web'
 /** Tools that change state or interrupt work: registered as "ask". */
 export const CONTROL_ASK_TOOLS = [
   'reload_opencode', 'add_mcp', 'test_mcp', 'set_mcp_mode', 'set_tool_mode', 'disconnect_mcp',
-  'send_prompt', 'abort_session', 'delete_schedule', 'create_schedule', 'update_schedule', 'run_schedule'
+  'send_prompt', 'abort_session', 'delete_schedule', 'create_schedule', 'update_schedule', 'run_schedule',
+  'configure_mcp_subagents'
 ]
 
 /** Base URL at which opencode can reach this app. */

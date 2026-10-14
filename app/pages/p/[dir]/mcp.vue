@@ -70,6 +70,9 @@ function reportBroken(name: string, action: string) {
   return true
 }
 
+// the subagent-per-MCP card re-plans after servers change
+const nestCard = ref<{ load: () => void } | null>(null)
+
 const { reloading, menuItems } = useReload()
 const reloadMenu = computed(() => menuItems(directory.value))
 
@@ -681,6 +684,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       </p>
 
       <AgentControlCard v-if="caps.mcp" @changed="refresh(true)" @details="(n) => openDetails(n, 'tools')" />
+      <McpNestCard v-if="caps.mcp" ref="nestCard" />
 
       <!-- scope: project vs global -->
       <div class="flex items-center gap-1 mb-3">
@@ -943,7 +947,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       :scope="scope"
       :initial-tab="details.tab"
       :preset="details.preset"
-      @saved="refresh(true)"
+      @saved="refresh(true); nestCard?.load()"
       @authenticate="(n) => { details.open = false; startAuth(n) }"
     />
   </div>

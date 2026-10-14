@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
@@ -6,7 +7,10 @@ import { expect, test, type Page } from '@playwright/test'
 // deterministic mock model: the same user journeys must work on every
 // supported opencode version and on the v2 protocol.
 // same folder as scripts/compat-server.mjs (outside the checkout)
-const WORK = path.join(path.resolve(process.env.COMPAT_ROOT || path.join(os.tmpdir(), 'opencode-web-compat')), 'work')
+const ROOT = path.resolve(process.env.COMPAT_ROOT || path.join(os.tmpdir(), 'opencode-web-compat'))
+const WORK = path.join(ROOT, 'work')
+/** every request the mock model got, with the tools it was offered (scripts/compat-server.mjs) */
+const MOCK_LOG = path.join(ROOT, 'mock-llm.log')
 const DIR = Buffer.from(WORK).toString('base64url')
 // opencode 2.x (`@opencode/cli`) only speaks the v2 API, MCP included
 const IS_2X = /^2(\.|-latest$)/.test(process.env.OPENCODE_VERSION || '')
@@ -178,4 +182,39 @@ test('MCP servers: add, test, reload opencode, still connected', async ({ reques
     const info = await (await request.get('/api/v1/mcp-server', { params: { name: 'compat-demo', directory: WORK } })).json()
     return info.status?.status
   }, { timeout: 60_000 }).toBe('connected')
+})
+
+test('subagent per MCP: the orchestrator delegates, the specialist only has its server', async ({ request, baseURL }) => {
+  test.skip(!HAS_MCP, 'the v2 API of 1.x servers has no MCP')
+  const saved = await (await request.put('/api/v1/mcp-server', {
+    data: { name: 'nest-demo', scope: 'global', directory: WORK, config: { type: 'remote', url: `${baseURL}/mcp-demo` } },
+    timeout: 150_000
+  })).json()
+  expect(saved.status?.status).toBe('connected')
+  try {
+    const plan = await (await request.put('/api/v1/mcp-nest', { data: { enabled: true }, timeout: 150_000 })).json()
+    expect(Object.keys(plan.agents)).toEqual(expect.arrayContaining(['orchestrator', 'mcp-nest-demo']))
+    await expect.poll(async () => (await (await request.get('/api/v1/reload')).json())?.state, { timeout: 60_000 }).toBe('done')
+    await expect.poll(async () => {
+      const agents = await (await request.get('/api/opencode/agent', { params: { directory: WORK } })).json()
+      return agents.map((a: { name: string }) => a.name)
+    }, { timeout: 30_000 }).toEqual(expect.arrayContaining(['orchestrator', 'mcp-nest-demo']))
+
+    const session = await (await request.post('/api/v1/sessions', { data: { directory: WORK } })).json()
+    const call = IS_2X
+      ? `call subagent ${JSON.stringify({ agent: 'mcp-nest-demo', description: 'demo', prompt: 'nest probe' })}`
+      : `call task ${JSON.stringify({ subagent_type: 'mcp-nest-demo', description: 'demo', prompt: 'nest probe' })}`
+    await request.post(`/api/v1/sessions/${session.id}/prompt`, { data: { directory: WORK, agent: 'orchestrator', text: call }, timeout: 150_000 })
+
+    // what the mock model was offered: the specialist only nest-demo's tools,
+    // the orchestrator none of them
+    const log = readFileSync(MOCK_LOG, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { userText: string; tools: string[] })
+    const specialist = log.filter((l) => l.userText.includes('nest probe') && !l.userText.startsWith('call') && l.tools.length).at(-1)
+    expect(specialist?.tools.length).toBeGreaterThan(0)
+    expect(specialist?.tools.every((t) => t.startsWith('nest-demo_'))).toBe(true)
+    const orchestrator = log.filter((l) => l.userText.startsWith('call') && l.userText.includes('nest probe') && l.tools.length).at(-1)
+    expect(orchestrator?.tools.some((t) => t.startsWith('nest-demo_'))).toBe(false)
+  } finally {
+    await request.put('/api/v1/mcp-nest', { data: { enabled: false }, timeout: 150_000 })
+  }
 })

@@ -34,7 +34,7 @@ http.createServer(async (req, res) => {
     ? lastUser.content
     : (lastUser?.content || []).map((p) => p.text || '').join(' ')
   if (LOG) {
-    fs.appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), url: req.url, lastRole: last.role, userText: userText.slice(0, 200), tools: (body.tools || []).map((t) => t.function?.name) }) + '\n')
+    fs.appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), url: req.url, lastRole: last.role, userText: userText.slice(0, 4000), tools: (body.tools || []).map((t) => t.function?.name) }) + '\n')
   }
   if (!req.url.includes('chat/completions')) {
     res.writeHead(404)
