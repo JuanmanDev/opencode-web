@@ -2,10 +2,12 @@
 // discovery over stdio is testable offline. Speaks newline-delimited JSON-RPC.
 import process from 'node:process'
 
+// opencode 2.x rejects tools without an input schema
+const EMPTY = { type: 'object', properties: {} }
 const TOOLS = [
-  { name: 'navigate', description: 'Open a URL in the browser' },
-  { name: 'click', description: 'Click an element' },
-  { name: 'screenshot', description: 'Capture the page' }
+  { name: 'navigate', description: 'Open a URL in the browser', inputSchema: { type: 'object', properties: { url: { type: 'string' } } } },
+  { name: 'click', description: 'Click an element', inputSchema: EMPTY },
+  { name: 'screenshot', description: 'Capture the page', inputSchema: EMPTY }
 ]
 
 let buffer = ''

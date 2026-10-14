@@ -98,6 +98,50 @@ export interface McpRemoteEntry {
   enabled?: boolean
 }
 
+/** One parameter of a tool's input schema, flattened for display. */
+export interface McpToolParam {
+  name: string
+  type?: string
+  required?: boolean
+  description?: string
+  enum?: string[]
+}
+
+/** Everything the server detail view shows about one tool. */
+export interface McpToolDetail extends McpToolInfo {
+  title?: string
+  /** full description, not just the first line */
+  fullDescription?: string
+  destructive?: boolean
+  params: McpToolParam[]
+}
+
+/** Full `tools/list` entry for the detail view (descriptions, parameters, hints). */
+export function toToolDetail(t: any): McpToolDetail {
+  const schema = t?.inputSchema && typeof t.inputSchema === 'object' ? t.inputSchema : {}
+  const required = new Set<string>(Array.isArray(schema.required) ? schema.required : [])
+  const props = schema.properties && typeof schema.properties === 'object' ? schema.properties : {}
+  const typeOf = (p: any): string | undefined => {
+    if (Array.isArray(p?.type)) return p.type.join(' | ')
+    if (typeof p?.type === 'string') return p.type === 'array' && p.items?.type ? `${p.items.type}[]` : p.type
+    if (Array.isArray(p?.anyOf || p?.oneOf)) return (p.anyOf || p.oneOf).map(typeOf).filter(Boolean).join(' | ') || undefined
+    return undefined
+  }
+  return {
+    ...toToolInfo(t),
+    title: typeof t?.title === 'string' ? t.title : typeof t?.annotations?.title === 'string' ? t.annotations.title : undefined,
+    fullDescription: typeof t?.description === 'string' ? t.description.slice(0, 4000) : undefined,
+    ...(t?.annotations?.destructiveHint === true ? { destructive: true } : {}),
+    params: Object.entries(props as Record<string, any>).map(([name, p]) => ({
+      name,
+      type: typeOf(p),
+      required: required.has(name),
+      description: typeof p?.description === 'string' ? p.description.slice(0, 400) : undefined,
+      ...(Array.isArray(p?.enum) ? { enum: p.enum.map(String).slice(0, 20) } : {})
+    }))
+  }
+}
+
 /** Non-2xx answer from an MCP endpoint; `status` drives the transport fallback. */
 export class McpHttpError extends Error {
   constructor(readonly status: number) {
@@ -107,7 +151,7 @@ export class McpHttpError extends Error {
 
 /** One open MCP session, whatever the transport. */
 export interface McpConnection {
-  readonly transport: 'http' | 'sse'
+  readonly transport: 'http' | 'sse' | 'stdio'
   request(method: string, params?: Record<string, unknown>): Promise<any>
   notify(method: string, params?: Record<string, unknown>): Promise<void>
   close(): void
@@ -292,6 +336,14 @@ async function sseConnection(url: string, headers: Record<string, string>, timeo
   }
 }
 
+/** `fetch failed` alone says nothing: append the network cause (ECONNREFUSED, ENOTFOUND, a TLS error…). */
+export function errorWithCause(error: unknown) {
+  if (!(error instanceof Error)) return String(error)
+  const cause = (error as { cause?: { code?: string; message?: string } }).cause
+  const detail = cause?.code || cause?.message
+  return detail && !error.message.includes(detail) ? `${error.message} (${detail})` : error.message
+}
+
 export interface ConnectOptions {
   timeoutMs?: number
   protocolVersion?: string
@@ -329,7 +381,7 @@ export async function connectMcp(
       return { conn, init }
     } catch (error) {
       conn?.close()
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorWithCause(error)
       errors.push(errors.length ? `${transport === 'sse' ? 'SSE' : 'HTTP'} fallback: ${message}` : message)
       const status = error instanceof McpHttpError ? error.status : 0
       const retry = status >= 400 && status < 500 && status !== 401 && status !== 403

@@ -14,6 +14,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [mode: 'inherit' | 'deny' | 'ask' | 'allow'] }>()
 
+// long descriptions: one line until tapped
+const expanded = ref(false)
+
 const items = computed(() => [
   { label: 'inherit', value: 'inherit' },
   { label: 'off', value: 'deny' },
@@ -38,7 +41,14 @@ const items = computed(() => [
           <UBadge size="sm" variant="subtle" color="primary" class="shrink-0 text-[9px] leading-none px-1 py-0.5">UI</UBadge>
         </UTooltip>
       </div>
-      <div v-if="description" class="text-[10px] text-dimmed truncate leading-tight">{{ description }}</div>
+      <button
+        v-if="description"
+        type="button"
+        class="block w-full text-left text-[10px] text-dimmed leading-tight hover:text-muted transition-colors"
+        :class="expanded ? 'whitespace-normal' : 'truncate'"
+        :title="expanded ? undefined : description"
+        @click="expanded = !expanded"
+      >{{ description }}</button>
     </div>
     <USelect
       :items="items"

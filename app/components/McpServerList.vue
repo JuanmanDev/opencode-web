@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { mcpErrorHint } from '#shared/utils/mcp-hints'
+
 // Shared MCP server list: search over servers & tools, accordion rows with
 // status, tri-state mode control and per-tool mode selects. Used by the MCP
 // settings page (persisted) and the chat options (per-prompt).
@@ -30,6 +32,8 @@ const props = defineProps<{
   settingsTo?: string
   /** show inline retry / sign-in buttons (settings page owns the actions) */
   repairable?: boolean
+  /** show a details button per server (opens the server modal) */
+  inspectable?: boolean
   /** height cap for the scrollable list */
   listClass?: string
   /** extra classes for the filter/actions header row, e.g. 'justify-end' */
@@ -41,6 +45,7 @@ const emit = defineEmits<{
   setTool: [id: string, mode: 'inherit' | 'deny' | 'ask' | 'allow']
   retry: [name: string]
   authenticate: [name: string]
+  details: [name: string, tab?: 'overview' | 'tools' | 'config' | 'test']
 }>()
 
 const filter = ref('')
@@ -108,17 +113,9 @@ function statusDot(status: string) {
 const isBroken = (status: string) => BROKEN.includes(status)
 
 /** Translate the raw opencode/transport error into something actionable. */
-function errorHint(error?: string) {
-  const e = (error || '').toLowerCase()
-  if (/enoent|no such file or directory/.test(e)) {
-    return 'opencode could not spawn it — most often the project directory does not exist '
-      + 'on the opencode host, or the command is not installed there'
-  }
-  if (/401|unauthorized/.test(e)) return 'authentication rejected — fix the token/header, or sign in'
-  if (/404|405/.test(e)) return 'the URL answered but speaks no MCP — check the path (…/mcp or …/sse)'
-  if (/connection closed|exited/.test(e)) return 'the process died at startup — check the command and package name'
-  if (/timed out|timeout/.test(e)) return 'no answer in time — the server is slow, down, or unreachable from the host'
-  return ''
+function errorHint(error?: string, status?: string) {
+  const hint = mcpErrorHint(error, status)
+  return hint ? `${hint.title}: ${hint.fix}` : ''
 }
 
 function toolsHint(server: McpListServer) {
@@ -180,7 +177,7 @@ function toolsHint(server: McpListServer) {
     <!-- listClass overrides the capped inner scroller; pass 'grow' to let the
          list take its natural height and scroll with the page instead -->
     <div
-      class="rounded-sm bg-elevated/60 divide-y divide-default"
+      class="relative rounded-sm bg-elevated/60 divide-y divide-default"
       :class="listClass === 'grow' ? '' : (listClass || 'max-h-[50dvh] sm:max-h-[60vh]') + ' overflow-y-auto overscroll-contain'"
     >
       <!-- discovery in flight: keep the height stable instead of popping in -->
@@ -198,6 +195,7 @@ function toolsHint(server: McpListServer) {
         {{ filter ? `Nothing matches “${filter}”` : 'No MCP servers configured.' }}
       </div>
 
+      <TransitionGroup name="oc-list">
       <div v-for="server in filtered" :key="server.name">
         <!-- header row -->
         <div class="flex items-center gap-2 px-2.5 py-1.5">
@@ -224,12 +222,14 @@ function toolsHint(server: McpListServer) {
 
           <!-- tools column -->
           <UTooltip :text="toolsHint(server)">
-            <span
+            <component
+              :is="inspectable ? 'button' : 'span'"
               class="w-10 shrink-0 text-right text-[11px] font-mono tabular-nums"
-              :class="server.tools.length ? 'text-muted' : 'text-dimmed'"
+              :class="[server.tools.length ? 'text-muted' : 'text-dimmed', inspectable ? 'hover:text-highlighted cursor-pointer' : '']"
+              @click="inspectable && emit('details', server.name, 'tools')"
             >
               <span v-if="server.approx && server.tools.length" class="text-dimmed">≈</span>{{ server.tools.length || '—' }}
-            </span>
+            </component>
           </UTooltip>
 
           <!-- status column: dot on phones, labelled badge from sm up -->
@@ -247,6 +247,18 @@ function toolsHint(server: McpListServer) {
             </UBadge>
           </UTooltip>
 
+          <UTooltip v-if="inspectable" text="Details, tools, edit & test">
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-sliders-horizontal"
+              class="oc-tap shrink-0"
+              :aria-label="`Details of ${server.name}`"
+              @click="emit('details', server.name)"
+            />
+          </UTooltip>
+
           <McpModeControl
             :model-value="serverMode(server.name)"
             :ask-disabled="askDisabled"
@@ -259,8 +271,8 @@ function toolsHint(server: McpListServer) {
         <div v-if="isBroken(server.status) || server.error" class="flex flex-wrap items-center gap-1.5 px-8 pb-1.5">
           <div v-if="server.error" class="flex-1 min-w-40 space-y-0.5">
             <p class="text-[11px] text-error break-all leading-tight">{{ server.error }}</p>
-            <p v-if="errorHint(server.error)" class="text-[10px] text-dimmed leading-tight">
-              {{ errorHint(server.error) }}
+            <p v-if="errorHint(server.error, server.status)" class="text-[10px] text-dimmed leading-tight">
+              {{ errorHint(server.error, server.status) }}
             </p>
           </div>
           <template v-if="repairable">
@@ -283,6 +295,16 @@ function toolsHint(server: McpListServer) {
               label="Sign in"
               class="oc-tap"
               @click="emit('authenticate', server.name)"
+            />
+            <UButton
+              v-if="inspectable"
+              size="xs"
+              variant="soft"
+              color="primary"
+              icon="i-lucide-stethoscope"
+              label="Diagnose & fix"
+              class="oc-tap"
+              @click="emit('details', server.name, 'overview')"
             />
           </template>
           <UButton
@@ -317,6 +339,7 @@ function toolsHint(server: McpListServer) {
           </div>
         </CollapseTransition>
       </div>
+      </TransitionGroup>
     </div>
   </div>
 </template>
