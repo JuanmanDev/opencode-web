@@ -1,3 +1,15 @@
+## [0.15.0](https://github.com/JuanmanDev/opencode-web/compare/0.14.0...0.15.0) (2026-10-14)
+
+### Features
+
+* agent control, MCP server details and scheduled prompts ([73afae1](https://github.com/JuanmanDev/opencode-web/commit/73afae14709c46f867a2b251192dedbd39c9d0da))
+* **compat:** opencode 2.x support and subagents in the chat ([41b2d76](https://github.com/JuanmanDev/opencode-web/commit/41b2d76469a3848793750da0122e32f152d19169))
+* **mcp:** a subagent per MCP server and an orchestrator ([1fddb20](https://github.com/JuanmanDev/opencode-web/commit/1fddb20d56039c3067bfc54002cd3762e1d400ee))
+
+### Bug Fixes
+
+* **chat:** reconcile messages from the server after each run ([4cfb172](https://github.com/JuanmanDev/opencode-web/commit/4cfb1728296ac83647e2404d988b437e2e94194c))
+
 ## [0.14.0](https://github.com/JuanmanDev/opencode-web/compare/0.13.0...0.14.0) (2026-10-04)
 
 ### Features
