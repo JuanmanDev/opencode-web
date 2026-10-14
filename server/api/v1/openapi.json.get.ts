@@ -211,6 +211,29 @@ export default defineEventHandler(() => ({
         responses: { 200: { description: 'save result with status' } }
       }
     },
+    '/api/v1/mcp-nest': {
+      get: { summary: 'Subagent per MCP: settings, one specialist per global MCP server, the orchestrator prompt and the agents that would be written', responses: { 200: { description: 'NestPlan' } } },
+      put: {
+        summary: 'Change the subagent-per-MCP settings and write the agents into the global opencode config',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  enabled: { type: 'boolean' },
+                  summaries: { type: 'object', additionalProperties: { type: 'string' } },
+                  exclude: { type: 'array', items: { type: 'string' } },
+                  instructions: { type: 'string' },
+                  orchestrator: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'NestPlan plus { changed }' } }
+      }
+    },
     '/api/v1/schedules': {
       get: {
         summary: 'List scheduled prompts',

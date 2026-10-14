@@ -456,6 +456,55 @@ export const CONTROL_TOOLS: ControlTool[] = [
     }
   },
 
+  // ---- MCP subagents (one specialist per server + an orchestrator) ----
+  {
+    name: 'mcp_subagents',
+    description: 'Show the MCP subagents setup: whether it is on, the orchestrator agent, and for each MCP server its specialist subagent and the summary the orchestrator uses to decide what to send it.',
+    inputSchema: obj({}),
+    annotations: read,
+    run: async (_args, ctx) => {
+      const plan = await planNest(ctx.selfOrigin)
+      return {
+        enabled: plan.settings.enabled,
+        orchestrator: plan.settings.orchestrator,
+        lastSync: plan.settings.lastSync || null,
+        specialists: plan.servers.map((s) => ({
+          server: s.server,
+          agent: s.agent,
+          included: s.included,
+          ...(s.skipped ? { skipped: s.skipped } : {}),
+          summary: s.summary,
+          customSummary: s.custom,
+          tools: s.tools.length
+        }))
+      }
+    }
+  },
+  {
+    name: 'configure_mcp_subagents',
+    description: 'Turn the MCP subagents on or off, change the summary of a specialist (what the orchestrator sends it), leave servers out, or add instructions for the orchestrator. Writes the agents into the global opencode config; they apply after an automatic reload once no session is busy.',
+    inputSchema: obj({
+      enabled: { type: 'boolean' },
+      summaries: { type: 'object', description: '{ "<server>": "when to use it and what to send" }; an empty string restores the generated summary' },
+      exclude: { type: 'array', items: { type: 'string' }, description: 'servers without a specialist' },
+      instructions: { type: 'string', description: 'extra instructions appended to the orchestrator prompt' }
+    }),
+    run: async (args, ctx) => {
+      const current = await nestSettings()
+      await saveNestSettings({
+        ...(typeof args.enabled === 'boolean' ? { enabled: args.enabled } : {}),
+        ...(args.summaries && typeof args.summaries === 'object' ? { summaries: { ...current.summaries, ...args.summaries } } : {}),
+        ...(Array.isArray(args.exclude) ? { exclude: args.exclude.map(String) } : {}),
+        ...(typeof args.instructions === 'string' ? { instructions: args.instructions } : {})
+      })
+      const result = await syncNest(ctx.selfOrigin, { force: true })
+      const agents = result.plan ? Object.keys(result.plan.agents) : []
+      return result.settings.enabled
+        ? `MCP subagents on: ${agents.join(', ')}. They apply after the automatic reload (once no session is busy).`
+        : 'MCP subagents off; their agents are disabled after the next reload.'
+    }
+  },
+
   // ---- schedules ----
   {
     name: 'list_schedules',

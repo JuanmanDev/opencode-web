@@ -39,6 +39,7 @@ One origin means no CORS, no double auth, and SSE streaming included. **It works
 | 🔑 **Provider config from the UI** | "Configure providers…" right inside the model dropdown adds or updates API keys without touching the server. Keys are never sent back to the browser. |
 | 📱 **Mobile first** | The desktop sidebar (resizable, collapsible to an icon rail, optional projects panel) becomes a slideover on phones. There are touch-sized controls, safe-area aware layouts and a prompt box that stays above the keyboard, so you can continue any session from your phone. Installable as a PWA. |
 | 🔄 **Any opencode version** | Works with every opencode 1.x server (1.0 → 1.19) and with **opencode 2.x** (`@opencode/cli`), which only speaks the new **v2 API** (`/api/*`): the web app detects which one it talks to and translates, so the UI behaves the same, MCP, config and subagents included. Features a server lacks are hidden instead of failing. [More →](docs/compatibility.md) |
+| 🕸️ **Subagent per MCP** | One switch creates a specialist subagent per MCP server (only that server's tools) and an `@orchestrator` that knows what to send each one, keeping its own context free of MCP tools. Summaries are editable and stay in sync as servers change. [More →](docs/mcp.md#subagent-per-mcp) |
 | 🤖 **Subagents** | When the agent hands work to a subagent, the chat shows a live card (agent, steps, result) with a link into the subagent's own conversation and back; the sidebar nests subagent sessions under their parent. |
 | 🤖 **Scriptable** | REST API with an OpenAPI spec, an MCP server (`/mcp`) to drive opencode from Claude, Cursor or n8n, and WebMCP tools in the page. |
 | 🛡️ **Safe by default** | Fail-fast proxy with health states everywhere, CSRF origin checks, optional API token, secret redaction and strict iframe sandboxing. [More →](docs/security.md) |
@@ -168,7 +169,7 @@ Tools:
 | overview | `server_info` (version, protocol, features, busy sessions, schedules, last reload) |
 | chats | `list_projects`, `create_project`, `list_sessions`, `session_status`, `read_session`, `get_messages`, `create_session`, `send_prompt` (waits for the reply, or `wait: false`), `abort_session`, `fork_session`, `list_tasks` |
 | opencode | `list_models`, `list_agents`, `list_commands`, `list_skills`, `get_config` (redacted), `reload_opencode` |
-| MCP | `list_mcp` (status, errors with a fix, tools), `mcp_status`, `test_mcp`, `add_mcp`, `connect_mcp`, `disconnect_mcp`, `set_mcp_mode`, `set_tool_mode` |
+| MCP | `list_mcp` (status, errors with a fix, tools), `mcp_status`, `test_mcp`, `add_mcp`, `connect_mcp`, `disconnect_mcp`, `set_mcp_mode`, `set_tool_mode`, `mcp_subagents`, `configure_mcp_subagents` |
 | schedules | `list_schedules`, `create_schedule`, `update_schedule`, `delete_schedule`, `run_schedule` |
 
 Read-only tools carry `readOnlyHint`. Register the same server **with opencode itself** (MCP page → *Agent control*) and the agent in any chat gets these tools: see [docs/mcp.md](docs/mcp.md#agent-control).

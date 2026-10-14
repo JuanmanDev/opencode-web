@@ -15,5 +15,7 @@ export default defineEventHandler(async (event) => {
     config: body.config
   })
   await forgetMcpTools()
+  // a new or changed server gets (or loses) its subagent
+  autoSyncNest()
   return result
 })

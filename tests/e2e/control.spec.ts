@@ -132,3 +132,17 @@ test('sidebar tiles reach schedules, and a schedule is created from the UI', asy
     await request.delete(`/api/v1/schedules/${s.id}`)
   }
 })
+
+test('subagent per MCP: the plan lists a specialist per server and the card shows it', async ({ page, request }) => {
+  const plan = await (await request.get('/api/v1/mcp-nest')).json()
+  const context7 = plan.servers.find((s: { server: string }) => s.server === 'context7')
+  expect(context7.agent).toBe('mcp-context7')
+  expect(context7.generated).toContain('query-docs')
+  // the orchestrator never gets the servers it delegates
+  expect(plan.agents.orchestrator.tools).toEqual({ 'context7_*': false })
+  expect(plan.agents['mcp-context7'].tools).toEqual({ '*': false, 'context7_*': true })
+  await page.goto(`/p/${DIR}/mcp`)
+  await page.getByText('Subagent per MCP', { exact: true }).click()
+  await expect(page.getByText('@orchestrator').first()).toBeVisible()
+  await expect(page.getByText('@mcp-context7')).toBeVisible()
+})

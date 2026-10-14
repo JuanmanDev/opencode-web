@@ -61,7 +61,9 @@ const env = {
   USERPROFILE: dirs.home,
   OPENCODE_SERVER_PASSWORD: PASSWORD,
   OPENCODE_DISABLE_AUTOUPDATE: '1',
-  MOCK_LLM_PORT: String(LLM_PORT)
+  MOCK_LLM_PORT: String(LLM_PORT),
+  // the tests read which tools the model was offered
+  MOCK_LLM_LOG: process.env.MOCK_LLM_LOG || path.join(root, 'mock-llm.log')
 }
 const isWindows = process.platform === 'win32'
 const children = []
