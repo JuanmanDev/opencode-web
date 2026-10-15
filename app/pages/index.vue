@@ -17,7 +17,8 @@ const sessionsByDir = ref<Record<string, SessionInfo[]>>({})
 const CAROUSEL_PROJECTS = 4
 
 onMounted(async () => {
-  loadRecents()
+  // the shared folder list arrives from the server; paint the local copy meanwhile
+  const recentsLoaded = loadRecents()
   projectMeta.load()
   // paint carousels instantly from cache
   for (const dir of knownDirs.value.slice(0, CAROUSEL_PROJECTS).map((k) => k.directory)) {
@@ -32,7 +33,8 @@ onMounted(async () => {
   } finally {
     projectsLoading.value = false
   }
-  // refresh sessions for the top projects
+  // refresh sessions for the top projects (of the shared list)
+  await recentsLoaded
   for (const dir of knownDirs.value.slice(0, CAROUSEL_PROJECTS).map((k) => k.directory)) {
     useOpencodeApi(() => dir).sessions()
       .then((list) => {
@@ -51,15 +53,16 @@ function openProject(directory: string) {
 
 const knownDirs = computed(() => {
   const seen = new Set<string>()
-  const list: Array<{ directory: string; source: string }> = []
+  const list: Array<{ directory: string; source: string; sessions?: number }> = []
   for (const r of recents.value) {
     if (!seen.has(r.directory)) {
       seen.add(r.directory)
-      list.push({ directory: r.directory, source: 'recent' })
+      list.push({ directory: r.directory, source: r.source || 'recent', sessions: r.sessions })
     }
   }
   for (const p of projects.value) {
-    if (p.worktree && !seen.has(p.worktree)) {
+    // "/" is opencode's catch-all project for folders outside git
+    if (p.worktree && p.worktree !== '/' && !seen.has(p.worktree)) {
       seen.add(p.worktree)
       list.push({ directory: p.worktree, source: 'server' })
     }
@@ -174,6 +177,7 @@ function saveEdit() {
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium truncate">{{ dirName(item.directory) }}</span>
                 <UBadge v-if="item.source === 'recent'" size="sm" variant="subtle" color="neutral">recent</UBadge>
+                <span v-if="item.sessions" class="text-[10px] text-dimmed font-mono">{{ item.sessions }} chat{{ item.sessions === 1 ? '' : 's' }}</span>
               </div>
               <div class="text-xs text-dimmed font-mono truncate">{{ item.directory }}</div>
               <p v-if="projectMeta.of(item.directory).description" class="text-xs text-muted truncate mt-0.5">
@@ -190,13 +194,13 @@ function saveEdit() {
               @click.stop="openEdit(item.directory)"
             />
             <UButton
-              v-if="item.source === 'recent'"
               icon="i-lucide-x"
               size="xs"
               color="neutral"
               variant="ghost"
               class="oc-hover-only oc-tap opacity-0 group-hover:opacity-100"
-              aria-label="Remove from recents"
+              aria-label="Remove from the list"
+              title="Remove from the list (every browser); opening it again brings it back"
               @click.stop="forget(item.directory)"
             />
           </div>

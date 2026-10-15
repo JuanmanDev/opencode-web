@@ -70,3 +70,15 @@ test('MCP: initialize, tools/list, tools/call', async ({ request }) => {
   const status = await rpc('tools/call', { name: 'mcp_status', arguments: { directory: DIR } }, 4)
   expect((await status.json()).result.content[0].text).toContain('context7')
 })
+
+test('directories: folders from every source, shared between browsers', async ({ request }) => {
+  await request.put('/api/v1/directories', { data: { directory: '/docker' } })
+  const list = await (await request.get('/api/v1/directories')).json()
+  const docker = list.find((d: { directory: string }) => d.directory === '/docker')
+  expect(docker.source).toBe('recent')
+  // git projects from opencode are listed too
+  expect(list.some((d: { directory: string }) => d.directory === '/projects/space-invaders')).toBe(true)
+  await request.delete('/api/v1/directories', { params: { directory: '/docker' } })
+  const after = await (await request.get('/api/v1/directories')).json()
+  expect(after.some((d: { directory: string }) => d.directory === '/docker')).toBe(false)
+})

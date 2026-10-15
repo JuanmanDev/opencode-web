@@ -23,34 +23,59 @@ export function decodeDir(param: string): string {
 export interface RecentProject {
   directory: string
   lastOpened: number
+  /** recent: opened from a browser; session: opencode has sessions there; project: a git project */
+  source?: 'recent' | 'session' | 'project'
+  sessions?: number
 }
 
 const RECENTS_KEY = 'opencode-web.recent-projects'
+const MIGRATED_KEY = 'opencode-web.recent-projects.migrated'
 
+/**
+ * Folders for the project picker. The server's list is the source of truth
+ * (sessions of every project + folders opened from any browser), so every
+ * browser and device shows the same folders; localStorage only paints the
+ * list instantly and keeps working offline.
+ */
 export function useRecentProjects() {
   const recents = useState<RecentProject[]>('recent-projects', () => [])
 
-  function load() {
+  function save() {
+    try { localStorage.setItem(RECENTS_KEY, JSON.stringify(recents.value.slice(0, 100))) } catch { /* full */ }
+  }
+
+  async function load() {
     if (!import.meta.client) return
-    try {
-      recents.value = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]')
-    } catch {
-      recents.value = []
+    let local: RecentProject[] = []
+    try { local = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]') } catch { /* corrupt */ }
+    if (!recents.value.length) recents.value = local
+    // this browser's own history predates the shared list: hand it over once
+    if (!localStorage.getItem(MIGRATED_KEY)) {
+      const mine = local.filter((r) => !r.source || r.source === 'recent')
+      await Promise.all(mine.map((r) => $fetch('/api/v1/directories', { method: 'PUT', body: { directory: r.directory }, timeout: 8000 }).catch(() => {})))
+      localStorage.setItem(MIGRATED_KEY, '1')
     }
+    try {
+      const server = await $fetch<Array<{ directory: string; lastActivity: number; sessions: number; source: RecentProject['source'] }>>(
+        '/api/v1/directories', { timeout: 30000 })
+      recents.value = server.map((d) => ({ directory: d.directory, lastOpened: d.lastActivity, source: d.source, sessions: d.sessions }))
+      save()
+    } catch { /* offline: keep the local copy */ }
   }
 
   function remember(directory: string) {
     if (!import.meta.client) return
-    const list = recents.value.filter((r) => r.directory !== directory)
-    list.unshift({ directory, lastOpened: Date.now() })
-    recents.value = list.slice(0, 20)
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(recents.value))
+    const current = recents.value.find((r) => r.directory === directory)
+    recents.value = [{ ...current, directory, lastOpened: Date.now(), source: 'recent' as const }, ...recents.value.filter((r) => r.directory !== directory)]
+    save()
+    $fetch('/api/v1/directories', { method: 'PUT', body: { directory }, timeout: 8000 }).catch(() => {})
   }
 
   function forget(directory: string) {
     if (!import.meta.client) return
     recents.value = recents.value.filter((r) => r.directory !== directory)
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(recents.value))
+    save()
+    $fetch('/api/v1/directories', { method: 'DELETE', query: { directory }, timeout: 8000 }).catch(() => {})
   }
 
   return { recents, load, remember, forget }
