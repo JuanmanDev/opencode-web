@@ -41,6 +41,7 @@ const emit = defineEmits<{
   abort: []
   refreshProviders: []
 }>()
+const toast = useToast()
 const caps = useCapabilities()
 
 // NOTE: Reka UI <SelectItem> forbids empty-string values, so "default"
@@ -58,47 +59,48 @@ const forcedTools = ref<string[]>([])
 const optionsOpen = ref(false)
 const providersOpen = ref(false)
 
-interface ModelItem {
-  label: string
-  value: string
-  provider: string
-  reasoning: boolean
-  ctx: number
-  cost: string
-}
+const modelItems = computed(() => modelItemsOf(props.providers))
 
-const modelItems = computed<ModelItem[]>(() => {
-  if (!props.providers) return []
-  const items: ModelItem[] = []
-  for (const provider of props.providers.providers || []) {
-    const providerName = String(provider.name || provider.id)
-    for (const [id, m] of Object.entries(provider.models || {})) {
-      const ctx = Math.round((m.limit?.context || 0) / 1000)
-      const cin = m.cost?.input
-      const cout = m.cost?.output
-      items.push({
-        label: `${m.name || id}`,
-        value: `${provider.id}/${id}`,
-        provider: providerName,
-        reasoning: Boolean(m.reasoning || m.capabilities?.reasoning),
-        ctx,
-        cost: cin != null && cout != null && (cin > 0 || cout > 0)
-          ? `$${cin}/${cout}`
-          : (cin === 0 && cout === 0 ? 'free' : '')
-      })
-    }
-  }
-  return items.sort((a, b) =>
-    a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label)
-  )
-})
-
+const primaryAgents = computed(() => props.agents
+  .filter((a) => (!a.mode || a.mode === 'primary' || a.mode === 'all') && a.name !== DEFAULT && !(a as { hidden?: boolean }).hidden))
 const agentItems = computed(() => [
-  { label: 'default agent', value: DEFAULT, icon: 'i-lucide-bot' },
-  ...props.agents
-    .filter((a) => (!a.mode || a.mode === 'primary' || a.mode === 'all') && a.name !== DEFAULT)
-    .map((a) => ({ label: a.name, value: a.name, icon: 'i-lucide-bot' }))
+  { label: 'default agent', value: DEFAULT, icon: 'i-lucide-bot', description: 'the server default (usually build)' },
+  ...primaryAgents.value.map((a) => ({ label: a.name, value: a.name, icon: 'i-lucide-bot', description: a.description }))
 ])
+// long agent lists (MCP subagents, custom agents) get a roomy picker too
+const agentPickerOpen = ref(false)
+const agentPickerItems = computed(() => [
+  ...agentItems.value.map((a) => ({
+    value: a.value,
+    label: a.label,
+    group: a.value === DEFAULT ? 'Default' : 'Primary agents',
+    detail: a.description,
+    icon: 'i-lucide-bot'
+  })),
+  // subagents can't run a chat but can be mentioned: picking one inserts @name
+  ...props.agents.filter((a) => a.mode === 'subagent').map((a) => ({
+    value: `@${a.name}`,
+    label: `@${a.name}`,
+    group: 'Subagents (inserted as an @mention)',
+    detail: a.description,
+    icon: 'i-lucide-bot-message-square'
+  }))
+])
+const agentModel = computed({
+  get: () => agent.value,
+  set: (value: string) => {
+    if (!value.startsWith('@')) {
+      agent.value = value
+      return
+    }
+    const name = value.slice(1)
+    text.value = `${text.value.replace(/\s*$/, '')}${text.value.trim() ? ' ' : ''}@${name} `
+    if (!picked.value.some((m) => m.kind === 'agent' && m.value === name)) {
+      picked.value = [...picked.value, { kind: 'agent', value: name }]
+    }
+    nextTick(() => textareaEl()?.focus())
+  }
+})
 
 const selectedModel = computed(() => modelItems.value.find((m) => m.value === model.value))
 
@@ -297,6 +299,7 @@ function send() {
   const modelID = rest.join('/')
   // shell and slash commands carry no mentions
   const mentioned = /^[!/]/.test(value) ? [] : mentionParts(value, picked.value, props.directory)
+  rememberHistory(value)
   emit('send', {
     text: value,
     model: providerID && modelID ? { providerID, modelID } : undefined,
@@ -314,31 +317,61 @@ function send() {
 }
 
 // ---- attachments (sent as opencode file parts, data URLs) ----
+// from the paperclip, pasted (screenshots, copied files) or dropped on the chat
 const attachments = ref<Array<{ mime: string; filename: string; url: string; size: number }>>([])
 const fileInput = ref<HTMLInputElement>()
-const MAX_FILE = 4 * 1024 * 1024
+const MAX_FILE = 10 * 1024 * 1024
 
 function pickFiles() {
   fileInput.value?.click()
 }
 
-function onFiles(e: Event) {
-  const input = e.target as HTMLInputElement
-  for (const file of Array.from(input.files || [])) {
-    if (file.size > MAX_FILE) continue
+function fmtSize(bytes: number) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+/** Read files into attachments; pasted screenshots get a readable name. */
+function addFiles(files: Iterable<File>) {
+  const tooBig: string[] = []
+  for (const file of files) {
+    if (file.size > MAX_FILE) {
+      tooBig.push(file.name)
+      continue
+    }
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '-')
+    const filename = file.name && file.name !== 'image.png'
+      ? file.name
+      : `pasted ${stamp}.${(file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`
     const reader = new FileReader()
     reader.onload = () => {
-      attachments.value.push({
-        mime: file.type || 'application/octet-stream',
-        filename: file.name,
-        url: String(reader.result),
-        size: file.size
-      })
+      attachments.value.push({ mime: file.type || 'application/octet-stream', filename, url: String(reader.result), size: file.size })
     }
     reader.readAsDataURL(file)
   }
+  if (tooBig.length) {
+    toast.add({ title: `Too large to attach (max ${fmtSize(MAX_FILE)})`, description: tooBig.join(', '), color: 'warning' })
+  }
+}
+
+function onFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  addFiles(Array.from(input.files || []))
   input.value = ''
 }
+
+// a pasted screenshot or copied file becomes an attachment; pasted text
+// still lands in the input as usual
+function onPaste(e: ClipboardEvent) {
+  const files = Array.from(e.clipboardData?.files || [])
+  if (!files.length) return
+  if (!e.clipboardData?.getData('text/plain')) e.preventDefault()
+  addFiles(files)
+}
+
+const isImage = (mime: string) => mime.startsWith('image/')
+const preview = ref<{ url: string; filename: string } | null>(null)
+
+defineExpose({ addFiles })
 
 // ---- slash-command autocomplete ----
 const slashMatches = computed(() => {
@@ -440,6 +473,128 @@ function onBlur() {
 onBeforeUnmount(() => clearTimeout(blurTimer))
 const keyboardOpen = computed(() => coarsePointer.value && inputFocused.value)
 
+// ---- terminal-like keys ----
+// Tab / Shift+Tab cycle the primary agents (like opencode's TUI), up/down walk
+// through earlier prompts, Esc twice stops a running reply
+const agentFlash = ref(0)
+function cycleAgent(step: 1 | -1) {
+  const values = agentItems.value.map((a) => a.value)
+  if (values.length < 2) return
+  const i = Math.max(0, values.indexOf(agent.value))
+  agent.value = values[(i + step + values.length) % values.length]!
+  agentFlash.value++
+}
+
+const historyKey = computed(() => `opencode-web.history.${props.directory}`)
+const history = ref<string[]>([])
+const historyIndex = ref(-1)
+let historyDraft = ''
+onMounted(() => {
+  try { history.value = JSON.parse(localStorage.getItem(historyKey.value) || '[]') } catch { history.value = [] }
+})
+function rememberHistory(value: string) {
+  history.value = [value, ...history.value.filter((h) => h !== value)].slice(0, 100)
+  historyIndex.value = -1
+  try { localStorage.setItem(historyKey.value, JSON.stringify(history.value)) } catch { /* full */ }
+}
+function walkHistory(step: 1 | -1) {
+  const next = historyIndex.value + step
+  if (next < -1 || next >= history.value.length) return false
+  if (historyIndex.value === -1) historyDraft = text.value
+  historyIndex.value = next
+  text.value = next === -1 ? historyDraft : history.value[next]!
+  nextTick(() => textareaEl()?.setSelectionRange(text.value.length, text.value.length))
+  return true
+}
+watch(text, (value) => {
+  if (historyIndex.value >= 0 && value !== history.value[historyIndex.value]) historyIndex.value = -1
+})
+
+const stopArmed = ref(false)
+let stopTimer: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(stopTimer))
+
+const projectBase = computed(() => `/p/${encodeDir(props.directory)}`)
+const help = computed(() => ({
+  model: {
+    title: 'Model',
+    text: [
+      'The AI model that writes the reply. Every message can use a different one; the choice is remembered per project.',
+      '',
+      '- **ctx**: how much text (in thousands of tokens) the model can keep in mind at once.',
+      '- **$in/$out**: list price per million input / output tokens. `free` models cost nothing.',
+      '- The brain icon marks models that can *think* before answering (see Think level).',
+      '',
+      'Models come from the providers configured in opencode. Add a provider (API key) to get more.'
+    ].join('\n'),
+    actions: [
+      { label: 'Configure providers', icon: 'i-lucide-plug', onClick: () => { providersOpen.value = true } },
+      { label: 'Usage & cost', icon: 'i-lucide-chart-column', to: `${projectBase.value}/stats` }
+    ]
+  },
+  think: {
+    title: 'Think level',
+    text: [
+      'How much the model reasons before it answers (only for models with thinking support).',
+      '',
+      '- **default**: what the model or opencode config uses.',
+      '- **none / low**: fast and cheap, good for small edits and questions.',
+      '- **medium / high**: better plans and fewer mistakes on harder tasks.',
+      '- **max**: the most reasoning the model allows: slowest and most expensive.',
+      '',
+      'Thinking tokens are billed as output tokens.'
+    ].join('\n'),
+    actions: [{ label: 'Usage & cost', icon: 'i-lucide-chart-column', to: `${projectBase.value}/stats` }]
+  },
+  agent: {
+    title: 'Agent',
+    text: [
+      'The agent decides how the model works: its instructions, which tools it may use and which MCP servers it sees.',
+      '',
+      '- **build**: the default, can edit files and run commands.',
+      '- **plan**: read-only, for exploring and planning.',
+      '- **orchestrator** (Subagent per MCP): delegates MCP work to one specialist subagent per server.',
+      '',
+      'Press **Tab** in the input to switch agents. Subagents can be called with **@name**.',
+      '',
+      'Agents can also load **skills**: instructions for specific tasks, used when their description matches (`/skills` lists them).'
+    ].join('\n'),
+    actions: [
+      { label: 'Skills', icon: 'i-lucide-graduation-cap', to: `${projectBase.value}/skills` },
+      { label: 'Edit agents', icon: 'i-lucide-bot', to: `${projectBase.value}/agents` }
+    ]
+  },
+  mcp: {
+    title: 'MCP for this chat',
+    text: [
+      'MCP servers give the agent extra tools (Home Assistant, browsers, docs...). Here you choose which ones this chat may use, without changing the project settings:',
+      '',
+      '- **project default**: what the MCP page configured.',
+      '- **all enabled / all disabled**: every server on or off for these messages.',
+      '- **custom**: pick servers and single tools; save the selection as a preset.',
+      '',
+      'Adding servers, fixing broken ones and the default modes live on the MCP page.'
+    ].join('\n'),
+    actions: [{ label: 'MCP servers', icon: 'i-lucide-server-cog', to: `${projectBase.value}/mcp` }]
+  }
+}))
+
+const keysHelp = [
+  '| Key | Does |',
+  '| --- | --- |',
+  '| `Enter` | send (queued while the agent works) |',
+  '| `Shift+Enter` | new line |',
+  '| `Tab` / `Shift+Tab` | next / previous agent (when no list is open) |',
+  '| `Up` / `Down` | earlier prompts (at the start / end of the input) |',
+  '| `Esc` `Esc` | stop the running reply |',
+  '| `/` | commands: `/reload`, `/mcp`, `/compact`, `/undo`... |',
+  '| `@` | mention files, folders and agents |',
+  '| `!` | run a shell command in the project |',
+  '| `Ctrl+K` | search everything |',
+  '',
+  'Paste a screenshot, or drop files anywhere on the chat, to attach them.'
+].join('\n')
+
 function onKeydown(e: KeyboardEvent) {
   if (mentionOpen.value && mentionItems.value.length) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -464,6 +619,32 @@ function onKeydown(e: KeyboardEvent) {
     pickCommand(slashMatches.value[0]!.name)
     return
   }
+  if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault()
+    cycleAgent(e.shiftKey ? -1 : 1)
+    return
+  }
+  if (e.key === 'Escape' && props.busy) {
+    e.preventDefault()
+    clearTimeout(stopTimer)
+    if (stopArmed.value) {
+      stopArmed.value = false
+      emit('abort')
+    } else {
+      stopArmed.value = true
+      stopTimer = setTimeout(() => { stopArmed.value = false }, 2000)
+    }
+    return
+  }
+  const el = e.target as HTMLTextAreaElement
+  if (e.key === 'ArrowUp' && !e.shiftKey && el.selectionStart === 0 && el.selectionEnd === 0 && walkHistory(1)) {
+    e.preventDefault()
+    return
+  }
+  if (e.key === 'ArrowDown' && !e.shiftKey && historyIndex.value >= 0 && el.selectionStart === text.value.length && walkHistory(-1)) {
+    e.preventDefault()
+    return
+  }
   // `repeat`: a held Enter fires keydown again and again - one send is enough
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.repeat) {
     e.preventDefault()
@@ -477,7 +658,7 @@ function onKeydown(e: KeyboardEvent) {
        room only the options panel gives way and scrolls, so the input and
        the Send row always stay on screen -->
   <div class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col min-h-0">
-    <div class="max-w-4xl w-full mx-auto space-y-2 relative flex flex-col min-h-0">
+    <div class="max-w-(--oc-chat-max,56rem) w-full mx-auto space-y-2 relative flex flex-col min-h-0">
       <!-- slash command autocomplete -->
       <CollapseTransition>
         <div
@@ -550,6 +731,7 @@ function onKeydown(e: KeyboardEvent) {
         @click="syncCaret"
         @focus="onFocus"
         @blur="onBlur"
+        @paste="onPaste"
       />
 
       <!-- collapsible options; the only part of the box that shrinks and
@@ -559,57 +741,23 @@ function onKeydown(e: KeyboardEvent) {
         <!-- one row on wide screens: model / think / agent -->
         <!-- phones pair think level + agent so the panel stays short -->
         <div class="grid grid-cols-2 sm:flex sm:flex-row gap-1.5">
-          <UFormField label="Model" size="xs" class="col-span-2 flex-1 min-w-0">
+          <UFormField size="xs" class="col-span-2 flex-1 min-w-0">
+            <template #label>
+              <span class="inline-flex items-center gap-1">Model <HelpTip v-bind="help.model" /></span>
+            </template>
             <div class="flex gap-1">
-              <USelectMenu
-                v-model="model"
-                :items="modelItems"
-                value-key="value"
-                :filter-fields="['label', 'provider']"
-                :search-input="{ placeholder: 'Search models or providers…' }"
-                :virtualize="{ estimateSize: () => 44 }"
-                :loading="metaLoading"
-                :placeholder="metaLoading ? 'Loading models…' : 'Select model'"
-                size="sm"
-                class="w-full min-w-0"
-                icon="i-lucide-cpu"
-              >
-                <template #item="{ item }">
-                  <div class="flex items-center gap-2 w-full min-w-0">
-                    <div class="min-w-0 flex-1">
-                      <div class="truncate text-sm">{{ item.label }}</div>
-                      <div class="text-[10px] text-dimmed font-mono truncate">
-                        {{ item.provider }}<template v-if="item.ctx"> · {{ item.ctx }}k ctx</template><template v-if="item.cost"> · {{ item.cost }}</template>
-                      </div>
-                    </div>
-                    <UIcon
-                      v-if="item.reasoning"
-                      name="i-lucide-brain"
-                      class="size-3.5 text-dimmed shrink-0"
-                    />
-                  </div>
-                </template>
-                <template #empty>
-                  <div
-                    class="flex items-center gap-2 px-2 py-3 text-sm"
-                    :class="!metaLoading && serverDegraded ? 'text-error' : 'text-muted'"
-                  >
-                    <UIcon v-if="metaLoading" name="i-lucide-loader-circle" class="size-4 animate-spin" />
-                    <UIcon v-else-if="serverDegraded" name="i-lucide-plug-zap" class="size-4" />
-                    {{ metaLoading ? 'Loading models…' : (serverDegraded ? 'Server not responding' : 'No models found') }}
-                  </div>
-                </template>
-                <!-- always visible, unaffected by the search filter -->
-                <template #content-bottom>
+              <ModelSelect v-model="model" :items="modelItems" :loading="metaLoading">
+                <template #bottom>
                   <button
-                    class="flex w-full items-center gap-2 px-2.5 py-2 text-sm text-highlighted bg-elevated hover:bg-accented cursor-pointer"
+                    class="flex items-center gap-2 px-2.5 py-2 text-sm text-highlighted bg-elevated hover:bg-accented cursor-pointer"
+                    :class="modelItems.length > 10 ? 'border-l border-default' : 'flex-1'"
                     @mousedown.prevent="providersOpen = true"
                   >
                     <UIcon name="i-lucide-settings-2" class="size-4 shrink-0" />
                     Configure providers…
                   </button>
                 </template>
-              </USelectMenu>
+              </ModelSelect>
               <UTooltip text="Configure providers">
                 <UButton
                   color="neutral"
@@ -623,7 +771,10 @@ function onKeydown(e: KeyboardEvent) {
               </UTooltip>
             </div>
           </UFormField>
-          <UFormField label="Think level" size="xs" class="min-w-0 sm:w-36 shrink-0">
+          <UFormField size="xs" class="min-w-0 sm:w-36 shrink-0">
+            <template #label>
+              <span class="inline-flex items-center gap-1">Think level <HelpTip v-bind="help.think" /></span>
+            </template>
             <UTooltip
               :text="selectedModel && !selectedModel.reasoning ? 'This model has no thinking support' : undefined"
               :disabled="!selectedModel || selectedModel.reasoning"
@@ -639,20 +790,42 @@ function onKeydown(e: KeyboardEvent) {
               />
             </UTooltip>
           </UFormField>
-          <UFormField label="Agent" size="xs" class="min-w-0 sm:w-40 shrink-0">
-            <USelect
-              v-model="agent"
+          <UFormField size="xs" class="min-w-0 sm:w-40 shrink-0">
+            <template #label>
+              <span class="inline-flex items-center gap-1">Agent <HelpTip v-bind="help.agent" /></span>
+            </template>
+            <USelectMenu
+              v-model="agentModel"
               :items="agentItems"
               value-key="value"
+              :search-input="agentItems.length > 10 ? { placeholder: 'Search agents…' } : false"
               :loading="metaLoading"
               size="sm"
               class="w-full"
               icon="i-lucide-bot"
-            />
+              :ui="{ content: 'max-h-[min(24rem,60dvh)] min-w-56' }"
+            >
+              <template #item-label="{ item }">
+                <span class="block truncate">{{ item.label }}</span>
+                <span v-if="item.description" class="block text-[10px] text-dimmed truncate">{{ item.description }}</span>
+              </template>
+              <template v-if="agentPickerItems.length > 10" #content-bottom>
+                <button
+                  class="flex w-full items-center gap-2 px-2.5 py-2 text-sm text-highlighted bg-elevated hover:bg-accented cursor-pointer"
+                  @mousedown.prevent="agentPickerOpen = true"
+                >
+                  <UIcon name="i-lucide-layout-grid" class="size-4 shrink-0" />
+                  Show all {{ agentPickerItems.length }} agents…
+                </button>
+              </template>
+            </USelectMenu>
           </UFormField>
 
           <!-- MCP shares the same row -->
-          <UFormField v-if="caps.mcp" label="MCP" size="xs" class="col-span-2 sm:w-44 shrink-0">
+          <UFormField v-if="caps.mcp" size="xs" class="col-span-2 sm:w-44 shrink-0">
+            <template #label>
+              <span class="inline-flex items-center gap-1">MCP <HelpTip v-bind="help.mcp" /></span>
+            </template>
             <USelect
               v-if="mcpLoading"
               disabled
@@ -770,25 +943,37 @@ function onKeydown(e: KeyboardEvent) {
 
       <!-- attachment chips -->
       <CollapseTransition>
-      <div v-if="attachments.length" class="flex flex-wrap gap-1 shrink-0">
-        <UBadge
+      <div v-if="attachments.length" class="flex flex-wrap items-end gap-1.5 shrink-0">
+        <div
           v-for="(file, i) in attachments"
-          :key="i"
-          color="neutral"
-          variant="subtle"
-          size="sm"
-          class="oc-appear font-mono"
+          :key="`${file.filename}-${i}`"
+          class="oc-appear group/att relative flex items-center gap-1.5 rounded-sm bg-elevated max-w-56"
+          :class="isImage(file.mime) ? 'p-0.5' : 'pl-2 pr-1 py-1'"
+          :title="`${file.filename} · ${fmtSize(file.size)}`"
         >
-          <UIcon name="i-lucide-paperclip" class="size-3 mr-1" />
-          {{ file.filename }}
           <button
-            class="relative oc-tap-zone ml-1 cursor-pointer hover:text-error"
+            v-if="isImage(file.mime)"
+            type="button"
+            class="block cursor-zoom-in"
+            :aria-label="`Preview ${file.filename}`"
+            @click="preview = { url: file.url, filename: file.filename }"
+          >
+            <img :src="file.url" :alt="file.filename" class="h-14 w-auto max-w-40 rounded-sm object-cover">
+          </button>
+          <template v-else>
+            <UIcon :name="file.mime === 'application/pdf' ? 'i-lucide-file-text' : 'i-lucide-paperclip'" class="size-3.5 shrink-0 text-dimmed" />
+            <span class="text-[11px] font-mono truncate">{{ file.filename }}</span>
+            <span class="text-[10px] text-dimmed shrink-0">{{ fmtSize(file.size) }}</span>
+          </template>
+          <button
+            class="cursor-pointer hover:text-error"
+            :class="isImage(file.mime) ? 'absolute -top-1.5 -right-1.5 size-5 rounded-full bg-accented flex items-center justify-center shadow oc-tap-zone' : 'relative oc-tap-zone'"
             :aria-label="`Remove ${file.filename}`"
             @click="attachments.splice(i, 1)"
           >
             <UIcon name="i-lucide-x" class="size-3" />
           </button>
-        </UBadge>
+        </div>
       </div>
       </CollapseTransition>
 
@@ -797,11 +982,11 @@ function onKeydown(e: KeyboardEvent) {
           ref="fileInput"
           type="file"
           multiple
-          accept="image/*,application/pdf,text/*,.md,.json,.csv"
+          accept="image/*,application/pdf,text/*,.md,.json,.csv,.log,.yaml,.yml,.xml,.html,.ts,.js,.py"
           class="hidden"
           @change="onFiles"
         >
-        <UTooltip text="Attach files">
+        <UTooltip text="Attach files (or paste / drop them)">
           <UButton
             color="neutral"
             variant="ghost"
@@ -839,9 +1024,14 @@ function onKeydown(e: KeyboardEvent) {
             <UIcon name="i-lucide-brain" class="size-3" />
             {{ variantLabel }}
           </span>
-          <span v-if="agent !== DEFAULT" class="hidden sm:flex items-center gap-1 shrink-0">
+          <span
+            :key="agentFlash"
+            class="flex items-center gap-1 shrink-0 rounded-sm px-1"
+            :class="[agent !== DEFAULT ? 'text-muted bg-elevated' : 'hidden sm:flex', agentFlash ? 'oc-flash' : '']"
+            title="Tab switches the agent"
+          >
             <UIcon name="i-lucide-bot" class="size-3" />
-            {{ agent }}
+            {{ agent === DEFAULT ? 'default' : agent }}
           </span>
           <span v-if="mcpLoading" class="hidden sm:flex items-center gap-1 shrink-0">
             <UIcon name="i-lucide-loader-circle" class="size-3 animate-spin" />
@@ -858,6 +1048,12 @@ function onKeydown(e: KeyboardEvent) {
         </div>
         </Transition>
         <span class="flex-1" />
+        <Transition name="oc-fade">
+          <span v-if="stopArmed" class="text-[11px] text-warning shrink-0">Esc again to stop</span>
+        </Transition>
+        <span class="hidden pointer-fine:inline-flex shrink-0">
+          <HelpTip title="Keyboard & input" :text="keysHelp" />
+        </span>
         <UBadge v-if="queueLength" color="neutral" variant="subtle" size="sm">
           {{ queueLength }} queued
         </UBadge>
@@ -889,6 +1085,19 @@ function onKeydown(e: KeyboardEvent) {
       </div>
     </div>
 
+    <PickerModal
+      v-model:open="agentPickerOpen"
+      v-model="agentModel"
+      :items="agentPickerItems"
+      title="Choose an agent"
+      description="Primary agents run the chat; subagents are inserted as an @mention."
+      placeholder="Search agents…"
+    />
+    <UModal :open="Boolean(preview)" :title="preview?.filename" :ui="{ content: 'sm:max-w-4xl' }" @update:open="(v: boolean) => { if (!v) preview = null }">
+      <template #body>
+        <img v-if="preview" :src="preview.url" :alt="preview.filename" class="max-h-[70dvh] mx-auto rounded-sm">
+      </template>
+    </UModal>
     <ProvidersModal
       v-model:open="providersOpen"
       :providers="providers"
