@@ -425,14 +425,15 @@ export const CONTROL_TOOLS: ControlTool[] = [
       mode: { type: 'string', enum: ['off', 'ask', 'auto'] },
       global: { type: 'boolean', description: 'apply to the global config instead of the project' }
     }, ['server', 'mode']),
-    run: async (args) => {
+    run: async (args, ctx) => {
       await requireConfigApi('Changing MCP modes')
       const body: Record<string, unknown> = args.mode === 'off'
         ? { mcp: { [args.server]: { enabled: false } } }
         : { mcp: { [args.server]: { enabled: true } }, permission: { [`${args.server}_*`]: args.mode === 'ask' ? 'ask' : 'allow' } }
-      await opencodeFetch(args.global ? '/global/config' : '/config', { method: 'PATCH', body, query: args.global ? {} : q(args.directory) })
+      const applied = await patchConfig(args.global ? 'global' : 'project', args.directory, body)
       await forgetMcpTools()
-      return `${args.server} set to ${args.mode} (applies to new sessions)`
+      autoSyncNest(ctx.selfOrigin)
+      return `${args.server} set to ${args.mode} in the ${applied.scope} config${applied.fallback ? ' (this opencode ignores project config written through its API)' : ''}; applies to new sessions`
     }
   },
   {
@@ -451,8 +452,8 @@ export const CONTROL_TOOLS: ControlTool[] = [
         : args.mode === 'inherit'
           ? { tools: { [args.tool]: true } }
           : { tools: { [args.tool]: true }, permission: { [args.tool]: args.mode === 'ask' ? 'ask' : 'allow' } }
-      await opencodeFetch(args.global ? '/global/config' : '/config', { method: 'PATCH', body, query: args.global ? {} : q(args.directory) })
-      return `${args.tool} set to ${args.mode}`
+      const applied = await patchConfig(args.global ? 'global' : 'project', args.directory, body)
+      return `${args.tool} set to ${args.mode} in the ${applied.scope} config`
     }
   },
 

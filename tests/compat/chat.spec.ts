@@ -218,3 +218,19 @@ test('subagent per MCP: the orchestrator delegates, the specialist only has its 
     await request.put('/api/v1/mcp-nest', { data: { enabled: false }, timeout: 150_000 })
   }
 })
+
+test('a project-scope MCP toggle really takes effect', async ({ request, baseURL }) => {
+  test.skip(!HAS_MCP, 'the v2 API of 1.x servers has no MCP')
+  // opencode 1.19 writes project PATCHes to a file it never reads: the web
+  // app must notice and apply the change where opencode looks
+  await request.put('/api/v1/mcp-server', {
+    data: { name: 'scope-demo', scope: 'global', directory: WORK, config: { type: 'remote', url: `${baseURL}/mcp-demo`, enabled: false } },
+    timeout: 150_000
+  })
+  const result = await (await request.post('/api/v1/config-patch', {
+    data: { scope: 'project', directory: WORK, patch: { mcp: { 'scope-demo': { enabled: true } } } }
+  })).json()
+  expect(['project', 'global']).toContain(result.scope)
+  const merged = await (await request.get('/api/opencode/config', { params: { directory: WORK } })).json()
+  expect(merged.mcp['scope-demo'].enabled).not.toBe(false)
+})
