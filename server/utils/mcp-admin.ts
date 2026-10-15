@@ -133,6 +133,8 @@ export interface SaveResult {
   dropped?: string[]
   /** headers/variables removed in the editor: saved empty (the config API can't delete keys) */
   blanked?: string[]
+  /** opencode ignored the project config: saved globally instead */
+  fallback?: boolean
 }
 
 /**
@@ -167,11 +169,11 @@ export async function saveMcpServer(opts: {
     }
   }
 
-  const path = scope === 'global' ? '/global/config' : '/config'
-  const query = scope === 'global' ? {} : { directory }
   const dropped: string[] = []
-  const patch = (entry: McpServerConfig) =>
-    opencodeFetch(path, { method: 'PATCH', body: { mcp: { [name]: entry } }, query, timeoutMs: 30000 })
+  let applied: PatchResult = { scope }
+  const patch = async (entry: McpServerConfig) => {
+    applied = await patchConfig(scope, directory, { mcp: { [name]: entry } })
+  }
   try {
     await patch(config)
   } catch (error) {
@@ -200,7 +202,8 @@ export async function saveMcpServer(opts: {
   const status = await mcpStatusOf(name, directory)
   return {
     name,
-    scope,
+    scope: applied.scope,
+    ...(applied.fallback ? { fallback: true } : {}),
     config: redactSecrets(config),
     status,
     hint: mcpErrorHint(status?.error, status?.status),
@@ -342,4 +345,43 @@ export async function forgetMcpTools() {
   const storage = useStorage('cache')
   const keys = await storage.getKeys('mcp-tools').catch(() => [] as string[])
   await Promise.all(keys.map((key) => storage.removeItem(key).catch(() => {})))
+}
+
+// ---- config patches that really apply ----
+
+/** Does every leaf of `patch` under these keys show up in the merged config? */
+function patchVisible(patch: Record<string, unknown>, merged: Record<string, unknown>, keys = ['mcp', 'tools']) {
+  const same = (want: unknown, have: unknown): boolean => {
+    if (want && typeof want === 'object' && !Array.isArray(want)) {
+      if (!have || typeof have !== 'object') return false
+      return Object.entries(want as Record<string, unknown>).every(([k, v]) => same(v, (have as Record<string, unknown>)[k]))
+    }
+    // secrets come back redacted; nothing else should differ
+    return JSON.stringify(want) === JSON.stringify(have) || have === REDACTED
+  }
+  return keys.every((key) => !(key in patch) || same(patch[key], merged[key]))
+}
+
+export interface PatchResult {
+  scope: McpScope
+  /** a project patch opencode ignored was applied to the global config instead */
+  fallback?: boolean
+}
+
+/**
+ * PATCH a scope's config and make sure opencode actually uses it. opencode
+ * 1.19's project PATCH writes `<folder>/config.json`, a file it never loads:
+ * the change "succeeds" and nothing happens. When the merged project config
+ * does not show the change, it goes to the global config instead.
+ */
+export async function patchConfig(scope: McpScope, directory: string | undefined, body: Record<string, unknown>): Promise<PatchResult> {
+  if (scope === 'global' || !directory) {
+    await opencodeFetch('/global/config', { method: 'PATCH', body, timeoutMs: 30000 })
+    return { scope: 'global' }
+  }
+  await opencodeFetch('/config', { method: 'PATCH', body, query: { directory }, timeoutMs: 30000 })
+  const merged = await opencodeFetch<Record<string, unknown>>('/config', { query: { directory }, timeoutMs: 30000 }).catch(() => null)
+  if (!merged || patchVisible(body, merged)) return { scope: 'project' }
+  await opencodeFetch('/global/config', { method: 'PATCH', body, timeoutMs: 30000 })
+  return { scope: 'global', fallback: true }
 }

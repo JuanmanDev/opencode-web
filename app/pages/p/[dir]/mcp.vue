@@ -84,8 +84,25 @@ function errorMessage(e: unknown) {
 // scope: this project's config, or the global opencode config (all projects)
 const scope = ref<'project' | 'global'>('project')
 
-function patchScoped(body: Record<string, unknown>) {
-  return scope.value === 'global' ? api.patchGlobalConfig(body) : api.patchConfig(body)
+/**
+ * Save to the scope's config through the web app, which checks the change
+ * took effect: opencode 1.19 writes project changes to a file it never
+ * reads, so those land in the global config instead (and the user is told).
+ */
+async function patchScoped(body: Record<string, unknown>) {
+  const result = await $fetch<{ scope: 'project' | 'global'; fallback?: boolean }>('/api/v1/config-patch', {
+    method: 'POST',
+    body: { scope: scope.value, directory: directory.value, patch: body },
+    timeout: 60_000
+  })
+  if (result.fallback) {
+    toast.add({
+      title: 'Saved in the global config',
+      description: 'This opencode version ignores per-project config written through its API, so the change applies to every project.',
+      color: 'info'
+    })
+  }
+  return result
 }
 
 interface DiscoveredTools {

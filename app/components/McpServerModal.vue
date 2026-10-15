@@ -271,7 +271,7 @@ async function save() {
   }
   saving.value = true
   try {
-    const result = await $fetch<{ status?: { status: string; error?: string }; hint?: McpErrorHint; dropped?: string[]; blanked?: string[] }>('/api/v1/mcp-server', {
+    const result = await $fetch<{ status?: { status: string; error?: string }; hint?: McpErrorHint; dropped?: string[]; blanked?: string[]; scope?: string; fallback?: boolean }>('/api/v1/mcp-server', {
       method: 'PUT',
       body: { name, scope: form.scope, directory: props.directory, config },
       timeout: 150_000
@@ -280,7 +280,7 @@ async function save() {
     toast.add({
       title: `${name}: saved${result.status ? ` · ${result.status.status}` : ''}`,
       description: ok
-        ? `Stored in the ${form.scope} config.${result.dropped?.length ? ` This opencode version ignores: ${result.dropped.join(', ')}.` : ''}`
+        ? `Stored in the ${result.scope || form.scope} config${result.fallback ? ' (this opencode ignores project config written through its API)' : ''}.${result.dropped?.length ? ` This opencode version ignores: ${result.dropped.join(', ')}.` : ''}`
           + (result.blanked?.length ? ` Removed entries (${result.blanked.join(', ')}) are saved empty: opencode's config API cannot delete keys.` : '')
         : result.hint ? `${result.hint.title}. ${result.hint.fix}` : result.status?.error,
       color: ok ? 'success' : 'warning'
