@@ -1,3 +1,17 @@
+## [0.17.0](https://github.com/JuanmanDev/opencode-web/compare/0.16.1...0.17.0) (2026-10-15)
+
+### Features
+
+* **agents:** edit agents and choose which MCP servers each one may use ([dba9ae2](https://github.com/JuanmanDev/opencode-web/commit/dba9ae21bd034b40778a2873285149a57093ff02))
+* **chat:** paste and drop attachments, terminal keys, help for every option ([1ea230e](https://github.com/JuanmanDev/opencode-web/commit/1ea230e05e2521940174903021a3b45b5a65c8c0))
+* **chat:** render component JSON as cards and tables, adjustable chat width ([a888d66](https://github.com/JuanmanDev/opencode-web/commit/a888d66281191f85fb7c7ec4ba152c3e35b2adc3))
+* **control:** agent control on by default, live MCP switching, reload & continue ([f5e7bf8](https://github.com/JuanmanDev/opencode-web/commit/f5e7bf8d667f4d0a8c3af4e02ccc909e3d67cbff))
+* **mcp:** model-written specialist summaries, specialists that call each other ([1b8c010](https://github.com/JuanmanDev/opencode-web/commit/1b8c01006a3c9ff0d61583651782835e785f84f3))
+* **projects:** recent, unread, starred and running chats in the projects panel ([3736a26](https://github.com/JuanmanDev/opencode-web/commit/3736a26cd802dd9c6d1204cfbe02e6c2f0f805dc))
+* **skills:** view, check, allow, write and improve skills from the web, API and MCP ([d868c05](https://github.com/JuanmanDev/opencode-web/commit/d868c055d5b9ba2707ca568152bc8ae8553884ce))
+* **ui:** steady project shell, clearer sidebar, touch tooltips, stars ([17a2b34](https://github.com/JuanmanDev/opencode-web/commit/17a2b345eaeda822cad2a63699097a915447f4d2))
+* **usage:** group usage by session, day, hour, weekday, model, provider or agent ([24d1f2c](https://github.com/JuanmanDev/opencode-web/commit/24d1f2c44f394e8fd72947b60865f37195eebe62))
+
 ## [0.16.1](https://github.com/JuanmanDev/opencode-web/compare/0.16.0...0.16.1) (2026-10-15)
 
 ### Bug Fixes
