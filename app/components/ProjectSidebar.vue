@@ -18,6 +18,7 @@ function toggleSubagents(parentID: string) {
   subagentToggles.value = { ...subagentToggles.value, [parentID]: !subagentsOpen(parentID) }
 }
 const { busy: busySessions } = useBusySessions()
+const { isUnread } = useSeenSessions()
 const projectMeta = useProjectMeta()
 const globalSearch = useGlobalSearch()
 
@@ -38,7 +39,8 @@ const sortedSessions = computed(() => {
 const api = useOpencodeApi(() => props.directory)
 const toast = useToast()
 
-onMounted(refresh)
+// the shell stays mounted while switching projects: follow the directory
+watch(() => props.directory, refresh, { immediate: true })
 
 async function newSession() {
   try {
@@ -82,11 +84,13 @@ async function deleteSession(id: string) {
 // ---- tool tiles ----
 const { reloading, menuItems } = useReload()
 const scheduleCount = ref(0)
-onMounted(() => {
-  $fetch<Array<{ enabled: boolean }>>('/api/v1/schedules', { query: { directory: props.directory }, timeout: 10000 })
-    .then((list) => { scheduleCount.value = list.filter((s) => s.enabled).length })
+watch(() => props.directory, (directory) => {
+  if (!import.meta.client) return
+  scheduleCount.value = 0
+  $fetch<Array<{ enabled: boolean }>>('/api/v1/schedules', { query: { directory }, timeout: 10000 })
+    .then((list) => { if (directory === props.directory) scheduleCount.value = list.filter((s) => s.enabled).length })
     .catch(() => {})
-})
+}, { immediate: true })
 
 interface Tile {
   key: string
@@ -101,7 +105,10 @@ interface Tile {
 }
 
 const tiles = computed<Tile[]>(() => [
+  { key: 'overview', label: 'Project', tip: 'Project overview', icon: 'i-lucide-layout-dashboard', to: `/p/${dirParam.value}` },
   ...(caps.value.mcp ? [{ key: 'mcp', label: 'MCP', tip: 'MCP servers', icon: 'i-lucide-server-cog', to: `/p/${dirParam.value}/mcp` }] : []),
+  { key: 'agents', label: 'Agents', tip: 'Agents: models, prompts, MCP access', icon: 'i-lucide-bot', to: `/p/${dirParam.value}/agents` },
+  { key: 'skills', label: 'Skills', tip: 'Skills: view, check, allow, write and improve', icon: 'i-lucide-graduation-cap', to: `/p/${dirParam.value}/skills` },
   {
     key: 'schedules',
     label: 'Schedules',
@@ -154,7 +161,7 @@ function fmtTime(ts?: number) {
         @click="newSession"
       />
       <!-- project tools: one row of labelled tiles -->
-      <nav class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }" aria-label="Project tools">
+      <nav class="grid gap-0.5" :style="{ gridTemplateColumns: `repeat(${tiles.length > 5 ? Math.ceil(tiles.length / 2) : tiles.length}, minmax(0, 1fr))` }" aria-label="Project tools">
         <template v-for="tile in tiles" :key="tile.key">
           <UDropdownMenu v-if="tile.menu" :items="tile.menu" :content="{ align: 'start' }">
             <UTooltip :text="tile.tip">
@@ -203,13 +210,13 @@ function fmtTime(ts?: number) {
       Sessions
       <UIcon v-if="refreshing" name="i-lucide-loader-circle" class="size-3 animate-spin" />
     </div>
-    <div class="px-2 pb-1.5">
+    <div class="flex items-center gap-1 px-2 pb-1.5">
       <UInput
         v-model="sessionFilter"
         size="xs"
         icon="i-lucide-search"
         placeholder="Search sessions…"
-        class="w-full"
+        class="flex-1 min-w-0"
         :ui="{ trailing: 'pe-1' }"
       >
         <template v-if="sessionFilter" #trailing>
@@ -228,7 +235,9 @@ function fmtTime(ts?: number) {
           </div>
         </div>
       </div>
-      <TransitionGroup name="oc-list">
+      <!-- keyed by project: switching projects swaps the list at once instead
+           of sliding every row out and the new ones in -->
+      <TransitionGroup :key="directory" name="oc-list">
       <div
         v-for="s in sortedSessions"
         :key="s.id"
@@ -247,7 +256,9 @@ function fmtTime(ts?: number) {
             :class="busySessions[s.id] ? 'animate-spin text-highlighted' : 'text-dimmed'"
           />
           <div class="min-w-0 flex-1">
-            <div class="truncate pr-11 pointer-coarse:pr-20">{{ s.title || 'Untitled session' }}</div>
+            <div class="truncate pr-11 pointer-coarse:pr-20" :class="isUnread(s) && route.params.id !== s.id ? 'text-highlighted font-medium' : ''">
+              <span v-if="isUnread(s) && route.params.id !== s.id" class="inline-block size-1.5 rounded-full bg-primary align-middle mr-1" title="New activity since you last opened it" />{{ s.title || 'Untitled session' }}
+            </div>
             <div class="text-[10px] text-dimmed font-mono">
               {{ busySessions[s.id] ? 'working…' : fmtTime(s.time?.updated || s.time?.created) }}
             </div>
@@ -258,10 +269,11 @@ function fmtTime(ts?: number) {
           v-if="confirmingDelete !== s.id"
           icon="i-lucide-star"
           size="xs"
-          :color="projectMeta.isFavorite(directory, s.id) ? 'primary' : 'neutral'"
+          color="neutral"
           variant="ghost"
           class="oc-tap absolute right-7 top-1.5 pointer-coarse:right-12 pointer-coarse:top-1"
-          :class="projectMeta.isFavorite(directory, s.id) ? '' : 'oc-hover-only opacity-0 group-hover:opacity-100'"
+          :class="projectMeta.isFavorite(directory, s.id) ? 'text-amber-400 hover:text-amber-300' : 'oc-hover-only opacity-0 group-hover:opacity-100'"
+          :ui="{ leadingIcon: projectMeta.isFavorite(directory, s.id) ? 'oc-filled' : '' }"
           :aria-label="projectMeta.isFavorite(directory, s.id) ? 'Unfavorite session' : 'Favorite session'"
           @click.stop.prevent="projectMeta.toggleFavorite(directory, s.id)"
         />
@@ -329,16 +341,18 @@ function fmtTime(ts?: number) {
       <div v-else-if="!sessions.length && !refreshing" class="px-2.5 py-4 text-xs text-dimmed">No sessions yet</div>
     </div>
 
-    <div class="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <!-- desktop has "All projects" in the header; the phone menu needs it here -->
+    <div class="md:hidden p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <UButton
         block
         color="neutral"
         variant="ghost"
         class="justify-start"
         :ui="{ leadingIcon: 'size-4' }"
-        icon="i-lucide-arrow-left"
+        icon="i-lucide-layout-grid"
         label="All projects"
         to="/"
+        @click="emit('navigate')"
       />
     </div>
   </div>

@@ -356,11 +356,39 @@ const AGENTS = [
   { name: 'explore', description: 'Fast read-only codebase exploration', mode: 'subagent', builtIn: true }
 ]
 
+// like opencode: config entries override the built-ins field by field, disabled ones are left out
 function agentList(directory?: string) {
-  const extra = Object.entries(mergedConfig(directory).agent || {})
-    .filter(([, a]: [string, Json]) => !a?.disable)
-    .map(([name, a]: [string, Json]) => ({ name, description: a.description, mode: a.mode || 'all' }))
-  return [...AGENTS.filter((a) => !extra.some((e) => e.name === a.name)), ...extra]
+  const config: Record<string, Json> = mergedConfig(directory).agent || {}
+  const names = [...new Set([...AGENTS.map((a) => a.name), ...Object.keys(config)])]
+  return names.filter((name) => !config[name]?.disable).map((name) => {
+    const a: Json = config[name] || {}
+    const [providerID, ...modelID] = typeof a.model === 'string' ? a.model.split('/') : []
+    return {
+      ...(AGENTS.find((b) => b.name === name) || { name, mode: 'all' }),
+      ...(a.description ? { description: a.description } : {}),
+      ...(a.mode ? { mode: a.mode } : {}),
+      ...(modelID.length ? { model: { providerID, modelID: modelID.join('/') } } : {}),
+      ...(typeof a.prompt === 'string' ? { prompt: a.prompt } : {}),
+      ...(typeof a.temperature === 'number' ? { temperature: a.temperature } : {}),
+      ...(a.tools ? { tools: a.tools } : {})
+    }
+  })
+}
+
+/** Stand-in for /api/v1/ai-text: canned agent descriptions and prompts. */
+function demoAiText(body: Json) {
+  const name = /Name: (\S+)/.exec(String(body?.prompt || ''))?.[1] || 'this agent'
+  if (/system prompt/i.test(String(body?.system || ''))) {
+    return `You are @${name}, a focused assistant in this project.
+
+- Read the relevant files before changing anything.
+- Keep changes small and explain them briefly.
+- When the task is done, report what you did and anything left open.
+
+(Written by the demo's scripted AI.)`
+  }
+  if (/description/i.test(String(body?.system || ''))) return `Use @${name} for focused tasks in this project (written by the demo's scripted AI).`
+  return "A short text written by the demo's scripted AI."
 }
 
 const PROVIDERS = {
@@ -503,7 +531,57 @@ route('GET', 'lsp', () => [])
 route('GET', 'formatter', () => [])
 
 // web app API (/api/v1/*)
+// ---- skills (a library kept in memory for the session) ----
+const demoLibrary: Record<string, { content: string; version: number }> = {}
+const RELEASE_NOTES = `---
+name: release-notes
+description: Use when the user asks for release notes or a changelog entry: summarizes the git log since the last tag, grouped by feat/fix.
+---
+
+# Release notes
+
+1. Find the last tag with \`git describe --tags --abbrev=0\`.
+2. List commits since then: \`git log <tag>..HEAD --oneline\`.
+3. Group them by type (feat, fix, docs) and write one line per change for users, not developers.
+`
+function demoSkillChecks(content: string) {
+  const checks: Array<{ level: string; message: string }> = []
+  if (!/^---\n[\s\S]*?description:/.test(content)) checks.push({ level: 'error', message: 'description is missing: opencode never shows the skill to the model without one.' })
+  if (content.split(/\s+/).length < 40) checks.push({ level: 'warning', message: 'The body is almost empty: add the instructions, steps and examples the model should follow.' })
+  return checks
+}
+function demoSkills() {
+  const desc = (c: string) => /description:\s*(.*)/.exec(c)?.[1] || ''
+  const list = [
+    { name: 'release-notes', description: desc(RELEASE_NOTES), location: '/home/demo/.config/opencode/skills/release-notes/SKILL.md', source: 'global', content: RELEASE_NOTES, permission: 'allow', checks: demoSkillChecks(RELEASE_NOTES) }
+  ]
+  for (const [name, own] of Object.entries(demoLibrary)) {
+    const entry = { name, description: desc(own.content), source: 'library', content: own.content, permission: 'allow', library: { version: own.version, updatedAt: Date.now(), loaded: true }, checks: demoSkillChecks(own.content) }
+    const at = list.findIndex((x) => x.name === name)
+    if (at >= 0) list.splice(at, 1, entry as never)
+    else list.push(entry as never)
+  }
+  return list
+}
+const demoCatalog = () => ({ rev: Object.keys(demoLibrary).length, count: Object.keys(demoLibrary).length, url: 'http://web:3000/skills/r1/', registered: Object.keys(demoLibrary).length ? 'http://web:3000/skills/r1/' : null, upToDate: true, supported: true })
+
 const v1: Array<[string, string, Handler]> = [
+  ['GET', 'skills', () => ({ skills: demoSkills(), available: true, permissions: null, catalog: demoCatalog() })],
+  ['PUT', 'skills/library', ({ body }) => {
+    const name = String(body?.name || '')
+    demoLibrary[name] = { content: String(body?.content || ''), version: (demoLibrary[name]?.version || 0) + 1 }
+    return { skill: { name, version: demoLibrary[name].version }, catalog: demoCatalog() }
+  }],
+  ['DELETE', 'skills/library', ({ query }) => { delete demoLibrary[query.get('name') || '']; return { deleted: query.get('name'), catalog: demoCatalog() } }],
+  ['POST', 'skills/catalog', () => demoCatalog()],
+  ['POST', 'skills/check', ({ body }) => ({ checks: demoSkillChecks(String(body?.content || '')) })],
+  ['POST', 'skills/ai', ({ body }) => new Promise((resolve) => setTimeout(() => {
+    const name = String(body?.name || 'new-skill')
+    const content = body?.mode === 'create'
+      ? `---\nname: ${name}\ndescription: Use when ${String(body?.brief || 'the user asks for it').slice(0, 160)}\n---\n\n# ${name}\n\n## Steps\n\n1. Understand the request and the files involved.\n2. Follow the project conventions.\n3. Report what changed.\n`
+      : String(body?.content || '').replace(/^# (.*)$/m, '# $1\n\n> Improved by the demo AI: clearer steps, sharper description.')
+    resolve({ content, checks: demoSkillChecks(content) })
+  }, 900))],
   ['GET', 'capabilities', () => ({
     protocol: 'legacy', version: VERSION, mcp: true, config: true, sessionRename: true, sessionDelete: true, fork: true, share: true,
     diff: true, shell: true, compact: true, revert: true, questions: true, permissions: true, todos: true, cost: true
@@ -565,6 +643,7 @@ const v1: Array<[string, string, Handler]> = [
     save()
     return { scope: body.scope === 'project' && body.directory ? 'project' : 'global' }
   }],
+  ['POST', 'ai-text', ({ body }) => new Promise((resolve) => setTimeout(() => resolve({ text: demoAiText(body) }), 900))],
   ['GET', 'mcp-presets', ({ query }) => state.presets[query.get('key') || ''] || []],
   ['PUT', 'mcp-presets', ({ query, body }) => { state.presets[query.get('key') || ''] = body; save(); return true }],
   ['GET', 'mcp-nest', () => nestPlan()],
@@ -633,6 +712,32 @@ const v1: Array<[string, string, Handler]> = [
       agents: agentList(dir).filter((a) => a.mode !== 'subagent').map((a) => a.name),
       models: { count: 2, default: 'demo/demo-model' }
     }
+  }],
+  // same shape as server/api/v1/usage.get.ts: one row per assistant reply + list prices
+  ['GET', 'usage', ({ query }) => {
+    const dir = dirOf(query)
+    const days = Math.min(365, Math.max(1, Math.round(Number(query.get('days')) || 30)))
+    const since = Date.now() - days * 86400_000
+    const titles = new Map(state.sessions.map((s) => [s.id, s.title]))
+    const rows = state.sessions.filter((s) => s.directory === dir).flatMap((s) => messagesOf(s.id)
+      .filter((m) => m.info.role === 'assistant' && (m.info.time?.created || 0) >= since)
+      .map((m) => {
+        const t = m.info.tokens || {}
+        return {
+          sessionID: s.id, parentID: s.parentID, title: s.title, parentTitle: s.parentID ? titles.get(s.parentID) : undefined,
+          time: m.info.time.created, completed: m.info.time?.completed,
+          providerID: m.info.providerID || 'demo', modelID: m.info.modelID || 'demo-model', agent: m.info.agent || m.info.mode,
+          cost: m.info.cost || 0,
+          tokens: { input: t.input || 0, output: t.output || 0, reasoning: t.reasoning || 0, cacheRead: t.cache?.read || 0, cacheWrite: t.cache?.write || 0 }
+        }
+      }))
+      .sort((a, b) => a.time - b.time)
+    // list prices above what the demo "charges", so the page shows a promotion saving
+    const prices = {
+      'demo/demo-model': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+      'demo/demo-fast': { input: 0.8, output: 4, cacheRead: 0.08, cacheWrite: 1 }
+    }
+    return { generatedAt: Date.now(), days, rows, prices }
   }],
   ['GET', 'status', ({ query }) => ({
     opencode: { protocol: 'legacy', version: VERSION, reachable: true, hybrid: false },

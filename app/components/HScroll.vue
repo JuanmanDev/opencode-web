@@ -11,6 +11,13 @@ function update() {
   canRight.value = node.scrollLeft + node.clientWidth < node.scrollWidth - 4
 }
 
+const mask = computed(() => {
+  if (!canLeft.value && !canRight.value) return undefined
+  const left = canLeft.value ? 'transparent 0, #000 2.5rem' : '#000 0'
+  const right = canRight.value ? '#000 calc(100% - 2.5rem), transparent 100%' : '#000 100%'
+  return `linear-gradient(to right, ${left}, ${right})`
+})
+
 function scrollBy(direction: 1 | -1) {
   el.value?.scrollBy({ left: direction * el.value.clientWidth * 0.8, behavior: 'smooth' })
 }
@@ -56,9 +63,11 @@ onBeforeUnmount(() => observer?.disconnect())
 
 <template>
   <div class="relative group/scroll">
+    <!-- edges fade out where more cards hide, so the overflow is visible -->
     <div
       ref="el"
       class="flex gap-2 overflow-x-auto select-none"
+      :style="{ maskImage: mask, WebkitMaskImage: mask }"
       @scroll.passive="update"
       @pointerdown="onPointerDown"
     >

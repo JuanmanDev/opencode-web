@@ -142,7 +142,7 @@ useHead(() => ({ title: `${dirName(directory.value)} · opencode web` }))
               <UIcon
                 :name="projectMeta.isFavorite(directory, s.id) ? 'i-lucide-star' : 'i-lucide-message-square'"
                 class="size-3.5 shrink-0"
-                :class="projectMeta.isFavorite(directory, s.id) ? 'text-primary' : 'text-dimmed'"
+                :class="projectMeta.isFavorite(directory, s.id) ? 'text-amber-400 oc-filled' : 'text-dimmed'"
               />
               <span class="text-sm truncate flex-1">{{ s.title || 'Untitled session' }}</span>
               <span class="text-[10px] text-dimmed font-mono shrink-0">{{ fmtTime(s.time?.updated || s.time?.created) }}</span>

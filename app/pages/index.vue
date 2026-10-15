@@ -67,7 +67,11 @@ const knownDirs = computed(() => {
       list.push({ directory: p.worktree, source: 'server' })
     }
   }
+  // starred projects first, each group keeps its recency order
   return list
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => Number(projectMeta.isStarred(b.item.directory)) - Number(projectMeta.isStarred(a.item.directory)) || a.i - b.i)
+    .map(({ item }) => item)
 })
 
 function carouselSessions(dir: string): SessionInfo[] {
@@ -185,6 +189,18 @@ function saveEdit() {
               </p>
             </div>
             <UButton
+              icon="i-lucide-star"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              class="oc-tap"
+              :class="projectMeta.isStarred(item.directory) ? 'text-amber-400 hover:text-amber-300' : 'oc-hover-only opacity-0 group-hover:opacity-100'"
+              :ui="{ leadingIcon: projectMeta.isStarred(item.directory) ? 'oc-filled' : '' }"
+              :aria-label="projectMeta.isStarred(item.directory) ? 'Unstar project' : 'Star project (listed first)'"
+              :aria-pressed="projectMeta.isStarred(item.directory)"
+              @click.stop="projectMeta.toggleStar(item.directory)"
+            />
+            <UButton
               icon="i-lucide-pencil"
               size="xs"
               color="neutral"
@@ -205,11 +221,13 @@ function saveEdit() {
             />
           </div>
 
-          <!-- carousel breaks out to the full viewport width, but its first card
-               stays aligned with the project row above (container = max-w-3xl + px-4) -->
+          <!-- carousel breaks out of the column (full width on phones and
+               tablets, 90% of the page on wide screens, so its scroll arrows sit
+               at a sensible place), but its first card stays aligned with the
+               project row above (container = max-w-3xl + px-4) -->
           <HScroll
             v-if="index < CAROUSEL_PROJECTS && carouselSessions(item.directory).length"
-            class="relative left-1/2 -translate-x-1/2 w-screen px-[max(1rem,calc((100vw-48rem)/2+1rem))] pt-2 pb-1"
+            class="relative left-1/2 -translate-x-1/2 [--oc-cw:100vw] lg:[--oc-cw:90vw] w-(--oc-cw) px-[max(1rem,calc((var(--oc-cw)_-_48rem)/2_+_1rem))] pt-2 pb-1"
           >
             <NuxtLink
               v-for="s in carouselSessions(item.directory)"
@@ -221,7 +239,7 @@ function saveEdit() {
                 <UIcon
                   :name="projectMeta.isFavorite(item.directory, s.id) ? 'i-lucide-star' : 'i-lucide-message-square'"
                   class="size-3.5 shrink-0 mt-0.5"
-                  :class="projectMeta.isFavorite(item.directory, s.id) ? 'text-primary' : 'text-dimmed'"
+                  :class="projectMeta.isFavorite(item.directory, s.id) ? 'text-amber-400 oc-filled' : 'text-dimmed'"
                 />
                 <span class="text-xs leading-snug line-clamp-2 flex-1">{{ s.title || 'Untitled session' }}</span>
               </div>
