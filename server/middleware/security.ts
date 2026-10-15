@@ -22,7 +22,7 @@ export default defineEventHandler((event) => {
 
   const token = useRuntimeConfig().apiToken
   const path = event.path || ''
-  if (token && method === 'GET' && !/^\/(api|mcp|_nuxt|_ipx|__nuxt)/.test(path)) {
+  if (token && method === 'GET' && !/^\/(api|mcp|skills|_nuxt|_ipx|__nuxt)/.test(path)) {
     setCookie(event, UI_COOKIE, uiCookieValue(token), {
       httpOnly: true,
       sameSite: 'strict',
