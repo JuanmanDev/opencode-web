@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentInfo, ProvidersResponse } from '#shared/types/opencode'
+import type { MentionItem, PickedMention } from '~/composables/useMentions'
 
 export interface McpServerInfo {
   name: string
@@ -34,6 +35,8 @@ const emit = defineEmits<{
     variant?: string
     tools?: Record<string, boolean>
     files?: Array<{ mime: string; filename: string; url: string }>
+    /** `@` mentions: file/agent parts sent after the text, like opencode does */
+    parts?: Array<Record<string, unknown>>
   }]
   abort: []
   refreshProviders: []
@@ -292,6 +295,8 @@ function send() {
 
   const [providerID, ...rest] = model.value.split('/')
   const modelID = rest.join('/')
+  // shell and slash commands carry no mentions
+  const mentioned = /^[!/]/.test(value) ? [] : mentionParts(value, picked.value, props.directory)
   emit('send', {
     text: value,
     model: providerID && modelID ? { providerID, modelID } : undefined,
@@ -300,10 +305,12 @@ function send() {
     tools,
     files: attachments.value.length
       ? attachments.value.map(({ mime, filename, url }) => ({ mime, filename, url }))
-      : undefined
+      : undefined,
+    parts: mentioned.length ? mentioned : undefined
   })
   text.value = ''
   attachments.value = []
+  picked.value = []
 }
 
 // ---- attachments (sent as opencode file parts, data URLs) ----
@@ -356,7 +363,102 @@ watch(() => props.seed, (seed) => {
   }
 })
 
+// ---- `@` mentions: files, folders and agents (like opencode's TUI) ----
+const inputRef = ref<{ $el?: HTMLElement } | null>(null)
+const caret = ref(0)
+const picked = ref<PickedMention[]>([])
+const dismissedAt = ref<number | null>(null)
+const activeMention = ref(0)
+const { files: fileHits, loading: filesLoading, search: searchFiles } = useMentionSearch(() => props.directory)
+
+function textareaEl() {
+  return inputRef.value?.$el?.querySelector('textarea') as HTMLTextAreaElement | null
+}
+function syncCaret() {
+  caret.value = textareaEl()?.selectionStart ?? text.value.length
+}
+watch(text, () => nextTick(syncCaret))
+
+const mentionToken = computed(() => {
+  if (slashMatches.value.length || text.value.startsWith('!')) return null
+  const token = mentionAt(text.value, caret.value)
+  return token && dismissedAt.value !== token.start ? token : null
+})
+watch(() => mentionToken.value?.query ?? null, (query) => searchFiles(query))
+
+const mentionItems = computed<MentionItem[]>(() => {
+  const token = mentionToken.value
+  if (!token) return []
+  return [...agentMatches(props.agents, token.query), ...fileHits.value].slice(0, 12)
+})
+const mentionOpen = computed(() => Boolean(mentionToken.value) && (mentionItems.value.length > 0 || filesLoading.value))
+watch(mentionItems, () => { activeMention.value = 0 })
+
+function pickMention(item: MentionItem) {
+  const token = mentionToken.value
+  if (!token) return
+  const next = applyMention(text.value, token, item.value)
+  text.value = next.text
+  if (!picked.value.some((m) => m.kind === item.kind && m.value === item.value)) {
+    picked.value = [...picked.value, { kind: item.kind, value: item.value }]
+  }
+  nextTick(() => {
+    const el = textareaEl()
+    el?.focus()
+    el?.setSelectionRange(next.caret, next.caret)
+    caret.value = next.caret
+  })
+}
+
+const mentionIcon = (kind: MentionItem['kind']) =>
+  kind === 'agent' ? 'i-lucide-bot' : kind === 'folder' ? 'i-lucide-folder' : 'i-lucide-file'
+
+// `!` at the start: shell mode, like opencode
+const shellMode = computed(() => text.value.startsWith('!'))
+
+// ---- phones: the on-screen keyboard is up while the input has focus ----
+// the model/think/agent row and the options panel step aside so the
+// conversation keeps its room; they come back once the keyboard closes
+const coarsePointer = ref(false)
+const inputFocused = ref(false)
+let blurTimer: ReturnType<typeof setTimeout> | undefined
+onMounted(() => {
+  const mq = window.matchMedia('(pointer: coarse)')
+  coarsePointer.value = mq.matches
+  mq.addEventListener?.('change', (e) => { coarsePointer.value = e.matches })
+})
+function onFocus() {
+  clearTimeout(blurTimer)
+  inputFocused.value = true
+}
+// delayed: a tap on Send blurs the input first, and the row reappearing at
+// once would move the button away from the finger
+function onBlur() {
+  clearTimeout(blurTimer)
+  blurTimer = setTimeout(() => { inputFocused.value = false }, 250)
+}
+onBeforeUnmount(() => clearTimeout(blurTimer))
+const keyboardOpen = computed(() => coarsePointer.value && inputFocused.value)
+
 function onKeydown(e: KeyboardEvent) {
+  if (mentionOpen.value && mentionItems.value.length) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const n = mentionItems.value.length
+      activeMention.value = (activeMention.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
+      return
+    }
+    if ((e.key === 'Enter' && !e.shiftKey && !e.isComposing) || e.key === 'Tab') {
+      e.preventDefault()
+      pickMention(mentionItems.value[activeMention.value]!)
+      return
+    }
+  }
+  if (e.key === 'Escape' && mentionToken.value) {
+    e.preventDefault()
+    dismissedAt.value = mentionToken.value.start
+    return
+  }
   if (e.key === 'Tab' && slashMatches.value.length) {
     e.preventDefault()
     pickCommand(slashMatches.value[0]!.name)
@@ -391,25 +493,69 @@ function onKeydown(e: KeyboardEvent) {
             <span class="font-mono text-sm text-highlighted">/{{ cmd.name }}</span>
             <span class="text-xs text-dimmed truncate">{{ cmd.description }}</span>
           </button>
-          <div class="px-3 py-1 text-[10px] text-dimmed">Tab completes · `!command` runs shell</div>
+          <div class="px-3 py-1 text-[10px] text-dimmed">Tab completes · `!command` runs shell · `@` mentions files and agents</div>
+        </div>
+      </CollapseTransition>
+      <!-- @ mentions: agents, files and folders -->
+      <CollapseTransition>
+        <div
+          v-if="mentionOpen"
+          role="listbox"
+          aria-label="Mention a file, folder or agent"
+          class="absolute bottom-full left-0 right-0 mb-1 rounded-sm bg-elevated shadow-lg divide-y divide-default max-h-72 overflow-y-auto z-20"
+        >
+          <button
+            v-for="(item, i) in mentionItems"
+            :key="`${item.kind}:${item.value}`"
+            role="option"
+            :aria-selected="i === activeMention"
+            class="oc-row flex w-full items-center gap-2 px-3 py-1.5 pointer-coarse:py-2.5 text-left cursor-pointer"
+            :class="i === activeMention ? 'bg-accented' : 'hover:bg-accented'"
+            @mousedown.prevent="pickMention(item)"
+            @mouseenter="activeMention = i"
+          >
+            <UIcon :name="mentionIcon(item.kind)" class="size-3.5 shrink-0" :class="item.kind === 'agent' ? 'text-primary' : 'text-dimmed'" />
+            <span class="font-mono text-sm text-highlighted shrink-0">@{{ item.kind === 'agent' ? item.value : item.label }}</span>
+            <span class="text-xs text-dimmed truncate">{{ item.kind === 'agent' ? (item.detail || 'subagent') : item.detail }}</span>
+          </button>
+          <div v-if="filesLoading && !fileHits.length" class="flex items-center gap-2 px-3 py-1.5 text-xs text-dimmed">
+            <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" /> Searching files…
+          </div>
+          <div class="px-3 py-1 text-[10px] text-dimmed">↑↓ choose · Enter/Tab insert · Esc close · files are read into the context, agents get the task</div>
+        </div>
+      </CollapseTransition>
+      <!-- ! shell mode -->
+      <CollapseTransition>
+        <div
+          v-if="shellMode"
+          class="absolute bottom-full left-0 mb-1 flex items-center gap-1.5 rounded-sm bg-elevated shadow px-2.5 py-1 text-[11px] z-10"
+          :class="caps.shell ? 'text-muted' : 'text-error'"
+        >
+          <UIcon name="i-lucide-square-terminal" class="size-3.5" />
+          {{ caps.shell ? 'Shell mode: runs the command in the project folder' : 'Shell commands are not available on this server' }}
         </div>
       </CollapseTransition>
       <UTextarea
+        ref="inputRef"
         v-model="text"
         :rows="2"
         autoresize
         :maxrows="10"
-        placeholder="Ask opencode… (Enter to send, Shift+Enter for newline)"
+        placeholder="Ask opencode… (Enter to send, Shift+Enter for newline, @ to mention)"
         class="w-full font-mono shrink-0"
         variant="soft"
         size="lg"
         @keydown="onKeydown"
+        @keyup="syncCaret"
+        @click="syncCaret"
+        @focus="onFocus"
+        @blur="onBlur"
       />
 
       <!-- collapsible options; the only part of the box that shrinks and
            scrolls, so the on-screen keyboard never pushes Send off-screen -->
       <CollapseTransition>
-      <div v-if="optionsOpen" class="space-y-2 min-h-0 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none">
+      <div v-if="optionsOpen && !keyboardOpen" class="space-y-2 min-h-0 max-h-[65dvh] overflow-y-auto overscroll-contain sm:max-h-none">
         <!-- one row on wide screens: model / think / agent -->
         <!-- phones pair think level + agent so the panel stays short -->
         <div class="grid grid-cols-2 sm:flex sm:flex-row gap-1.5">
@@ -666,6 +812,8 @@ function onKeydown(e: KeyboardEvent) {
             @click="pickFiles"
           />
         </UTooltip>
+        <Transition name="oc-fade">
+        <div v-show="!keyboardOpen" data-testid="prompt-config" class="flex items-center gap-1.5 min-w-0">
         <UTooltip :text="optionsOpen ? 'Hide options' : 'Model, think level, agent & MCP options'">
           <UButton
             color="neutral"
@@ -707,6 +855,8 @@ function onKeydown(e: KeyboardEvent) {
             {{ mcpSummary }} mcp
           </span>
         </button>
+        </div>
+        </Transition>
         <span class="flex-1" />
         <UBadge v-if="queueLength" color="neutral" variant="subtle" size="sm">
           {{ queueLength }} queued

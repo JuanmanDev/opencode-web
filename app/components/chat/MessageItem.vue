@@ -9,7 +9,7 @@ const speech = useSpeech()
 
 const messageText = computed(() =>
   (props.message.parts || [])
-    .filter((p) => p.type === 'text')
+    .filter((p) => p.type === 'text' && !(p as { synthetic?: boolean }).synthetic)
     .map((p) => (p as { text?: string }).text || '')
     .join('\n\n')
     .trim()
@@ -61,6 +61,28 @@ const visibleParts = computed<Part[]>(() =>
   })
 )
 
+// user messages: the text the user wrote (opencode adds synthetic parts with
+// the contents of @-mentioned files and agent hand-offs: those stay hidden)
+const userTextParts = computed(() => visibleParts.value.filter(
+  (p) => p.type === 'text' && !(p as { synthetic?: boolean }).synthetic
+))
+
+interface Chip { id: string; kind: 'file' | 'folder' | 'agent' | 'attachment'; label: string; icon: string; title: string }
+const userChips = computed<Chip[]>(() => visibleParts.value.flatMap((p): Chip[] => {
+  const part = p as Record<string, any>
+  if (part.type === 'agent') {
+    return [{ id: p.id, kind: 'agent', label: `@${part.name}`, icon: 'i-lucide-bot', title: `Handed to the ${part.name} agent` }]
+  }
+  if (part.type !== 'file') return []
+  const url = String(part.url || '')
+  if (url.startsWith('file:')) {
+    const folder = part.mime === 'application/x-directory'
+    const path = part.source?.path || part.filename || decodeURIComponent(url.replace(/^file:\/\//, ''))
+    return [{ id: p.id, kind: folder ? 'folder' : 'file', label: `@${path}`, icon: folder ? 'i-lucide-folder' : 'i-lucide-file', title: decodeURIComponent(url.replace(/^file:\/\//, '')) }]
+  }
+  return [{ id: p.id, kind: 'attachment', label: part.filename || 'attachment', icon: 'i-lucide-paperclip', title: part.mime || '' }]
+}))
+
 const showReasoning = ref(false)
 
 function tokenTotal(tokens?: TokenUsage) {
@@ -91,13 +113,21 @@ const errorMessage = computed(() => {
           @click="emit('fork')"
         />
       </UTooltip>
-      <template v-for="part in visibleParts" :key="part.id">
-        <div v-if="part.type === 'text'" class="text-sm whitespace-pre-wrap break-words">{{ (part as any).text }}</div>
-        <div v-else-if="part.type === 'file'" class="flex items-center gap-1.5 text-xs text-muted mt-1">
-          <UIcon name="i-lucide-paperclip" class="size-3.5" />
-          {{ (part as any).filename || (part as any).url }}
-        </div>
+      <template v-for="part in userTextParts" :key="part.id">
+        <div class="text-sm whitespace-pre-wrap break-words">{{ (part as any).text }}</div>
       </template>
+      <!-- attachments and @ mentions: one row of chips -->
+      <div v-if="userChips.length" class="flex flex-wrap gap-1 mt-1.5">
+        <span
+          v-for="chip in userChips"
+          :key="chip.id"
+          class="inline-flex items-center gap-1 rounded-sm bg-accented/70 px-1.5 py-0.5 text-[11px] font-mono text-muted max-w-full"
+          :title="chip.title"
+        >
+          <UIcon :name="chip.icon" class="size-3 shrink-0" :class="chip.kind === 'agent' ? 'text-primary' : ''" />
+          <span class="truncate">{{ chip.label }}</span>
+        </span>
+      </div>
       <!-- sent time + user message actions -->
       <div class="flex items-center gap-2 mt-1 -mb-1 min-w-0">
         <time

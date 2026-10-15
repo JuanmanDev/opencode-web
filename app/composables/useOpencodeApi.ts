@@ -27,6 +27,10 @@ export function useOpencodeApi(directory?: MaybeRefOrGetter<string | undefined>)
     projects: () => ocFetch<Project[]>(`${BASE}/project`),
     listFiles: (path: string) =>
       ocFetch<FileEntry[]>(`${BASE}/file`, { query: q({ path }) }),
+    /** Fuzzy file + folder search (`@` mentions); folders end with "/". */
+    findFiles: (query: string, limit = 30) =>
+      ocFetch<string[]>(`${BASE}/find/file`, { query: q({ query, dirs: 'true', limit }), timeout: 10000 })
+        .then((paths) => (Array.isArray(paths) ? paths.filter((p) => typeof p === 'string') : [])),
 
     /** opencode's own paths - reveals which OS/host it runs on. */
     paths: () =>
