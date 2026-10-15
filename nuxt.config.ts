@@ -1,4 +1,4 @@
-export default defineNuxtConfig({
+export default defineNuxtConfig(withDemo({
   compatibilityDate: '2026-08-01',
   modules: ['@nuxt/ui'],
   css: ['~/assets/css/main.css'],
@@ -84,4 +84,38 @@ export default defineNuxtConfig({
       data: { driver: 'fs', base: './.data' }
     }
   }
-})
+}))
+
+// ---- static web demo (DEMO=1 nuxi generate) ----
+// A client-only build for GitHub Pages: no server, the UI's API calls are
+// answered in the browser by demo/backend.ts with a tiny scripted "AI".
+// The normal build never sees any of it.
+function withDemo<T extends Record<string, any>>(config: T): T {
+  if (process.env.DEMO !== '1') return config
+  const base = process.env.DEMO_BASE_URL || '/opencode-web/'
+  const prefix = (href: string) => (href.startsWith('/') ? base + href.slice(1) : href)
+  return {
+    ...config,
+    ssr: false,
+    // keep the regular build's .nuxt and .output untouched
+    buildDir: 'node_modules/.cache/nuxt-demo',
+    app: {
+      ...config.app,
+      baseURL: base,
+      head: {
+        ...config.app.head,
+        title: 'opencode web — live demo',
+        link: config.app.head.link.map((l: { href: string }) => ({ ...l, href: prefix(l.href) }))
+      }
+    },
+    plugins: [...(config.plugins || []), { src: '~~/demo/plugin.client.ts', mode: 'client' }],
+    // no icon endpoint on a static host: unbundled icons come from Iconify
+    icon: { ...config.icon, provider: 'iconify', serverBundle: false, clientBundle: { scan: true, sizeLimitKb: 1024 } },
+    nitro: {
+      ...config.nitro,
+      preset: 'github-pages',
+      output: { dir: 'node_modules/.cache/opencode-web-demo' },
+      prerender: { routes: ['/'], crawlLinks: false, failOnError: false }
+    }
+  }
+}
