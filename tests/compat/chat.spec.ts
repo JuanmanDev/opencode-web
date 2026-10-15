@@ -206,12 +206,15 @@ test('subagent per MCP: the orchestrator delegates, the specialist only has its 
       : `call task ${JSON.stringify({ subagent_type: 'mcp-nest-demo', description: 'demo', prompt: 'nest probe' })}`
     await request.post(`/api/v1/sessions/${session.id}/prompt`, { data: { directory: WORK, agent: 'orchestrator', text: call }, timeout: 150_000 })
 
-    // what the mock model was offered: the specialist only nest-demo's tools,
-    // the orchestrator none of them
+    // what the mock model was offered: the specialist only nest-demo's tools
+    // (plus the subagent tool to hand work to the other specialists), the
+    // orchestrator none of them
     const log = readFileSync(MOCK_LOG, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { userText: string; tools: string[] })
     const specialist = log.filter((l) => l.userText.includes('nest probe') && !l.userText.startsWith('call') && l.tools.length).at(-1)
     expect(specialist?.tools.length).toBeGreaterThan(0)
-    expect(specialist?.tools.every((t) => t.startsWith('nest-demo_'))).toBe(true)
+    const delegation = ['task', 'subagent']
+    expect(specialist?.tools.some((t) => t.startsWith('nest-demo_'))).toBe(true)
+    expect(specialist?.tools.every((t) => t.startsWith('nest-demo_') || delegation.includes(t))).toBe(true)
     const orchestrator = log.filter((l) => l.userText.startsWith('call') && l.userText.includes('nest probe') && l.tools.length).at(-1)
     expect(orchestrator?.tools.some((t) => t.startsWith('nest-demo_'))).toBe(false)
   } finally {
