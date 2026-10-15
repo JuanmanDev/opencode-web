@@ -71,11 +71,11 @@ const table = computed(() => {
 </script>
 
 <template>
-  <div class="min-w-0" :class="depth === 0 ? 'rounded-md bg-elevated/60 p-3 space-y-3' : 'space-y-2'">
+  <div class="min-w-0" :class="depth === 0 ? 'rounded-md bg-elevated p-3 space-y-3' : 'space-y-2'">
     <div v-if="title" class="text-sm font-medium text-highlighted">{{ title }}</div>
 
     <!-- list of records -> table -->
-    <div v-if="table" class="overflow-x-auto rounded-sm bg-default/40">
+    <div v-if="table" class="overflow-x-auto rounded-sm bg-default/60">
       <table class="w-full text-xs">
         <thead>
           <tr class="text-left text-[10px] uppercase tracking-wide text-dimmed">
@@ -104,7 +104,8 @@ const table = computed(() => {
     <!-- record -> label/value grid + sub-sections -->
     <template v-else-if="isRec(value)">
       <dl v-if="fields.scalars.length" class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-4 gap-y-2">
-        <div v-for="[k, v] in fields.scalars" :key="k" class="min-w-0">
+        <!-- long text (notes, comments) gets a whole row instead of a tall narrow column -->
+        <div v-for="[k, v] in fields.scalars" :key="k" class="min-w-0" :class="typeof v === 'string' && v.length > 60 ? 'col-span-full' : ''">
           <dt class="text-[10px] uppercase tracking-wide text-dimmed truncate">{{ label(k) }}</dt>
           <dd class="text-sm break-words">
             <UBadge v-if="badgeColor(k, v)" size="sm" variant="subtle" :color="badgeColor(k, v)">{{ typeof v === 'boolean' ? (v ? 'yes' : 'no') : fmt(v) }}</UBadge>

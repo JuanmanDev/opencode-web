@@ -298,16 +298,22 @@ watch(htmlResources, () => {
 
     <!-- structured data for a component this app doesn't have: cards & tables -->
     <div v-if="structured" class="oc-breakout px-2.5 pb-2" :class="{ 'pt-1': !open }">
-      <div class="flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-widest text-dimmed">
-        <UIcon name="i-lucide-layout-panel-top" class="size-3" />
-        <span class="truncate">{{ structured.kind }}</span>
-        <button type="button" class="ml-auto normal-case tracking-normal hover:text-highlighted cursor-pointer" @click="showStructured = !showStructured">
-          {{ showStructured ? 'hide' : 'show' }}
-        </button>
-      </div>
-      <CollapseTransition>
-        <ChatStructuredData v-if="showStructured" :value="structured.value" :title="structured.title" />
-      </CollapseTransition>
+      <ChatWidthBlock>
+        <!-- one solid card: header and content share the background, also
+             where it grows past the chat column -->
+        <div class="rounded-md bg-elevated shadow-sm ring-1 ring-(--ui-border)">
+          <div class="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[10px] uppercase tracking-widest text-dimmed">
+            <UIcon name="i-lucide-layout-panel-top" class="size-3" />
+            <span class="truncate">{{ structured.kind }}</span>
+            <button type="button" class="ml-auto normal-case tracking-normal hover:text-highlighted cursor-pointer" @click="showStructured = !showStructured">
+              {{ showStructured ? 'hide' : 'show' }}
+            </button>
+          </div>
+          <CollapseTransition>
+            <ChatStructuredData v-if="showStructured" :value="structured.value" :title="structured.title" class="!bg-transparent !pt-1" />
+          </CollapseTransition>
+        </div>
+      </ChatWidthBlock>
     </div>
     <div v-if="noUi" class="px-2.5 pb-2 text-[11px] text-dimmed flex items-center gap-1.5" :class="{ 'pt-1': !open }">
       <UIcon name="i-lucide-info" class="size-3.5 shrink-0" />
@@ -330,7 +336,7 @@ watch(htmlResources, () => {
       Loading app UI…
     </div>
     <div v-if="fetchedResources.length" class="oc-breakout px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open && !htmlResources.length }">
-      <template v-for="(res, i) in fetchedResources" :key="`f${i}`">
+      <ChatWidthBlock v-for="(res, i) in fetchedResources" :key="`f${i}`">
         <div
           v-if="res.remoteDom && !res.script"
           class="flex items-center gap-2 rounded-md bg-elevated/70 px-3 py-2 text-xs text-muted"
@@ -350,17 +356,17 @@ watch(htmlResources, () => {
           :title="res.title || part.tool"
           :app-id="`${part.id}:f${i}`"
         />
-      </template>
+      </ChatWidthBlock>
     </div>
     <div v-if="htmlResources.length" class="oc-breakout px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
-      <ChatMcpHtmlFrame
-        v-for="(res, i) in htmlResources"
-        :key="i"
-        :html="res.html"
-        :url="res.url"
-        :title="res.title"
-        :app-id="`${part.id}:h${i}`"
-      />
+      <ChatWidthBlock v-for="(res, i) in htmlResources" :key="i">
+        <ChatMcpHtmlFrame
+          :html="res.html"
+          :url="res.url"
+          :title="res.title"
+          :app-id="`${part.id}:h${i}`"
+        />
+      </ChatWidthBlock>
     </div>
   </div>
 </template>

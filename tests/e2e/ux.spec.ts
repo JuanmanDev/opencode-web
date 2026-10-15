@@ -96,20 +96,21 @@ test('projects can be starred on the home page', async ({ page }) => {
 
 test('JSON for a front-end component renders as cards and tables', async ({ page }) => {
   const payload = {
-    __componentType: 'reservation-details',
-    message: 'Reservation EXP-1',
-    data: { reservationId: 'EXP-1', status: 'Checked-in', guest: { name: 'Ada Lovelace', country: 'UK' }, rooms: [{ roomName: '303', adults: 2 }] }
+    __componentType: 'order-details',
+    message: 'Order A-1',
+    data: { orderId: 'A-1', status: 'shipped', customer: { name: 'Ada Lovelace', country: 'UK' }, items: [{ sku: '303', quantity: 2 }] }
   }
   await page.route('**/api/opencode/session/ses_mock1/message*', (route) => route.request().method() === 'GET'
     ? route.fulfill({
       json: [{
         info: { id: 'msg_h1', sessionID: 'ses_mock1', role: 'assistant', time: { created: Date.now(), completed: Date.now() } },
-        parts: [{ id: 'prt_h1', messageID: 'msg_h1', sessionID: 'ses_mock1', type: 'tool', tool: 'hotelier-tools_get_reservation_details_ui', state: { status: 'completed', input: {}, output: JSON.stringify(payload), title: 'details' } }]
+        parts: [{ id: 'prt_h1', messageID: 'msg_h1', sessionID: 'ses_mock1', type: 'tool', tool: 'shop_get_order_ui', state: { status: 'completed', input: {}, output: JSON.stringify(payload), title: 'details' } }]
       }]
     })
     : route.fallback())
   await page.goto(`/p/${DIR}/session/ses_mock1`)
-  await expect(page.getByText('Reservation EXP-1')).toBeVisible()
+  await expect(page.getByText('Order A-1')).toBeVisible()
+  await expect(page.getByRole('separator', { name: /Automatic width/ })).toHaveCount(1)
   await expect(page.getByText('Ada Lovelace')).toBeVisible()
   await expect(page.getByRole('cell', { name: '303' })).toBeVisible()
   // the data is all there: no "run the tool again" offer
