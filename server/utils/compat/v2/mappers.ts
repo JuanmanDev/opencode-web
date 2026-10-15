@@ -758,6 +758,16 @@ export function toLegacyCommands(commands: any[], skills: any[] = []): any[] {
   return out
 }
 
+/** `GET /api/fs/find` entries -> 1.x `/find/file` paths (folders end with "/", POSIX separators). */
+export function findToLegacy(entries: unknown): string[] {
+  return asArray(entries)
+    .filter((e) => typeof e?.path === 'string' && e.path)
+    .map((e) => {
+      const path = String(e.path).replace(/\\/g, '/').replace(/\/+$/, '')
+      return e.type === 'directory' ? `${path}/` : path
+    })
+}
+
 /**
  * `/api/fs/list` entries -> legacy `/file` entries. v2 returns paths relative
  * to the location with native separators, directories with a trailing one

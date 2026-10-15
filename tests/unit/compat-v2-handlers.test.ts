@@ -584,3 +584,20 @@ describe('questions and permissions', () => {
     await rejects(req('POST', `session/${SID}/permissions/${PID}`, { body: { response: 'sometimes' } }), 400)
   })
 })
+
+describe('find/file (@ mentions)', () => {
+  it('searches /api/fs/find and answers 1.x-style paths', async () => {
+    const { req, calls } = setup({
+      'GET /api/fs/find': { location: { directory: DIR }, data: [{ path: 'src', type: 'directory' }, { path: 'src\\loop.ts', type: 'file' }] }
+    })
+    const out = await req('GET', 'find/file', { query: { directory: DIR, query: 'lo', dirs: 'true', limit: '30' } })
+    expect(out).toEqual(['src/', 'src/loop.ts'])
+    expect(calls[0]!.opts).toMatchObject({ directory: DIR, query: { query: 'lo', limit: '30' } })
+  })
+
+  it('files only when dirs=false', async () => {
+    const { req, calls } = setup({ 'GET /api/fs/find': { data: [] } })
+    await req('GET', 'find/file', { query: { directory: DIR, query: 'x', dirs: 'false' } })
+    expect(calls[0]!.opts.query).toMatchObject({ type: 'file' })
+  })
+})

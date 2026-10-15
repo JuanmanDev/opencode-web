@@ -17,6 +17,7 @@ import {
   todosFromMessages,
   toLegacyAgents,
   toLegacyCommands,
+  findToLegacy,
   toLegacyFiles,
   toLegacyMessages,
   toLegacyPermission,
@@ -1032,6 +1033,19 @@ export function createV2Handler(deps: {
     ['GET', 'path', async (ctx) => {
       const loc = await location(ctx, ctx.dir)
       return { directory: loc.directory, worktree: loc.project?.directory ?? loc.directory }
+    }],
+    // `@` mentions: fuzzy file/folder search, folders end with "/" like 1.x
+    ['GET', 'find/file', async (ctx) => {
+      const dirs = String(ctx.req.query.dirs ?? 'true') !== 'false'
+      const res = await ctx.call('/api/fs/find', {
+        ...at(ctx.dir),
+        query: clean({
+          query: String(ctx.req.query.query ?? ''),
+          limit: ctx.req.query.limit !== undefined ? String(ctx.req.query.limit) : undefined,
+          type: dirs ? undefined : 'file'
+        })
+      })
+      return findToLegacy(res?.data)
     }],
     ['GET', 'file', async (ctx) => {
       const path = relativePath(String(ctx.req.query.path ?? ''), ctx.dir)

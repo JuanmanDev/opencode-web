@@ -647,6 +647,8 @@ type PromptPayload = {
   variant?: string
   tools?: Record<string, boolean>
   files?: Array<{ mime: string; filename: string; url: string }>
+  /** @ mentions (file / agent parts), sent after the text like opencode does */
+  parts?: Array<Record<string, unknown>>
 }
 
 // prompts sent while the agent is busy wait in a queue and fire on idle
@@ -658,7 +660,8 @@ const promptSeed = ref<{ text: string; ts: number } | null>(null)
 function retryLast() {
   const lastUser = [...messages.value].reverse().find((m) => m.info.role === 'user')
   const text = (lastUser?.parts || [])
-    .filter((p) => p.type === 'text')
+    // synthetic parts are opencode's own (file contents, agent hand-offs)
+    .filter((p) => p.type === 'text' && !(p as { synthetic?: boolean }).synthetic)
     .map((p) => (p as { text?: string }).text || '')
     .join('\n')
     .trim()
@@ -670,7 +673,7 @@ function retryLast() {
 }
 
 function continueRun() {
-  dispatch({ ...(lastPayload.value || {} as PromptPayload), text: 'Continue.' })
+  dispatch({ ...(lastPayload.value || {} as PromptPayload), text: 'Continue.', parts: undefined })
 }
 
 function dispatch(payload: PromptPayload) {
@@ -679,7 +682,8 @@ function dispatch(payload: PromptPayload) {
   lastPayload.value = payload
   const parts: Array<Record<string, unknown>> = [
     ...(payload.files || []).map((f) => ({ type: 'file', mime: f.mime, filename: f.filename, url: f.url })),
-    ...(payload.text ? [{ type: 'text', text: payload.text }] : [])
+    ...(payload.text ? [{ type: 'text', text: payload.text }] : []),
+    ...(payload.parts || [])
   ]
   api.prompt(sessionId.value, {
     parts: parts as never,
