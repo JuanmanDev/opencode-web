@@ -1,3 +1,9 @@
+## [0.16.1](https://github.com/JuanmanDev/opencode-web/compare/0.16.0...0.16.1) (2026-10-15)
+
+### Bug Fixes
+
+* **demo:** keep the last reply when the page reloads right away ([b4507b0](https://github.com/JuanmanDev/opencode-web/commit/b4507b04a190bf1668374545cdc4e23e41f8a509))
+
 ## [0.16.0](https://github.com/JuanmanDev/opencode-web/compare/0.15.1...0.16.0) (2026-10-15)
 
 ### Features
