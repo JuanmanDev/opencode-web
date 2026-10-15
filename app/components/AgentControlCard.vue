@@ -53,9 +53,10 @@ async function install(enabled = true) {
 }
 
 const TOOLS = [
-  ['MCP', 'list, test, add, reconnect, set modes'],
-  ['Reload', 'one project or all of opencode, after replies finish'],
+  ['MCP', 'list, test, add, switch on/off at once, set modes'],
+  ['Reload', 'one project or all of opencode; the chat continues by itself afterwards'],
   ['Chats', 'list, read and prompt other sessions, abort'],
+  ['Sub-chats', 'run any agent on a task in a sub-chat (run_subagent)'],
   ['Tasks', 'todo lists of busy and recent sessions'],
   ['Schedules', 'create, run and manage scheduled prompts'],
   ['Info', 'version, models, agents, commands, skills, config']
@@ -81,7 +82,7 @@ const TOOLS = [
     </button>
     <CollapseTransition>
       <div v-if="expanded" class="px-3 pb-3 space-y-2.5">
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           <div v-for="[title, text] in TOOLS" :key="title" class="rounded-sm bg-elevated/70 px-2 py-1.5">
             <div class="text-[11px] font-medium">{{ title }}</div>
             <div class="text-[10px] text-dimmed leading-tight">{{ text }}</div>
@@ -123,7 +124,7 @@ const TOOLS = [
             label="Tools"
             @click="emit('details', state.name)"
           />
-          <span class="oc-note text-[10px] text-dimmed">Saved in the global config; new chats get the tools.</span>
+          <span class="oc-note text-[10px] text-dimmed">On by default, saved in the global config: every chat lists it among its MCP servers. Switching it off here is remembered.</span>
         </div>
       </div>
     </CollapseTransition>

@@ -8,16 +8,7 @@ export default defineEventHandler(async (event) => {
   if (!/^https?:\/\//.test(url)) {
     throw createError({ statusCode: 400, message: 'Set the URL at which opencode reaches this app (NUXT_SELF_URL), e.g. http://web:3000/mcp' })
   }
-  const result = await saveMcpServer({
-    name: CONTROL_MCP_NAME,
-    scope: 'global',
-    config: { ...await controlMcpConfig(url), enabled: body?.enabled !== false }
-  })
-  await opencodeFetch('/global/config', {
-    method: 'PATCH',
-    body: { permission: Object.fromEntries(CONTROL_ASK_TOOLS.map((tool) => [`${CONTROL_MCP_NAME}_${tool}`, 'ask'])) },
-    timeoutMs: 30000
-  }).catch(() => { /* older servers without per-tool permissions */ })
-  await forgetMcpTools()
-  return result
+  // a manual choice ends the "on by default" registration for good
+  await useStorage('data').setItem('control-mcp-auto.json', { done: true, at: Date.now() })
+  return installControlMcp(url, body?.enabled !== false)
 })

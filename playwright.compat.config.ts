@@ -38,6 +38,7 @@ export default defineConfig({
         NITRO_PORT: String(APP_PORT),
         NUXT_OPENCODE_URL: `http://127.0.0.1:${OPENCODE_PORT}`,
         NUXT_OPENCODE_PASSWORD: PASSWORD,
+        NUXT_AGENT_CONTROL: 'off',
         NUXT_OPENCODE_PROTOCOL: process.env.COMPAT_PROTOCOL || 'auto',
         // agent control: opencode reaches this app's MCP server here
         NUXT_SELF_URL: `http://127.0.0.1:${APP_PORT}`

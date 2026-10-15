@@ -7,14 +7,31 @@ interface ReloadState {
   when: 'now' | 'idle'
   state: 'waiting' | 'done' | 'failed' | 'gave-up'
   message?: string
+  resumed?: string[]
 }
 
 export function useReload() {
   const toast = useToast()
   const caps = useCapabilities()
   const reloading = useState('oc-reloading', () => false)
+  // changes saved to the config that opencode only picks up after a reload,
+  // by project directory ('*' = global): pages show a "reload to apply" notice
+  const pendingReload = useState<Record<string, string[]>>('oc-pending-reload', () => ({}))
 
-  async function reload(opts: { scope: 'project' | 'all'; directory?: string; when?: 'now' | 'idle' }) {
+  function markPending(directory: string | '*', what: string) {
+    const list = pendingReload.value[directory] || []
+    if (!list.includes(what)) pendingReload.value = { ...pendingReload.value, [directory]: [...list, what] }
+  }
+
+  function pendingFor(directory: string) {
+    return [...new Set([...(pendingReload.value['*'] || []), ...(pendingReload.value[directory] || [])])]
+  }
+
+  /**
+   * `resume`: chats (of `directory`) to continue once the reload is done;
+   * `resumeBusy`: continue every chat that is busy when the reload starts.
+   */
+  async function reload(opts: { scope: 'project' | 'all'; directory?: string; when?: 'now' | 'idle'; resume?: string[]; resumeBusy?: boolean }) {
     if (!caps.value.config) {
       toast.add({ title: 'Not available on this server', description: 'Restart the opencode server process to reload its config.', color: 'warning' })
       return
@@ -34,7 +51,9 @@ export function useReload() {
         state = await $fetch<ReloadState>('/api/v1/reload', { timeout: 10000 }).catch(() => state)
       }
       if (state?.state === 'done') {
-        toast.add({ title: `Reloaded ${label}`, description: 'opencode re-read its config. New sessions use it.', color: 'success' })
+        pendingReload.value = {}
+        const resumed = state.resumed?.length ? ` ${state.resumed.length} chat(s) continue where they stopped.` : ''
+        toast.add({ title: `Reloaded ${label}`, description: `opencode re-read its config. New messages use it.${resumed}`, color: 'success' })
       } else {
         toast.add({ title: `Reload of ${label}: ${state?.state || 'unknown'}`, description: state?.message, color: 'warning' })
       }
@@ -52,9 +71,10 @@ export function useReload() {
       { label: 'Reload this project', description: 'when its sessions are idle', icon: 'i-lucide-folder-sync', onSelect: () => reload({ scope: 'project', directory }) },
       { label: 'Reload all projects', description: 'like restarting opencode serve', icon: 'i-lucide-server-cog', onSelect: () => reload({ scope: 'all' }) }
     ], [
-      { label: 'Reload this project now', description: 'interrupts running replies', icon: 'i-lucide-zap', color: 'warning' as const, onSelect: () => reload({ scope: 'project', directory, when: 'now' }) }
+      { label: 'Reload now & continue', description: 'interrupts running replies, then resumes them', icon: 'i-lucide-zap', color: 'warning' as const, onSelect: () => reload({ scope: 'project', directory, when: 'now', resumeBusy: true }) },
+      { label: 'Reload this project now', description: 'interrupts running replies', icon: 'i-lucide-zap-off', color: 'warning' as const, onSelect: () => reload({ scope: 'project', directory, when: 'now' }) }
     ]]
   }
 
-  return { reload, reloading, menuItems }
+  return { reload, reloading, menuItems, pendingReload, markPending, pendingFor }
 }

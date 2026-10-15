@@ -64,6 +64,9 @@ export default defineNuxtConfig(withDemo({
     // register the control MCP server (`<selfUrl>/mcp`) with opencode.
     // Empty: the origin of NUXT_PUBLIC_DEMO_MCP_URL, else the request's own
     selfUrl: '',
+    // agent control (the /mcp control server in opencode's global config) is
+    // registered once by default (NUXT_AGENT_CONTROL): 'auto' or 'off'
+    agentControl: 'auto',
     public: {
       // URL at which *opencode* reaches this app's demo MCP server, used when
       // adding it from the MCP page (NUXT_PUBLIC_DEMO_MCP_URL). Empty: the

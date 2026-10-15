@@ -27,7 +27,9 @@ export default defineConfig({
       env: {
         NITRO_PORT: String(APP_PORT),
         NUXT_OPENCODE_URL: `http://127.0.0.1:${MOCK_PORT}`,
-        NUXT_OPENCODE_PASSWORD: ''
+        NUXT_OPENCODE_PASSWORD: '',
+        // tests register agent control themselves
+        NUXT_AGENT_CONTROL: 'off'
       }
     }
   ]
