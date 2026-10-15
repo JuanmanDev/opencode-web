@@ -3,6 +3,8 @@
 interface ProjectMeta {
   description?: string
   favorites: string[]
+  /** starred project: listed first on the home page */
+  starred?: boolean
 }
 
 const KEY = 'opencode-web.project-meta'
@@ -59,5 +61,15 @@ export function useProjectMeta() {
     persist()
   }
 
-  return { meta, load, of, setDescription, isFavorite, toggleFavorite }
+  function isStarred(directory: string) {
+    return Boolean(of(directory).starred)
+  }
+
+  function toggleStar(directory: string) {
+    const current = of(directory)
+    meta.value = { ...meta.value, [directory]: { ...current, starred: !current.starred || undefined } }
+    persist()
+  }
+
+  return { meta, load, of, setDescription, isFavorite, toggleFavorite, isStarred, toggleStar }
 }

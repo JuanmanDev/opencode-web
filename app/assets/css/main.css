@@ -106,18 +106,29 @@ body {
 
 /* ---- motion system ---- */
 
-/* page transitions */
-.oc-page-enter-active,
+/* page transitions: a short fade only. The project shell (sidebar, header)
+   stays mounted while its content changes, so nothing around the content
+   moves; old content leaves fast so the new one isn't kept waiting */
+.oc-page-enter-active {
+  transition: opacity 0.14s ease-out;
+}
 .oc-page-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.08s ease-in;
 }
-.oc-page-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
+.oc-page-enter-from,
 .oc-page-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+}
+
+/* cross-fade of two contents stacked in the same box (sidebar <-> rail):
+   both are absolutely positioned by their parent, so no layout shift */
+.oc-xfade-enter-active,
+.oc-xfade-leave-active {
+  transition: opacity 0.16s ease;
+}
+.oc-xfade-enter-from,
+.oc-xfade-leave-to {
+  opacity: 0;
 }
 
 /* vertical collapse (options panels, tool details, reasoning) */
@@ -222,9 +233,6 @@ body {
 .oc-tile {
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
-.oc-tile:hover {
-  transform: translateY(-1px);
-}
 .oc-tile:active {
   transform: scale(0.96);
 }
@@ -262,17 +270,17 @@ body {
   animation: oc-send-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* interactive rows/buttons: smooth hover feedback */
+/* interactive rows/buttons: smooth hover feedback (colour only: rows that
+   shift sideways under the pointer read as jitter in long lists) */
 .oc-row {
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
-}
-.oc-row:hover {
-  transform: translateX(2px);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .oc-page-enter-active,
   .oc-page-leave-active,
+  .oc-xfade-enter-active,
+  .oc-xfade-leave-active,
   .oc-collapse-enter-active,
   .oc-collapse-leave-active,
   .oc-slide-enter-active,
@@ -405,4 +413,52 @@ body {
 .oc-markdown .oc-img-gate:hover {
   color: var(--ui-text-highlighted);
   border-color: var(--ui-border-inverted);
+}
+
+/* filled variant of an outline (lucide) icon, e.g. a favourite star */
+.oc-filled path,
+.oc-filled polygon,
+.oc-filled circle {
+  fill: currentColor;
+}
+
+/* long-press label on touch screens (plugins/longpress-tip.client.ts) */
+.oc-touch-tip {
+  position: fixed;
+  z-index: 100;
+  max-width: min(18rem, calc(100vw - 1rem));
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.25rem;
+  background: var(--ui-bg-inverted);
+  color: var(--ui-bg);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  pointer-events: none;
+  animation: oc-fade-up 0.14s ease both;
+}
+@media (pointer: coarse) {
+  /* a long press shows the label above instead of iOS's link preview */
+  button,
+  a[aria-label] {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* brief highlight when a value changes from the keyboard (Tab → agent) */
+@keyframes oc-flash {
+  0% { background-color: var(--ui-bg-inverted); color: var(--ui-bg); }
+  100% { background-color: var(--ui-bg-elevated); }
+}
+.oc-flash {
+  animation: oc-flash 0.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .oc-flash { animation: none; }
+}
+
+/* MCP apps and data tables in the chat: when the column is narrower than the
+   scroller (@container), they grow into the free space on both sides, 1rem
+   from its edges; never narrower than the column */
+.oc-wide-apps .oc-breakout {
+  margin-inline: min(0px, calc(50% - 50cqw + 1rem));
 }
