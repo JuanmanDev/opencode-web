@@ -215,7 +215,9 @@ Results are cached for five minutes, so reloading a session doesn't repeat calls
 
 ### Structured data without an app
 
-Some servers return JSON meant for their own front-end components instead of an HTML or `ui://` app, e.g. `{ "__componentType": "reservation-details", "message": "…", "data": { … } }`. The chat renders such results (and JSON from tools whose name marks them as UI tools) as cards and tables straight from the text opencode kept: labelled fields, sub-sections for nested objects, tables for lists of records, status badges. Nothing is run again.
+Some servers return JSON meant for their own front-end components instead of an HTML or `ui://` app, e.g. `{ "__componentType": "order-details", "message": "…", "data": { … } }`. The chat renders such results (and JSON from tools whose name marks them as UI tools) as cards and tables straight from the text opencode kept: labelled fields, sub-sections for nested objects, tables for lists of records, status badges. Nothing is run again: the web app provides these views itself, for any server, without knowing its tools. Servers that want their own look should return an MCP App (`ui://`).
+
+Apps and data views use the available width up to a maximum you set by dragging their right edge (or with the arrow keys on the handle); dragged all the way out, or double-clicked, they go back to automatic.
 
 ### Width
 
