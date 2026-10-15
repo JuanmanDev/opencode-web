@@ -196,6 +196,28 @@ body {
   right: 0;
 }
 
+/* action rows: one line on wide screens; on phones every button takes the
+   full width. `.oc-actions` (modal footers, primary action last in the
+   markup) stacks with the primary on top; `.oc-actions-col` keeps order */
+.oc-actions,
+.oc-actions-col {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+.oc-actions { justify-content: flex-end; }
+@media (max-width: 639px) {
+  .oc-actions { flex-direction: column-reverse; align-items: stretch; }
+  .oc-actions-col { flex-direction: column; align-items: stretch; }
+  .oc-actions > *,
+  .oc-actions-col > * { width: 100%; justify-content: center; }
+  .oc-actions > .oc-spacer,
+  .oc-actions-col > .oc-spacer { display: none; }
+  .oc-actions-col > .oc-note { text-align: center; }
+}
+
 /* nav tiles in the project sidebar */
 .oc-tile {
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;

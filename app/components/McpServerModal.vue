@@ -571,10 +571,10 @@ const title = computed(() => creating.value ? 'Add MCP server' : props.name || '
                 <UFormField v-if="creating" label="Name" size="sm" class="flex-1 min-w-40">
                   <UInput v-model="form.name" placeholder="home-assistant" class="w-full font-mono" />
                 </UFormField>
-                <UFormField label="Type" size="sm">
-                  <div class="flex gap-1">
-                    <UButton size="xs" :variant="form.type === 'remote' ? 'solid' : 'soft'" :color="form.type === 'remote' ? 'primary' : 'neutral'" icon="i-lucide-globe" label="Remote URL" :disabled="jsonMode" @click="form.type = 'remote'" />
-                    <UButton size="xs" :variant="form.type === 'local' ? 'solid' : 'soft'" :color="form.type === 'local' ? 'primary' : 'neutral'" icon="i-lucide-terminal" label="Local command" :disabled="jsonMode" @click="form.type = 'local'" />
+                <UFormField label="Type" size="sm" class="w-full sm:w-auto">
+                  <div class="grid grid-cols-2 gap-1">
+                    <UButton size="xs" :variant="form.type === 'remote' ? 'solid' : 'soft'" :color="form.type === 'remote' ? 'primary' : 'neutral'" icon="i-lucide-globe" label="Remote URL" class="justify-center" :disabled="jsonMode" @click="form.type = 'remote'" />
+                    <UButton size="xs" :variant="form.type === 'local' ? 'solid' : 'soft'" :color="form.type === 'local' ? 'primary' : 'neutral'" icon="i-lucide-terminal" label="Local command" class="justify-center" :disabled="jsonMode" @click="form.type = 'local'" />
                   </div>
                 </UFormField>
                 <span class="flex-1" />
@@ -668,10 +668,10 @@ const title = computed(() => creating.value ? 'Add MCP server' : props.name || '
               </template>
 
               <USeparator />
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="grid grid-cols-[auto_1fr_1fr] items-center gap-1.5">
                 <span class="text-xs text-dimmed">Save to</span>
-                <UButton size="xs" :variant="form.scope === 'project' ? 'solid' : 'soft'" :color="form.scope === 'project' ? 'primary' : 'neutral'" icon="i-lucide-folder-git-2" :label="dirName(directory)" @click="form.scope = 'project'" />
-                <UButton size="xs" :variant="form.scope === 'global' ? 'solid' : 'soft'" :color="form.scope === 'global' ? 'primary' : 'neutral'" icon="i-lucide-globe" label="Global" @click="form.scope = 'global'" />
+                <UButton size="xs" class="justify-center" :variant="form.scope === 'project' ? 'solid' : 'soft'" :color="form.scope === 'project' ? 'primary' : 'neutral'" icon="i-lucide-folder-git-2" :label="dirName(directory)" @click="form.scope = 'project'" />
+                <UButton size="xs" class="justify-center" :variant="form.scope === 'global' ? 'solid' : 'soft'" :color="form.scope === 'global' ? 'primary' : 'neutral'" icon="i-lucide-globe" label="Global" @click="form.scope = 'global'" />
                 <span v-if="!creating && info?.definedIn && info.definedIn !== form.scope" class="text-[11px] text-warning">
                   defined in the {{ info.definedIn }} config: saving here adds an override
                 </span>
@@ -740,7 +740,7 @@ const title = computed(() => creating.value ? 'Add MCP server' : props.name || '
     </template>
 
     <template #footer>
-      <div class="flex flex-wrap items-center justify-end gap-2 w-full">
+      <div class="oc-actions">
         <UButton variant="ghost" color="neutral" label="Close" @click="open = false" />
         <UButton
           v-if="tab === 'config'"
