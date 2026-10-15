@@ -26,6 +26,54 @@ const sessions = [
     directory: '/projects/space-invaders',
     time: { created: now - 86400000, updated: now - 43200000 },
     version: 'mock'
+  },
+  {
+    id: 'ses_mock3',
+    title: 'Audit the docs with a subagent',
+    directory: '/projects/space-invaders',
+    time: { created: now - 3600000, updated: now - 1800000 },
+    version: 'mock'
+  },
+  {
+    id: 'ses_child1',
+    parentID: 'ses_mock3',
+    agent: 'general',
+    title: 'Check the README (@general subagent)',
+    directory: '/projects/space-invaders',
+    time: { created: now - 3500000, updated: now - 3400000 },
+    version: 'mock'
+  }
+]
+
+// Session 3: the agent hands work to a subagent (task tool + child session)
+const subagentMessages = [
+  {
+    info: { id: 'msg_u3', sessionID: 'ses_mock3', role: 'user', time: { created: now - 3600000 } },
+    parts: [{ id: 'prt_u3', messageID: 'msg_u3', sessionID: 'ses_mock3', type: 'text', text: 'Have a subagent check that the README matches the controls, then summarize.' }]
+  },
+  {
+    info: { id: 'msg_a3', sessionID: 'ses_mock3', role: 'assistant', time: { created: now - 3590000, completed: now - 3380000 }, modelID: 'claude-sonnet-5', providerID: 'anthropic', cost: 0.018, tokens: { input: 3100, output: 410 } },
+    parts: [
+      { id: 'prt_t3', messageID: 'msg_a3', sessionID: 'ses_mock3', type: 'tool', callID: 'c6', tool: 'task',
+        state: { status: 'completed', title: 'Check the README', input: { description: 'Check the README', prompt: 'Compare README.md with src/input.ts and list every control that is missing or wrong.', subagent_type: 'general' },
+          output: 'task_id: ses_child1\n\n<task_result>\n**2 mismatches** in README.md:\n\n- `Space` fires, but the README says `Enter`\n- the pause key `P` is not documented\n</task_result>',
+          metadata: { parentSessionId: 'ses_mock3', sessionId: 'ses_child1' }, time: { start: now - 3580000, end: now - 3400000 } } },
+      { id: 'prt_x3', messageID: 'msg_a3', sessionID: 'ses_mock3', type: 'text', text: 'The subagent found **2 mismatches**: the fire key is `Space` (README says `Enter`) and pause (`P`) is undocumented. Want me to fix the README?' }
+    ]
+  }
+]
+const childMessages = [
+  {
+    info: { id: 'msg_cu1', sessionID: 'ses_child1', role: 'user', time: { created: now - 3500000 } },
+    parts: [{ id: 'prt_cu1', messageID: 'msg_cu1', sessionID: 'ses_child1', type: 'text', text: 'Compare README.md with src/input.ts and list every control that is missing or wrong.' }]
+  },
+  {
+    info: { id: 'msg_ca1', sessionID: 'ses_child1', role: 'assistant', time: { created: now - 3490000, completed: now - 3410000 }, modelID: 'claude-haiku-4-5', providerID: 'anthropic', cost: 0.002, tokens: { input: 900, output: 120 } },
+    parts: [
+      { id: 'prt_cr1', messageID: 'msg_ca1', sessionID: 'ses_child1', type: 'tool', callID: 'c7', tool: 'read', state: { status: 'completed', title: 'README.md', input: { filePath: 'README.md' }, output: '# Space Invaders\n\nEnter: fire', time: { start: now - 3480000, end: now - 3470000 }, metadata: {} } },
+      { id: 'prt_cr2', messageID: 'msg_ca1', sessionID: 'ses_child1', type: 'tool', callID: 'c8', tool: 'grep', state: { status: 'completed', title: 'key bindings in src/', input: { pattern: 'key ===' }, output: "src/input.ts:4: if (key === ' ') fire()\nsrc/input.ts:9: if (key === 'p') pause()", time: { start: now - 3460000, end: now - 3450000 }, metadata: {} } },
+      { id: 'prt_cx1', messageID: 'msg_ca1', sessionID: 'ses_child1', type: 'text', text: '**2 mismatches** in README.md:\n\n- `Space` fires, but the README says `Enter`\n- the pause key `P` is not documented' }
+    ]
   }
 ]
 
@@ -205,6 +253,17 @@ createServer((req, res) => {
       'playwright_navigate', 'playwright_click', 'playwright_screenshot'
     ])
   }
+  // ---- find (autocomplete) ----
+  // fuzzy file + folder search behind `@` mentions; folders end with "/"
+  if (p === '/find/file') {
+    const query = (url.searchParams.get('query') || '').toLowerCase()
+    const dirs = url.searchParams.get('dirs') !== 'false'
+    const paths = ['src/', 'src/game/', 'src/game/loop.ts', 'src/game/powerups.ts', 'README.md', 'package.json']
+      .filter((path) => dirs || !path.endsWith('/'))
+      .filter((path) => !query || path.toLowerCase().includes(query))
+    return json(res, paths.slice(0, Number(url.searchParams.get('limit') || 50)))
+  }
+  // ---- end find ----
   if (p === '/file') return json(res, files)
 
   if (p === '/session' && req.method === 'GET') return json(res, sessions)
@@ -216,7 +275,8 @@ createServer((req, res) => {
 
   const msgMatch = p.match(/^\/session\/([^/]+)\/message$/)
   if (msgMatch && req.method === 'GET') {
-    return json(res, msgMatch[1] === 'ses_mock1' ? messages : msgMatch[1] === 'ses_mock2' ? uiMessages : [])
+    const byId = { ses_mock1: messages, ses_mock2: uiMessages, ses_mock3: subagentMessages, ses_child1: childMessages }
+    return json(res, byId[msgMatch[1]] || [])
   }
   if (msgMatch && req.method === 'POST') {
     return json(res, { info: { role: 'assistant', time: { created: Date.now(), completed: Date.now() } }, parts: [{ type: 'text', text: 'Scheduled run done.' }] })
