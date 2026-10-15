@@ -1,3 +1,15 @@
+## [0.16.0](https://github.com/JuanmanDev/opencode-web/compare/0.15.1...0.16.0) (2026-10-15)
+
+### Features
+
+* **chat:** @ mentions for files and subagents, shell-mode hint ([a8a7042](https://github.com/JuanmanDev/opencode-web/commit/a8a7042f3a4e6bcd05682b1dfe505579963a1a40))
+* **demo:** static live demo with an in-browser scripted AI ([f1f1285](https://github.com/JuanmanDev/opencode-web/commit/f1f1285c8ea254b6f5603f5fbab25b69a06e59de))
+* **ui:** full-width actions in settings on phones ([7fde0f4](https://github.com/JuanmanDev/opencode-web/commit/7fde0f44258fd771178c91e37e5ad00b92153660))
+
+### Bug Fixes
+
+* **projects:** no lost folders when several tabs open projects at once ([eb88a89](https://github.com/JuanmanDev/opencode-web/commit/eb88a894b02988b4cb7084cc993776de0a54d90c))
+
 ## [0.15.1](https://github.com/JuanmanDev/opencode-web/compare/0.15.0...0.15.1) (2026-10-15)
 
 ### Bug Fixes
