@@ -385,3 +385,30 @@ export async function patchConfig(scope: McpScope, directory: string | undefined
   await opencodeFetch('/global/config', { method: 'PATCH', body, timeoutMs: 30000 })
   return { scope: 'global', fallback: true }
 }
+
+// ---- applying a change to the running opencode ----
+
+/**
+ * Make the running opencode match a server's config without a reload:
+ * enabled -> register it with its stored entry and connect, disabled ->
+ * disconnect. opencode reads `enabled` only when an instance starts, so a
+ * server switched on through the config API stays "disabled" until this
+ * (or a reload) happens.
+ */
+export async function applyMcpLive(name: string, directory?: string, enabled?: boolean): Promise<McpStatusInfo | undefined> {
+  const query = { directory }
+  const path = `/mcp/${encodeURIComponent(name)}`
+  const scope = await mcpDefinedIn(name, directory)
+  const stored = scope ? (await rawMcpConfig(scope, directory).catch(() => ({} as Record<string, McpServerConfig>)))[name] : undefined
+  const on = enabled ?? (stored ? stored.enabled !== false : true)
+  if (on) {
+    if (stored) {
+      await opencodeFetch('/mcp', { method: 'POST', body: { name, config: { ...stored, enabled: true } }, query, timeoutMs: 60_000 }).catch(() => {})
+    }
+    await opencodeFetch(`${path}/connect`, { method: 'POST', body: {}, query, timeoutMs: 60_000 }).catch(() => {})
+  } else {
+    await opencodeFetch(`${path}/disconnect`, { method: 'POST', body: {}, query, timeoutMs: 30_000 }).catch(() => {})
+  }
+  await forgetMcpTools()
+  return mcpStatusOf(name, directory)
+}

@@ -319,6 +319,9 @@ function toolsHint(server: McpListServer) {
           />
         </div>
 
+        <!-- page-provided notice for this server (e.g. "reload to apply") -->
+        <slot name="notice" :server="server" />
+
         <!-- tools -->
         <CollapseTransition>
           <div

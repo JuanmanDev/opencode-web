@@ -73,8 +73,62 @@ function reportBroken(name: string, action: string) {
 // the subagent-per-MCP card re-plans after servers change
 const nestCard = ref<{ load: () => void } | null>(null)
 
-const { reloading, menuItems } = useReload()
+const { reload, reloading, menuItems } = useReload()
 const reloadMenu = computed(() => menuItems(directory.value))
+
+// ---- config vs running opencode ----
+// opencode reads `enabled` when an instance starts: a server switched on or
+// off through the config can disagree with what is running. Such rows get a
+// notice with a one-click fix (connect / disconnect now, or reload).
+const LIVE = ['connected', 'running', 'ok', 'success']
+interface Drift { kind: 'load' | 'unload'; text: string }
+function driftOf(name: string): Drift | undefined {
+  const entry = entries.value.find((e) => e.name === name)
+  if (!entry?.config) return undefined
+  const configOn = entry.config.enabled !== false
+  if (configOn && ['disabled', 'unknown'].includes(entry.status)) {
+    return { kind: 'load', text: 'Switched on in the config, but the running opencode has not loaded it yet.' }
+  }
+  if (!configOn && LIVE.includes(entry.status)) {
+    return { kind: 'unload', text: 'Switched off in the config, but still connected in the running opencode.' }
+  }
+  return undefined
+}
+const driftCount = computed(() => entries.value.filter((e) => driftOf(e.name)).length)
+const applying = ref<string | null>(null)
+
+/** Connect or disconnect a server in the running opencode to match its config. */
+async function applyLive(name: string, enabled?: boolean, quiet = false) {
+  applying.value = name
+  try {
+    const result = await $fetch<{ status?: { status: string; error?: string } }>('/api/v1/mcp-apply', {
+      method: 'POST',
+      body: { name, directory: directory.value, ...(typeof enabled === 'boolean' ? { enabled } : {}) },
+      timeout: 90_000
+    })
+    if (!quiet) {
+      const status = result.status?.status || 'unknown'
+      toast.add({ title: `${name}: ${status}`, color: LIVE.includes(status) || status === 'disabled' ? 'success' : 'warning' })
+    }
+    return result.status
+  } catch (e) {
+    if (!quiet) toast.add({ title: `Could not apply ${name}`, description: errorMessage(e), color: 'error' })
+  } finally {
+    applying.value = null
+  }
+}
+
+async function applyAndRefresh(name: string) {
+  const drift = driftOf(name)
+  await applyLive(name, drift ? drift.kind === 'load' : undefined)
+  await refresh(true)
+  reportBroken(name, 'connected')
+}
+
+async function reloadAndContinue() {
+  await reload({ scope: 'project', directory: directory.value, resumeBusy: true })
+  await refresh(true)
+}
 
 function errorMessage(e: unknown) {
   const data = (e as { data?: { message?: string; data?: { message?: string } } })?.data
@@ -313,12 +367,17 @@ async function setServerMode(entry: McpEntry, mode: ServerMode) {
       })
       configPermission.value = { ...configPermission.value, [`${entry.name}_*`]: mode }
     }
+    // make the running opencode follow at once: no reload needed
+    const live = await applyLive(entry.name, mode !== 'off', true)
     await refresh()
     if (mode === 'off' || !reportBroken(entry.name, 'enabled')) {
+      const drift = driftOf(entry.name)
       toast.add({
         title: `${entry.name}: ${mode === 'off' ? 'disabled' : mode === 'ask' ? 'enabled (asks first)' : 'enabled (no ask)'}`,
-        description: 'Applies to new sessions.',
-        color: 'success'
+        description: drift
+          ? 'Saved. The running opencode still needs a reload: see the notice on the server.'
+          : `Saved and applied${live?.status ? ` (${live.status})` : ''}. Chats use it from their next message.`,
+        color: drift ? 'warning' : 'success'
       })
     }
   } catch (e) {
@@ -703,7 +762,7 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       </p>
 
       <AgentControlCard v-if="caps.mcp" @changed="refresh(true)" @details="(n) => openDetails(n, 'tools')" />
-      <McpNestCard v-if="caps.mcp" ref="nestCard" />
+      <McpNestCard v-if="caps.mcp" ref="nestCard" :directory="directory" />
 
       <!-- scope: project vs global, a full-width segmented control -->
       <div class="grid grid-cols-2 gap-0.5 p-0.5 mb-3 rounded-sm bg-muted" role="tablist" aria-label="Configuration scope">
@@ -743,6 +802,23 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
           + 'directory is missing. Open a project path that exists on the opencode host.'"
       />
 
+      <!-- config and running opencode disagree: say so once, with the fix -->
+      <CollapseTransition>
+        <div v-if="driftCount && !loading" class="mb-3">
+          <UAlert
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-rotate-ccw"
+            :title="`${driftCount} server${driftCount === 1 ? '' : 's'} not applied yet`"
+            description="The config changed but the running opencode still uses the old state. Apply each one below, or reload this project (running chats continue afterwards)."
+          >
+            <template #actions>
+              <UButton size="xs" color="warning" variant="solid" icon="i-lucide-rotate-ccw" label="Reload & continue" class="oc-tap" :loading="reloading" @click="reloadAndContinue" />
+            </template>
+          </UAlert>
+        </div>
+      </CollapseTransition>
+
       <div v-if="loading && !entries.length" class="bg-muted rounded-sm p-4 space-y-3">
         <div v-for="i in 3" :key="i" class="flex items-center gap-3">
           <USkeleton class="size-4 rounded-full" />
@@ -773,6 +849,35 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         @authenticate="startAuth"
         @details="openDetails"
       >
+        <template #notice="{ server }">
+          <div
+            v-if="driftOf(server.name)"
+            class="mx-2.5 mb-2 ml-8 flex flex-wrap items-center gap-1.5 rounded-sm bg-warning/10 px-2 py-1.5 oc-appear"
+          >
+            <UIcon name="i-lucide-info" class="size-3.5 text-warning shrink-0" />
+            <span class="text-[11px] text-muted flex-1 min-w-40">{{ driftOf(server.name)!.text }}</span>
+            <UButton
+              size="xs"
+              color="warning"
+              variant="soft"
+              :icon="driftOf(server.name)!.kind === 'load' ? 'i-lucide-plug' : 'i-lucide-unplug'"
+              :label="driftOf(server.name)!.kind === 'load' ? 'Connect now' : 'Disconnect now'"
+              class="oc-tap"
+              :loading="applying === server.name"
+              @click="applyAndRefresh(server.name)"
+            />
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-rotate-ccw"
+              label="Reload"
+              class="oc-tap"
+              :loading="reloading"
+              @click="reloadAndContinue"
+            />
+          </div>
+        </template>
         <!-- saved presets share the filter row -->
         <template #actions>
           <div v-for="g in groups" :key="g.name" class="flex items-center rounded-sm overflow-hidden">

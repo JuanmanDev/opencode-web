@@ -63,6 +63,8 @@ export async function busySessions(directory?: string) {
 
 // ---- reload ----
 
+export interface SessionRef { directory?: string; sessionID: string }
+
 export interface ReloadState {
   scope: 'project' | 'all'
   directory?: string
@@ -71,6 +73,55 @@ export interface ReloadState {
   state: 'waiting' | 'done' | 'failed' | 'gave-up'
   doneAt?: number
   message?: string
+  /** chats prompted to continue once the reload is done */
+  resume?: SessionRef[]
+  resumed?: string[]
+}
+
+const RESUME_TEXT = 'opencode was reloaded (its config was re-read: MCP servers, agents, permissions). '
+  + 'Continue where you left off; if the task is already finished, just say so briefly. '
+  + 'Do not reload opencode again unless something new requires it.'
+
+// a chat that reloads again right after being resumed is not resumed twice
+// in a row: no reload -> continue -> reload loops
+const lastResumed = new Map<string, number>()
+const RESUME_COOLDOWN_MS = 3 * 60_000
+
+/**
+ * Prompt chats to carry on after a reload, with the agent and model of
+ * their last message (a reload cuts running replies, and a chat that asked
+ * for the reload itself should pick up the thread on its own).
+ */
+export async function resumeSessions(refs: SessionRef[]) {
+  const resumed: string[] = []
+  const now = Date.now()
+  for (const [id, at] of lastResumed) if (now - at > RESUME_COOLDOWN_MS) lastResumed.delete(id)
+  await Promise.all(refs.map(async ({ directory, sessionID }) => {
+    if (lastResumed.has(sessionID)) return
+    lastResumed.set(sessionID, now)
+    const query = { directory }
+    const path = `/session/${encodeURIComponent(sessionID)}`
+    try {
+      const messages = await opencodeFetch<Array<{ info?: { role?: string; agent?: string; mode?: string; model?: { providerID?: string; modelID?: string }; providerID?: string; modelID?: string } }>>(
+        `${path}/message`, { query, timeoutMs: 20_000 }
+      ).catch(() => [])
+      const lastUser = [...messages].reverse().find((m) => m.info?.role === 'user')?.info
+      const lastReply = [...messages].reverse().find((m) => m.info?.role === 'assistant')?.info
+      const model = lastUser?.model?.providerID && lastUser.model.modelID
+        ? { providerID: lastUser.model.providerID, modelID: lastUser.model.modelID }
+        : lastReply?.providerID && lastReply.modelID ? { providerID: lastReply.providerID, modelID: lastReply.modelID } : undefined
+      const body = { agent: lastUser?.agent || lastReply?.agent || lastReply?.mode, model, parts: [{ type: 'text', text: RESUME_TEXT }] }
+      await opencodeFetch(`${path}/prompt_async`, { method: 'POST', query, body, timeoutMs: 30_000 })
+        .catch(() => {
+          // servers without prompt_async: fire the blocking route, don't await it
+          opencodeFetch(`${path}/message`, { method: 'POST', query, body, timeoutMs: 1000 * 60 * 60 }).catch(() => {})
+        })
+      resumed.push(sessionID)
+    } catch (error) {
+      console.warn(`[reload] could not resume ${sessionID}: ${error instanceof Error ? error.message : error}`)
+    }
+  }))
+  return resumed
 }
 
 let lastReload: ReloadState | undefined
@@ -119,7 +170,14 @@ async function dispose(scope: 'project' | 'all', directory?: string) {
  * and finish its own reply first. `now` still waits ~1.5 s so the caller's
  * response gets out before the instance goes away.
  */
-export function requestReload(opts: { scope: 'project' | 'all'; directory?: string; when?: 'now' | 'idle'; maxWaitMs?: number }): ReloadState {
+export function requestReload(opts: {
+  scope: 'project' | 'all'
+  directory?: string
+  when?: 'now' | 'idle'
+  maxWaitMs?: number
+  /** chats to prompt with "continue" once the reload is done */
+  resume?: SessionRef[]
+}): ReloadState {
   if (opts.scope === 'project' && !opts.directory) {
     throw createError({ statusCode: 400, message: 'directory is required to reload one project' })
   }
@@ -129,7 +187,8 @@ export function requestReload(opts: { scope: 'project' | 'all'; directory?: stri
     directory: opts.directory,
     when: opts.when === 'now' ? 'now' : 'idle',
     requestedAt: Date.now(),
-    state: 'waiting'
+    state: 'waiting',
+    ...(opts.resume?.length ? { resume: opts.resume } : {})
   }
   lastReload = state
   const deadline = Date.now() + (opts.maxWaitMs ?? 15 * 60_000)
@@ -154,6 +213,12 @@ export function requestReload(opts: { scope: 'project' | 'all'; directory?: stri
       state.state = 'done'
       state.doneAt = Date.now()
       await forgetMcpTools()
+      if (state.resume?.length) {
+        // give the fresh instance a moment to load its MCP servers first
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        state.resumed = await resumeSessions(state.resume)
+        if (state.resumed.length) state.message += `; ${state.resumed.length} chat(s) continued`
+      }
     } catch (error) {
       state.state = 'failed'
       state.message = error instanceof Error ? error.message : String(error)
@@ -233,7 +298,7 @@ export const CONTROL_MCP_NAME = 'opencode-web'
 export const CONTROL_ASK_TOOLS = [
   'reload_opencode', 'add_mcp', 'test_mcp', 'set_mcp_mode', 'set_tool_mode', 'disconnect_mcp',
   'send_prompt', 'abort_session', 'delete_schedule', 'create_schedule', 'update_schedule', 'run_schedule',
-  'configure_mcp_subagents'
+  'configure_mcp_subagents', 'save_skill', 'delete_skill', 'set_skill_permission'
 ]
 
 /** Base URL at which opencode can reach this app. */
@@ -276,4 +341,68 @@ export async function controlMcpState(event?: H3Event) {
     suggestedUrl: base ? `${base}/mcp` : null,
     tokenProtected: Boolean(useRuntimeConfig().apiToken)
   }
+}
+
+/**
+ * Register (or update / switch off) the control server in the global config
+ * and set its state-changing tools to "ask".
+ */
+export async function installControlMcp(url: string, enabled = true) {
+  const result = await saveMcpServer({
+    name: CONTROL_MCP_NAME,
+    scope: 'global',
+    config: { ...await controlMcpConfig(url), enabled }
+  })
+  await opencodeFetch('/global/config', {
+    method: 'PATCH',
+    body: { permission: Object.fromEntries(CONTROL_ASK_TOOLS.map((tool) => [`${CONTROL_MCP_NAME}_${tool}`, 'ask'])) },
+    timeoutMs: 30000
+  }).catch(() => { /* older servers without per-tool permissions */ })
+  await forgetMcpTools()
+  return result
+}
+
+// ---- on by default ----
+
+const AUTO_KEY = 'control-mcp-auto.json'
+let ensuring: Promise<void> | undefined
+let retryAt = 0
+
+/**
+ * Agent control is on by default (NUXT_AGENT_CONTROL=auto): the first time
+ * the app knows a URL at which opencode reaches it (NUXT_SELF_URL, or the
+ * address of a request), the control server is registered in the global
+ * config. Only once: switching it off on the MCP page is respected, and so
+ * is an existing entry. NUXT_AGENT_CONTROL=off never registers it.
+ */
+export function ensureControlMcp(event?: H3Event) {
+  if (String(useRuntimeConfig().agentControl || 'auto') === 'off') return
+  if (ensuring || Date.now() < retryAt) return ensuring
+  const base = selfBaseUrl(event)
+  if (!base) return
+  ensuring = (async () => {
+    const storage = useStorage('data')
+    const flag = await storage.getItem<{ done?: boolean; asks?: number }>(AUTO_KEY)
+    if (flag?.done && (flag.asks || 0) >= CONTROL_ASK_TOOLS.length) return
+    if (!(await getCapabilities()).config) throw new Error('no config API')
+    const global = await rawMcpConfig('global')
+    if (!flag?.done && !global[CONTROL_MCP_NAME]) {
+      const result = await installControlMcp(`${base}/mcp`)
+      console.info(`[control] agent control registered at ${base}/mcp: ${result.status?.status || 'saved'}`)
+    } else if (global[CONTROL_MCP_NAME]) {
+      // tools added in an update: they ask first too
+      await opencodeFetch('/global/config', {
+        method: 'PATCH',
+        body: { permission: Object.fromEntries(CONTROL_ASK_TOOLS.map((tool) => [`${CONTROL_MCP_NAME}_${tool}`, 'ask'])) },
+        timeoutMs: 30000
+      }).catch(() => {})
+    }
+    await storage.setItem(AUTO_KEY, { done: true, at: Date.now(), asks: CONTROL_ASK_TOOLS.length })
+  })()
+    .catch((error) => {
+      retryAt = Date.now() + 60_000
+      console.warn(`[control] could not register agent control yet: ${error instanceof Error ? error.message : error}`)
+    })
+    .finally(() => { ensuring = undefined })
+  return ensuring
 }
