@@ -22,6 +22,9 @@ const props = defineProps<{
 const frame = ref<HTMLIFrameElement>()
 // small until the app reports its real size: short cards stay short
 const height = ref(props.viewer ? 480 : 160)
+// "fit to screen": as tall as the window allows, for apps that don't report
+// their size or need room (maps, dashboards)
+const tall = ref(false)
 
 // External apps run with allow-same-origin (module scripts, storage). That is
 // only safe for http(s) pages on another origin: javascript:/data: URLs or a
@@ -290,6 +293,16 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
           aria-label="Open in a new tab"
         />
       </UTooltip>
+      <UTooltip v-if="!viewer && !shownElsewhere" :text="tall ? 'Back to its own height' : 'Fit to the screen height'">
+        <UButton
+          :icon="tall ? 'i-lucide-fold-vertical' : 'i-lucide-unfold-vertical'"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :aria-label="tall ? 'Back to its own height' : 'Fit to the screen height'"
+          @click="tall = !tall"
+        />
+      </UTooltip>
       <template v-if="appId && !viewer">
         <UTooltip text="Open in side panel">
           <UButton
@@ -332,7 +345,7 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
           : 'allow-scripts allow-forms'"
         class="w-full bg-white dark:bg-neutral-950 transition-opacity duration-300"
         :class="[viewer ? 'flex-1' : '', state === 'ready' ? 'opacity-100' : 'opacity-0']"
-        :style="viewer ? undefined : { height: height + 'px' }"
+        :style="viewer ? undefined : { height: tall ? 'calc(100dvh - 10rem)' : height + 'px' }"
         :title="title || 'MCP app'"
         @load="onFrameLoad"
       />
