@@ -55,6 +55,16 @@ const scroller = ref<HTMLElement>()
 const pinnedToBottom = ref(true)
 
 const chime = useChime()
+const chatWidth = useChatWidth()
+// an open chat is read: whatever it does while on screen doesn't make it unread
+const { markSeen } = useSeenSessions()
+watch(() => [sessionId.value, session.value?.time?.updated, messages.value.length, busy.value] as const, ([id]) => {
+  if (import.meta.client && id && document.visibilityState === 'visible') markSeen(id)
+})
+const onVisible = () => { if (document.visibilityState === 'visible') markSeen(sessionId.value) }
+onMounted(() => document.addEventListener('visibilitychange', onVisible))
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+const { reload } = useReload()
 const projectMeta = useProjectMeta()
 onMounted(projectMeta.load)
 
@@ -159,7 +169,12 @@ async function runMcpCommand(input: string) {
       case 'disable': {
         if (!name) return note(`Usage: \`/mcp ${sub} <name>\``)
         await api.patchConfig({ mcp: { [name]: { enabled: sub === 'enable' } } })
-        note(`**${name}** ${sub}d. Applies to new sessions.`)
+        // connect / disconnect it in the running opencode right away
+        const applied = await $fetch<{ status?: { status: string; error?: string } }>('/api/v1/mcp-apply', {
+          method: 'POST', body: { name, directory: directory.value, enabled: sub === 'enable' }, timeout: 90_000
+        }).catch(() => null)
+        note(`**${name}** ${sub}d${applied?.status ? ` — now **${applied.status.status}**${applied.status.error ? `: ${applied.status.error}` : ''}` : ''}. `
+          + `Its tools ${sub === 'enable' ? 'are available' : 'are gone'} from your next message${applied ? '' : ' (if not, run `/reload`)'}.`)
         loadMeta()
         break
       }
@@ -193,9 +208,11 @@ async function runMcpCommand(input: string) {
           '',
           '- `/mcp list` — servers and status',
           '- `/mcp add <name> <url|command…>` — register a server',
-          '- `/mcp enable|disable <name>` — toggle for this project',
+          '- `/mcp enable|disable <name>` — switch on/off for this project (applied at once)',
           '- `/mcp remove <name>` — delete from the project config',
-          '- `/mcp test <name>` — connect and list its tools'
+          '- `/mcp test <name>` — connect and list its tools',
+          '',
+          '`/reload [all] [now] [stay]` re-reads the config and continues this chat afterwards.'
         ].join('\n'))
     }
   } catch (e) {
@@ -301,6 +318,11 @@ const sessionMenu = computed(() => {
       label: fav ? 'Unfavorite' : 'Favorite',
       icon: 'i-lucide-star',
       onSelect: () => projectMeta.toggleFavorite(directory.value, sessionId.value)
+    },
+    {
+      label: chatWidth.wideApps.value ? 'Apps: keep in the column' : 'Apps: use all the width',
+      icon: 'i-lucide-app-window',
+      onSelect: () => { chatWidth.wideApps.value = !chatWidth.wideApps.value }
     }
   ]]
 })
@@ -707,11 +729,13 @@ const BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
   { name: 'undo', description: 'Revert the last change' },
   { name: 'redo', description: 'Restore the reverted change' },
   { name: 'mcp', description: 'Manage MCP servers (list, add, test…)' },
+  { name: 'reload', description: 'Reload opencode config (project, all, now), then continue this chat' },
+  { name: 'skills', description: 'List the skills the agent can load (manage them on the Skills page)' },
   { name: 'test', description: 'UI demos, e.g. /test question' }
 ]
 
 // built-ins the connected server can't run are not offered
-const UNSUPPORTED_BUILTIN: Record<string, keyof Capabilities> = { share: 'share', mcp: 'mcp' }
+const UNSUPPORTED_BUILTIN: Record<string, keyof Capabilities> = { share: 'share', mcp: 'mcp', reload: 'config' }
 const allCommands = computed(() => [
   ...BUILTIN_COMMANDS.filter((c) => !UNSUPPORTED_BUILTIN[c.name] || caps.value[UNSUPPORTED_BUILTIN[c.name]!]),
   ...commands.value.map((c) => ({
@@ -755,6 +779,36 @@ async function runSlashCommand(text: string) {
         note('Restored the reverted change.')
         loadAll()
         return
+      case 'skills': {
+        const res = await $fetch<{ skills: Array<{ name: string; description?: string; source: string; permission: string }> }>(
+          '/api/v1/skills', { query: { directory: directory.value }, timeout: 60_000 })
+        const rows = res.skills.map((s) => `| \`${s.name}\` | ${s.source} | ${s.permission === 'allow' ? 'auto' : s.permission === 'deny' ? 'off' : 'ask'} | ${(s.description || '').replace(/\|/g, '/').slice(0, 140)} |`)
+        note([
+          `**Skills** (${res.skills.length}) — [manage them](/p/${route.params.dir}/skills)`,
+          '',
+          '| skill | source | mode | when it is used |',
+          '| --- | --- | --- | --- |',
+          ...(rows.length ? rows : ['| _none_ | | | |']),
+          '',
+          'Ask for one by name ("use the release-notes skill…") or let the agent pick it from its description.'
+        ].join('\n'))
+        return
+      }
+      case 'reload': {
+        // /reload [all] [now] [stay]: re-read opencode's config (new MCP
+        // servers, agents…) and, unless "stay", continue this chat afterwards
+        const words = args.toLowerCase().split(/\s+/)
+        const scope = words.includes('all') ? 'all' : 'project'
+        const now = words.includes('now')
+        const resume = !words.includes('stay')
+        note(`Reloading ${scope === 'all' ? 'every project' : 'this project'}${now ? ' now' : ' once its chats are idle'}${resume ? ' — this chat continues afterwards' : ''}…`)
+        const state = await reload({ scope, directory: directory.value, when: now ? 'now' : 'idle', resume: resume ? [sessionId.value] : undefined })
+        if (state?.state === 'done') {
+          note(resume ? '✅ Reloaded. Continuing the chat…' : '✅ Reloaded. New messages use the new config.')
+          loadMeta()
+        }
+        return
+      }
       default: {
         if (commands.value.some((c) => c.name === name)) {
           busy.value = true
@@ -898,15 +952,67 @@ async function respondPermission(perm: PermissionRequest, response: 'once' | 'al
   }
 }
 
+// ---- drop files anywhere on the chat to attach them ----
+const promptBox = ref<{ addFiles: (files: Iterable<File>) => void } | null>(null)
+const dragDepth = ref(0)
+const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes('Files')
+function onDragEnter(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth.value++
+}
+function onDragOver(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+function onDragLeave(e: DragEvent) {
+  if (!hasFiles(e)) return
+  dragDepth.value = Math.max(0, dragDepth.value - 1)
+}
+function onDrop(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth.value = 0
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (!files.length) return
+  if (!promptBox.value) {
+    toast.add({ title: 'Answer the question first', description: 'Files can be attached once the chat input is back.', color: 'warning' })
+    return
+  }
+  promptBox.value.addFiles(files)
+}
+
 useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 </script>
 
 <template>
   <div
     class="flex-1 flex min-h-0 transition-[margin] duration-300"
-    :style="effectiveView === 'side' && !isSmallScreen ? { marginRight: 'min(42vw, 42rem)' } : {}"
+    :class="chatWidth.wideApps.value ? 'oc-wide-apps' : ''"
+    :style="{
+      '--oc-chat-max': chatWidth.maxWidth.value,
+      ...(effectiveView === 'side' && !isSmallScreen ? { marginRight: 'min(42vw, 42rem)' } : {})
+    }"
   >
-  <div class="flex-1 flex flex-col min-h-0 min-w-0">
+  <div
+    class="relative flex-1 flex flex-col min-h-0 min-w-0"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
+    <!-- drop target overlay while files are dragged over the chat -->
+    <Transition name="oc-fade">
+      <div
+        v-if="dragDepth > 0"
+        class="absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-(--ui-border-inverted)/50 bg-default/85 backdrop-blur-sm pointer-events-none"
+      >
+        <UIcon name="i-lucide-image-up" class="size-10 text-highlighted" />
+        <p class="text-sm text-highlighted">Drop to attach</p>
+        <p class="text-xs text-dimmed">Images, PDFs and text files up to 10 MB</p>
+      </div>
+    </Transition>
     <!-- session header: title + actions; phones get a compact row with the
          actions in an overflow menu (sound toggle is in the mobile app bar) -->
     <div class="flex items-center gap-2 h-10 md:h-12 pl-3 pr-1 md:px-4 bg-muted/50 shrink-0">
@@ -971,14 +1077,28 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
         <UTooltip :text="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite' : 'Favorite'">
           <UButton
             icon="i-lucide-star"
-            :color="projectMeta.isFavorite(directory, sessionId) ? 'primary' : 'neutral'"
+            color="neutral"
             variant="ghost"
             size="xs"
             class="oc-tap"
+            :class="projectMeta.isFavorite(directory, sessionId) ? 'text-amber-400 hover:text-amber-300' : ''"
+            :ui="{ leadingIcon: projectMeta.isFavorite(directory, sessionId) ? 'oc-filled' : '' }"
             :aria-label="projectMeta.isFavorite(directory, sessionId) ? 'Unfavorite conversation' : 'Favorite conversation'"
             @click="projectMeta.toggleFavorite(directory, sessionId)"
           />
         </UTooltip>
+        <UDropdownMenu :items="chatWidth.menu.value" :content="{ align: 'end' }">
+          <UTooltip text="Chat width">
+            <UButton
+              icon="i-lucide-move-horizontal"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="oc-tap"
+              aria-label="Chat width"
+            />
+          </UTooltip>
+        </UDropdownMenu>
         <UTooltip :text="chime.enabled.value ? 'Disable reply sound' : 'Enable reply sound'">
           <UButton
             :icon="chime.enabled.value ? 'i-lucide-bell-ring' : 'i-lucide-bell-off'"
@@ -1019,7 +1139,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
     <!-- live todo list from the agent -->
     <CollapseTransition>
       <div v-if="todos.length" class="bg-muted/40 px-3 sm:px-4 py-1.5 shrink-0">
-        <div class="max-w-4xl mx-auto">
+        <div class="max-w-(--oc-chat-max) mx-auto">
           <button
             class="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-dimmed cursor-pointer"
             @click="todosOpen = !todosOpen"
@@ -1052,12 +1172,14 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
       </div>
     </CollapseTransition>
 
+    <!-- @container: apps and tables measure the scroller to break out of a
+         narrower column (.oc-breakout) -->
     <div
       ref="scroller"
-      class="flex-1 overflow-y-auto min-h-0 py-2"
+      class="@container flex-1 overflow-y-auto min-h-0 py-2"
       @scroll.passive="onScroll"
     >
-      <div class="max-w-4xl mx-auto">
+      <div class="max-w-(--oc-chat-max) mx-auto">
         <div v-if="loading" class="px-3 sm:px-4 py-4 space-y-4">
           <div class="space-y-2">
             <USkeleton class="h-9 w-2/3" />
@@ -1146,7 +1268,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 
     <!-- a pending agent question replaces the chat input (TUI-style focus) -->
     <div v-if="questions[0]" class="bg-muted px-3 sm:px-4 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <div class="max-w-4xl mx-auto">
+      <div class="max-w-(--oc-chat-max) mx-auto">
         <ChatQuestionPrompt
           :key="questions[0].id"
           :request="questions[0]"
@@ -1162,6 +1284,7 @@ useHead(() => ({ title: `${session.value?.title || 'Chat'} · opencode web` }))
 
     <ChatPromptBox
       v-else
+      ref="promptBox"
       :providers="providers"
       :default-model="serverDefaultModel"
       :agents="agents"
