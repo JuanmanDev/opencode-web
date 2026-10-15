@@ -665,7 +665,8 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         title="No MCP on this server"
         description="This opencode server speaks the v2 protocol, which has no MCP support yet: its agent only uses the built-in tools. Connect a 1.x server (or a later 2.x with MCP) to manage MCP servers here."
       />
-      <div class="flex items-center gap-2 mb-1">
+      <!-- phones: title row + a full-width action row; desktop: one row -->
+      <div class="flex flex-wrap items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">MCP servers</h1>
         <span class="flex-1" />
         <UTooltip text="Rescan servers and tools">
@@ -679,20 +680,21 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
             @click="refresh(true)"
           />
         </UTooltip>
-        <UDropdownMenu v-if="caps.config" :items="reloadMenu" :content="{ align: 'end' }">
-          <UButton
-            size="xs"
-            variant="soft"
-            color="neutral"
-            icon="i-lucide-rotate-ccw"
-            label="Reload opencode"
-            class="oc-tap"
-            :loading="reloading"
-            :ui="{ label: 'hidden sm:inline' }"
-            aria-label="Reload opencode config"
-          />
-        </UDropdownMenu>
-        <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" class="oc-tap" @click="addOpen = true" />
+        <div class="basis-full sm:basis-auto grid gap-1.5 sm:flex" :class="caps.config ? 'grid-cols-2' : 'grid-cols-1'">
+          <UDropdownMenu v-if="caps.config" :items="reloadMenu" :content="{ align: 'end' }">
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-rotate-ccw"
+              label="Reload opencode"
+              class="oc-tap w-full sm:w-auto justify-center"
+              :loading="reloading"
+              aria-label="Reload opencode config"
+            />
+          </UDropdownMenu>
+          <UButton size="xs" color="primary" icon="i-lucide-plus" label="Add server" class="oc-tap w-full sm:w-auto justify-center" @click="addOpen = true" />
+        </div>
       </div>
       <p class="text-sm text-muted mb-4">
         {{ scope === 'global'
@@ -703,24 +705,28 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
       <AgentControlCard v-if="caps.mcp" @changed="refresh(true)" @details="(n) => openDetails(n, 'tools')" />
       <McpNestCard v-if="caps.mcp" ref="nestCard" />
 
-      <!-- scope: project vs global -->
-      <div class="flex items-center gap-1 mb-3">
+      <!-- scope: project vs global, a full-width segmented control -->
+      <div class="grid grid-cols-2 gap-0.5 p-0.5 mb-3 rounded-sm bg-muted" role="tablist" aria-label="Configuration scope">
         <UButton
           size="xs"
-          :variant="scope === 'project' ? 'solid' : 'soft'"
+          :variant="scope === 'project' ? 'solid' : 'ghost'"
           :color="scope === 'project' ? 'primary' : 'neutral'"
           icon="i-lucide-folder-git-2"
           :label="dirName(directory)"
-          class="oc-tap"
+          class="oc-tap w-full justify-center transition-colors"
+          role="tab"
+          :aria-selected="scope === 'project'"
           @click="scope = 'project'"
         />
         <UButton
           size="xs"
-          :variant="scope === 'global' ? 'solid' : 'soft'"
+          :variant="scope === 'global' ? 'solid' : 'ghost'"
           :color="scope === 'global' ? 'primary' : 'neutral'"
           icon="i-lucide-globe"
           label="Global"
-          class="oc-tap"
+          class="oc-tap w-full justify-center transition-colors"
+          role="tab"
+          :aria-selected="scope === 'global'"
           @click="scope = 'global'"
         />
       </div>
@@ -935,9 +941,9 @@ useHead(() => ({ title: `MCP · ${dirName(directory.value)} · opencode web` }))
         </div>
       </template>
       <template #footer>
-        <div class="flex flex-wrap justify-end gap-2 w-full">
+        <div class="oc-actions">
           <UButton variant="ghost" color="neutral" label="Close" @click="addOpen = false" />
-          <span class="flex-1" />
+          <span class="flex-1 oc-spacer" />
           <UButton
             variant="soft"
             color="neutral"

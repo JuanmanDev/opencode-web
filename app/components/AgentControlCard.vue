@@ -94,7 +94,7 @@ const TOOLS = [
         >
           <UInput v-model="url" placeholder="http://web:3000/mcp" class="w-full font-mono" />
         </UFormField>
-        <div class="flex flex-wrap items-center gap-1.5">
+        <div class="oc-actions-col sm:gap-1.5">
           <UButton
             size="xs"
             color="primary"
@@ -123,7 +123,7 @@ const TOOLS = [
             label="Tools"
             @click="emit('details', state.name)"
           />
-          <span class="text-[10px] text-dimmed">Saved in the global config; new chats get the tools.</span>
+          <span class="oc-note text-[10px] text-dimmed">Saved in the global config; new chats get the tools.</span>
         </div>
       </div>
     </CollapseTransition>

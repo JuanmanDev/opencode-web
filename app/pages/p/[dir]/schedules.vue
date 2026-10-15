@@ -308,10 +308,10 @@ useHead(() => ({ title: `Schedules · ${dirName(directory.value)} · opencode we
 <template>
   <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
     <div class="max-w-2xl mx-auto px-4 py-6">
-      <div class="flex items-center gap-2 mb-1">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
         <h1 class="text-lg font-semibold">Scheduled prompts</h1>
         <span class="flex-1" />
-        <UButton size="xs" color="primary" icon="i-lucide-plus" label="New schedule" class="oc-tap" @click="openEditor()" />
+        <UButton size="xs" color="primary" icon="i-lucide-plus" label="New schedule" class="oc-tap order-last sm:order-none w-full sm:w-auto justify-center" @click="openEditor()" />
       </div>
       <p class="text-sm text-muted mb-4">
         Prompts the web app sends to {{ dirName(directory) }} on a timetable.
@@ -418,8 +418,8 @@ useHead(() => ({ title: `Schedules · ${dirName(directory.value)} · opencode we
 
           <div class="space-y-2">
             <div class="flex flex-wrap items-end gap-2">
-              <UFormField label="When" size="sm">
-                <USelect v-model="form.cadence" :items="CADENCES" value-key="value" class="w-48" />
+              <UFormField label="When" size="sm" class="w-full sm:w-auto">
+                <USelect v-model="form.cadence" :items="CADENCES" value-key="value" class="w-full sm:w-48" />
               </UFormField>
               <UFormField v-if="form.cadence === 'minutes'" label="Every" size="sm">
                 <UInput v-model.number="form.every" type="number" min="1" max="59" class="w-20" />
@@ -472,16 +472,16 @@ useHead(() => ({ title: `Schedules · ${dirName(directory.value)} · opencode we
           </div>
 
           <UFormField label="Session" size="sm">
-            <div class="flex flex-wrap gap-1">
-              <UButton size="xs" :variant="form.session === 'new' ? 'solid' : 'soft'" :color="form.session === 'new' ? 'primary' : 'neutral'" icon="i-lucide-plus" label="New session each run" @click="form.session = 'new'" />
-              <UButton size="xs" :variant="form.session === 'reuse' ? 'solid' : 'soft'" :color="form.session === 'reuse' ? 'primary' : 'neutral'" icon="i-lucide-repeat" label="Always the same session" @click="form.session = 'reuse'" />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              <UButton size="xs" class="justify-center" :variant="form.session === 'new' ? 'solid' : 'soft'" :color="form.session === 'new' ? 'primary' : 'neutral'" icon="i-lucide-plus" label="New session each run" @click="form.session = 'new'" />
+              <UButton size="xs" class="justify-center" :variant="form.session === 'reuse' ? 'solid' : 'soft'" :color="form.session === 'reuse' ? 'primary' : 'neutral'" icon="i-lucide-repeat" label="Always the same session" @click="form.session = 'reuse'" />
             </div>
           </UFormField>
           <USwitch v-model="form.enabled" label="Enabled" size="sm" />
         </div>
       </template>
       <template #footer>
-        <div class="flex justify-end gap-2 w-full">
+        <div class="oc-actions">
           <UButton variant="ghost" color="neutral" label="Cancel" @click="editorOpen = false" />
           <UButton
             color="primary"

@@ -210,10 +210,10 @@ function fmt(ts?: number) {
           />
         </UFormField>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="oc-actions-col">
           <UButton size="xs" color="primary" icon="i-lucide-save" :label="draft.enabled ? 'Save & apply' : 'Save'" :loading="saving" :disabled="!dirty" @click="save()" />
           <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-scroll-text" :label="showPrompt ? 'Hide orchestrator prompt' : 'Orchestrator prompt'" @click="showPrompt = !showPrompt" />
-          <span class="text-[10px] text-dimmed">
+          <span class="oc-note text-[10px] text-dimmed">
             <template v-if="plan.settings.lastSync?.error"><span class="text-error">Last sync failed: {{ plan.settings.lastSync.error }}</span></template>
             <template v-else-if="plan.settings.lastSync">Written {{ fmt(plan.settings.lastSync.at) }} · stays in sync when MCP servers change</template>
             <template v-else>Uses the servers of the global config; saved there too</template>
