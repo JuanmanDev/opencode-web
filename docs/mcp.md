@@ -117,16 +117,19 @@ Home Assistant's *MCP Server* integration answers unauthenticated requests with 
 
 ## Agent control
 
-The web app is itself an MCP server (`POST /mcp`, see the README for the tool list). The **Agent control** card on the MCP page registers it in opencode's **global** config, so the agent in every new chat can manage opencode:
+The web app is itself an MCP server (`POST /mcp`, see the README for the tool list). It is registered in opencode's **global** config **by default** (once, as `opencode-web`), so it shows up in every chat's MCP list and the agent can manage opencode, and the chat itself:
 
-- list, **test**, add, reconnect and switch MCP servers (with the same plain-language fixes as the UI)
-- **reload opencode's config** for one project or all of them, the API's equivalent of restarting `opencode serve`
+- list, **test**, add, reconnect and switch MCP servers (with the same plain-language fixes as the UI); switching a server on or off is **applied to the running opencode at once**, no reload needed
+- **reload opencode's config** for one project or all of them, the API's equivalent of restarting `opencode serve`. The chats that were busy when the reload was asked for, **the asking chat included**, get a "continue" message afterwards, so the work carries on by itself with the new config (`resume: "none"` skips that; a chat is not resumed twice within three minutes)
 - see which sessions are busy, **read other chats**, prompt them (`wait: false` to dispatch work), abort them
+- **sub-chats**: `run_subagent` runs any agent (a subagent like `@mcp-home-assistant` or `explore`, or a primary one) on a task in a child session listed under the calling chat, so agents without the `task` tool can delegate too; `current_session` tells an agent which chat it runs in
 - read the **task lists** (todos) of busy and recent sessions
 - create, run and change **scheduled prompts**
 - version, models, agents, commands, skills, git/LSP status and the (redacted) config
 
-The URL must be reachable **from the opencode host**: `http://web:3000/mcp` in the bundled compose file (`NUXT_SELF_URL`), editable in the card. When `NUXT_API_TOKEN` is set, the token is added as a header automatically.
+The URL must be reachable **from the opencode host**: `http://web:3000/mcp` in the bundled compose file (`NUXT_SELF_URL`), editable in the card. When `NUXT_API_TOKEN` is set, the token is added as a header automatically. The automatic registration happens once, at startup (with `NUXT_SELF_URL`) or on the first page load; switching it off in the card is remembered, and `NUXT_AGENT_CONTROL=off` never registers it.
+
+In the chat, the same things are a slash command away: `/mcp enable|disable <server>` (applied at once) and `/reload [all] [now] [stay]` (reloads, then continues the chat unless `stay`).
 
 Safety:
 
@@ -142,11 +145,31 @@ With many MCP servers, every tool description sits in the agent's context on eve
 
 - every server of the **global** config gets a specialist subagent `@mcp-<server>` that only has that server's tools (`tools: { "*": false, "<server>_*": true }`)
 - a primary agent `@orchestrator` gets **none** of those tools; its prompt lists every specialist with a summary of what to send it, and it delegates through the subagent (`task`) tool
-- the summary of each specialist is generated from its tools; edit it in the card to steer the orchestrator (it is also the subagent's description opencode shows to the model). Servers can be left out, and the orchestrator can get extra instructions
+- the summary of each specialist is generated from its tools; edit it in the card to steer the orchestrator (it is also the subagent's description opencode shows to the model), or let **a model of your choice write it** (*Write with AI* per server, *Write all summaries*). Servers can be left out, and the orchestrator can get extra instructions
+- **specialists can call each other** (on by default): each one gets the `task` tool and the list of the other specialists, so a job that spans two servers is handed on as a sub-chat instead of failing
 
 Pick `@orchestrator` in the chat's agent selector to use it. The agents are written to the global opencode config and opencode reloads once no session is busy. The nest stays in sync on its own: adding, removing or switching off a server (or a change in its tools) regenerates it within a few minutes. Turning it off disables the agents (`disable: true`; the config API cannot delete keys). On opencode 2.x, nested servers get `codemode: false` so their tools are offered directly instead of through the `execute` code tool.
 
 The agent can manage it too: `mcp_subagents` and `configure_mcp_subagents` in agent control.
+
+## Agents
+
+The **Agents** page (`/p/<project>/agents`) lists every primary agent and subagent, with where it is defined (project config, global config, built-in), its model, how many MCP servers it may use and whether it can delegate (`task`). The editor sets the description, mode, model, temperature and prompt (the ✨ buttons draft them with a model of your choice), the built-in tools, and **per-agent MCP access**: each server is *inherit*, *allow* (`"<server>_*": true` in the agent's `tools`) or *block* (`false`). Only changed fields are written, to the project or global config; built-in agents keep their defaults otherwise.
+
+The config API merges and cannot delete keys: "deleting" an agent writes `disable: true` (it can be enabled again), and a rule set back to *inherit* is saved as `true`. Agents change after opencode reloads its config; the page keeps a reload reminder until then. The `orchestrator` and `mcp-*` agents of Subagent per MCP are shown read-only: change them on the MCP page.
+
+## Skills
+
+The **Skills** page (`/p/<project>/skills`) shows every skill opencode can load in the project: built-in, global (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`), project (`.opencode/skills`, `.claude/skills`, `.agents/skills`), downloaded from skill URLs, and the web app's own **skill library**. For each one:
+
+- **Overview**: the description (always in the agent's context: it decides *when* the skill is used), the other frontmatter fields, and the instructions rendered, with their size in words and tokens
+- **Checks**: opencode's rules (frontmatter, lowercase name matching its folder, a description, or the skill is never shown) plus advice that makes skills trigger well (say when to use it, third person, real instructions, headings, not too long)
+- **auto / ask / off**: `permission.skill` in the project or global config
+- **Improve with AI**: a model of your choice rewrites it (optionally following your brief); the proposal is shown first
+
+**The library.** opencode and the web app usually run in different containers, so skills written here are not put into opencode's folders: the app keeps them in its data volume and serves them as an HTTP skill catalog (`<NUXT_SELF_URL>/skills/r<revision>/index.json`, files at `…/<name>/<file>`), registered in the global config (`skills.urls` on 1.x, the `skills` array on 2.x). Every change bumps the revision in the URL and the skill's `version`, so opencode downloads the new copy on the next reload. Library skills are read last and win over a same-name skill from elsewhere: **Edit a copy** changes any skill, even a built-in one, without touching its file. With `NUXT_API_TOKEN` set, the catalog path carries a secret derived from the token instead (opencode sends no credentials).
+
+New skills start from a template or are drafted by a model from a short brief. The chat's `/skills` lists them. Through the API (`/api/v1/skills`, `/api/v1/skills/library`, `/api/v1/skills/ai`, `/api/v1/skills/check`) and agent control (`list_skills`, `get_skill`, `save_skill`, `delete_skill`, `set_skill_permission`, `improve_skill`), the agent can do the same: read a skill, improve it and save it, then `reload_opencode`. Which agents may load skills at all is the `skill` tool on the Agents page.
 
 ## Scheduled prompts
 
@@ -188,7 +211,15 @@ opencode keeps only the text content of an MCP tool result: embedded `ui://` res
 2. **MCP Apps tools** that are not read-only only get their template read (`resources/read`). Nothing is executed; the app receives the original text output.
 3. **Anything else that looks like a UI tool** shows a **Render UI (runs the tool again)** button instead of re-running it silently.
 
-Results are cached for five minutes, so reloading a session doesn't repeat calls. If you write MCP servers with UIs, mark pure tools with `readOnlyHint` so they render without a click.
+Results are cached for five minutes, so reloading a session doesn't repeat calls. If you write MCP servers with UIs, mark pure tools with `readOnlyHint` so they render without a click. When a re-run brings back no app at all, the tool says so instead of doing nothing.
+
+### Structured data without an app
+
+Some servers return JSON meant for their own front-end components instead of an HTML or `ui://` app, e.g. `{ "__componentType": "reservation-details", "message": "…", "data": { … } }`. The chat renders such results (and JSON from tools whose name marks them as UI tools) as cards and tables straight from the text opencode kept: labelled fields, sub-sections for nested objects, tables for lists of records, status badges. Nothing is run again.
+
+### Width
+
+The chat header's width menu sets the conversation column to *comfortable*, *wide* or *full width* (remembered in a cookie). With *Apps & tables use all the width* (on by default) MCP apps and data views grow beyond a narrower column into the free space; each app also has *Fit to the screen height*.
 
 ### Security of rendered apps
 

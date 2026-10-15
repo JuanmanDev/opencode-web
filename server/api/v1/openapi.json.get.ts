@@ -145,13 +145,84 @@ export default defineEventHandler(() => ({
                 properties: {
                   scope: { type: 'string', enum: ['project', 'all'] },
                   directory: { type: 'string' },
-                  when: { type: 'string', enum: ['idle', 'now'] }
+                  when: { type: 'string', enum: ['idle', 'now'] },
+                  resume: { type: 'array', items: { type: 'string' }, description: 'session ids (in directory) prompted to continue after the reload' },
+                  resumeBusy: { type: 'boolean', description: 'also continue every chat busy when the reload starts' }
                 }
               }
             }
           }
         },
         responses: { 200: { description: 'ReloadState' }, 501: { description: 'v2 servers cannot reload' } }
+      }
+    },
+    '/api/v1/usage': {
+      get: {
+        summary: 'Usage per assistant reply over a time window (real cost, tokens) plus the models\' list prices',
+        parameters: [
+          { $ref: '#/components/parameters/directory' },
+          { name: 'days', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 365, default: 30 } }
+        ],
+        responses: { 200: { description: '{ generatedAt, days, rows: [{ sessionID, parentID?, title, time, providerID, modelID, agent, cost, tokens }], prices }' } }
+      }
+    },
+    '/api/v1/mcp-apply': {
+      post: {
+        summary: 'Connect or disconnect an MCP server in the running opencode to match its config (no reload)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, directory: { type: 'string' }, enabled: { type: 'boolean' } } } } }
+        },
+        responses: { 200: { description: '{ name, status, hint }' } }
+      }
+    },
+    '/api/v1/skills': {
+      get: {
+        summary: 'Skills opencode can load (built-in, global, project, remote, library) with content, permission and quality checks, plus the library catalog state',
+        parameters: [{ $ref: '#/components/parameters/directory' }],
+        responses: { 200: { description: '{ skills, available, permissions, catalog }' } }
+      }
+    },
+    '/api/v1/skills/library': {
+      put: {
+        summary: 'Create or update a skill in the web app\'s library (served to opencode as a skill catalog)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', required: ['name', 'content'], properties: { name: { type: 'string' }, content: { type: 'string', description: 'whole SKILL.md' }, files: { type: 'object', additionalProperties: { type: 'string' } } } } } }
+        },
+        responses: { 200: { description: '{ skill, catalog }' }, 400: { description: 'invalid name or SKILL.md' } }
+      },
+      delete: {
+        summary: 'Delete a library skill',
+        parameters: [{ name: 'name', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: '{ deleted, catalog }' } }
+      }
+    },
+    '/api/v1/skills/ai': {
+      post: {
+        summary: 'Draft (mode create, from a brief) or improve (mode improve, from content) a SKILL.md with a model; nothing is saved',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', properties: { mode: { type: 'string', enum: ['create', 'improve'] }, name: { type: 'string' }, content: { type: 'string' }, brief: { type: 'string' }, model: { type: 'string' }, directory: { type: 'string' } } } } }
+        },
+        responses: { 200: { description: '{ content, checks }' } }
+      }
+    },
+    '/api/v1/skills/check': {
+      post: {
+        summary: 'Quality checks for a SKILL.md text',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { content: { type: 'string' }, name: { type: 'string' } } } } } },
+        responses: { 200: { description: '{ checks, parsed }' } }
+      }
+    },
+    '/api/v1/ai-text': {
+      post: {
+        summary: 'One-shot text from one of opencode\'s models (no tools, throwaway session)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', required: ['prompt'], properties: { prompt: { type: 'string' }, system: { type: 'string' }, model: { type: 'string', description: '"provider/model"' }, directory: { type: 'string' } } } } }
+        },
+        responses: { 200: { description: '{ text }' }, 502: { description: 'the model failed' } }
       }
     },
     '/api/v1/mcp-server': {
