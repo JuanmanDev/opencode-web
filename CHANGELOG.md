@@ -1,3 +1,10 @@
+## [0.15.1](https://github.com/JuanmanDev/opencode-web/compare/0.15.0...0.15.1) (2026-10-15)
+
+### Bug Fixes
+
+* **mcp:** project-scope changes that opencode ignored now apply ([390d7d3](https://github.com/JuanmanDev/opencode-web/commit/390d7d30f2c076274135da63dcdb2e5708474923))
+* **projects:** the same folders in every browser ([7ce17b4](https://github.com/JuanmanDev/opencode-web/commit/7ce17b405dc0c4fba10909c781c3672922b79057))
+
 ## [0.15.0](https://github.com/JuanmanDev/opencode-web/compare/0.14.0...0.15.0) (2026-10-14)
 
 ### Features
