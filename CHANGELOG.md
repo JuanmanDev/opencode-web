@@ -1,3 +1,9 @@
+## [0.17.1](https://github.com/JuanmanDev/opencode-web/compare/0.17.0...0.17.1) (2026-10-15)
+
+### Bug Fixes
+
+* **chat:** solid data cards, adjustable maximum width for apps and data views ([ffbf872](https://github.com/JuanmanDev/opencode-web/commit/ffbf872a469f3266e766f90306fd19d7c9078e43))
+
 ## [0.17.0](https://github.com/JuanmanDev/opencode-web/compare/0.16.1...0.17.0) (2026-10-15)
 
 ### Features
