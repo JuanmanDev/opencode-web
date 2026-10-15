@@ -14,7 +14,9 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "mock": "node scripts/mock-opencode.mjs"
+    "mock": "node scripts/mock-opencode.mjs",
+    "build:demo": "node demo/build.mjs",
+    "test:demo": "playwright test -c playwright.demo.config.ts"
   },
   "dependencies": {
     "@nuxt/ui": "^4.11.3",
