@@ -27,22 +27,30 @@ export async function directoryStore(): Promise<DirectoryStore> {
   return { recents: stored?.recents || [], hidden: stored?.hidden || [] }
 }
 
-async function saveStore(store: DirectoryStore) {
-  await useStorage('data').setItem(KEY, store)
+// read-modify-write: tabs opening projects at once must not drop each other's update
+let queue: Promise<unknown> = Promise.resolve()
+function update(change: (store: DirectoryStore) => void) {
+  const run = queue.then(async () => {
+    const store = await directoryStore()
+    change(store)
+    await useStorage('data').setItem(KEY, store)
+  })
+  queue = run.catch(() => {})
+  return run
 }
 
-export async function rememberDirectory(directory: string) {
-  const store = await directoryStore()
-  store.recents = [{ directory, lastOpened: Date.now() }, ...store.recents.filter((r) => r.directory !== directory)].slice(0, MAX_RECENTS)
-  store.hidden = store.hidden.filter((d) => d !== directory)
-  await saveStore(store)
+export function rememberDirectory(directory: string) {
+  return update((store) => {
+    store.recents = [{ directory, lastOpened: Date.now() }, ...store.recents.filter((r) => r.directory !== directory)].slice(0, MAX_RECENTS)
+    store.hidden = store.hidden.filter((d) => d !== directory)
+  })
 }
 
-export async function forgetDirectory(directory: string) {
-  const store = await directoryStore()
-  store.recents = store.recents.filter((r) => r.directory !== directory)
-  if (!store.hidden.includes(directory)) store.hidden.push(directory)
-  await saveStore(store)
+export function forgetDirectory(directory: string) {
+  return update((store) => {
+    store.recents = store.recents.filter((r) => r.directory !== directory)
+    if (!store.hidden.includes(directory)) store.hidden.push(directory)
+  })
 }
 
 interface SessionRow { directory?: string; parentID?: string; time?: { created?: number; updated?: number } }
