@@ -30,8 +30,42 @@ const canRerun = (tool: string) => uiTools.isReadOnly(tool)
 // UI-looking tools that may have side effects are re-run on demand only
 const offerRerun = computed(() =>
   status.value === 'completed' && looksLikeUi(props.part.tool) && !canRerun(props.part.tool) &&
-  !fetchingUi.value && !fetchedResources.value.length && !htmlResources.value.length
+  !fetchingUi.value && !fetchedResources.value.length && !htmlResources.value.length &&
+  !structured.value && !noUi.value
 )
+// a re-run that brought back no app: say so instead of doing nothing
+const noUi = ref(false)
+
+/**
+ * Structured data some servers return for their own front-end components
+ * (`{ "__componentType": "...", "message": "...", "data": {...} }`), or any
+ * JSON from a UI-looking MCP tool: shown as cards/tables, no re-run needed.
+ */
+function structuredOf(text: unknown, uiTool: boolean) {
+  if (typeof text !== 'string') return null
+  const trimmed = text.trim()
+  if (!/^[[{]/.test(trimmed) || trimmed.length > 500_000) return null
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && '__componentType' in parsed) {
+      const { message, data, __componentType: kind, meta: _meta, ...rest } = parsed as Record<string, unknown>
+      return {
+        kind: String(kind),
+        title: typeof message === 'string' ? message : undefined,
+        value: data ?? rest
+      }
+    }
+    if (uiTool && parsed && typeof parsed === 'object') return { kind: 'data', title: undefined, value: parsed }
+  } catch { /* not JSON */ }
+  return null
+}
+const rerunText = ref<string | null>(null)
+const structured = computed(() => {
+  if (status.value !== 'completed' || !props.part.tool.includes('_')) return null
+  const out = (props.part.state as { output?: unknown })?.output
+  return structuredOf(rerunText.value ?? out, looksLikeUi(props.part.tool))
+})
+const showStructured = ref(true)
 
 async function fetchUi(mode: 'template' | 'call') {
   if (fetchingUi.value || fetchedResources.value.length) return
@@ -44,6 +78,7 @@ async function fetchUi(mode: 'template' | 'call') {
       structuredContent?: unknown
       app?: { resourceUri: string; html: string } | null
       called?: boolean
+      text?: string
     }>(
       '/api/v1/mcp-call',
       {
@@ -73,8 +108,14 @@ async function fetchUi(mode: 'template' | 'call') {
       }]
     } else {
       fetchedResources.value = res.resources || []
+      if (!fetchedResources.value.length) {
+        // no app at all: show the data the tool returned, or say why nothing renders
+        if (res.text && structuredOf(res.text, true)) rerunText.value = res.text
+        else noUi.value = true
+      }
     }
   } catch {
+    noUi.value = true
     // local server, auth or non-MCP tool: nothing to render
   } finally {
     fetchingUi.value = false
@@ -255,6 +296,23 @@ watch(htmlResources, () => {
     </div>
     </CollapseTransition>
 
+    <!-- structured data for a component this app doesn't have: cards & tables -->
+    <div v-if="structured" class="oc-breakout px-2.5 pb-2" :class="{ 'pt-1': !open }">
+      <div class="flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-widest text-dimmed">
+        <UIcon name="i-lucide-layout-panel-top" class="size-3" />
+        <span class="truncate">{{ structured.kind }}</span>
+        <button type="button" class="ml-auto normal-case tracking-normal hover:text-highlighted cursor-pointer" @click="showStructured = !showStructured">
+          {{ showStructured ? 'hide' : 'show' }}
+        </button>
+      </div>
+      <CollapseTransition>
+        <ChatStructuredData v-if="showStructured" :value="structured.value" :title="structured.title" />
+      </CollapseTransition>
+    </div>
+    <div v-if="noUi" class="px-2.5 pb-2 text-[11px] text-dimmed flex items-center gap-1.5" :class="{ 'pt-1': !open }">
+      <UIcon name="i-lucide-info" class="size-3.5 shrink-0" />
+      The server sent no app UI for this tool (no HTML or ui:// resource), only the text above.
+    </div>
     <div v-if="offerRerun" class="px-2.5 pb-2" :class="{ 'pt-1': !open }">
       <UButton
         size="xs"
@@ -271,7 +329,7 @@ watch(htmlResources, () => {
       <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />
       Loading app UI…
     </div>
-    <div v-if="fetchedResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open && !htmlResources.length }">
+    <div v-if="fetchedResources.length" class="oc-breakout px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open && !htmlResources.length }">
       <template v-for="(res, i) in fetchedResources" :key="`f${i}`">
         <div
           v-if="res.remoteDom && !res.script"
@@ -294,7 +352,7 @@ watch(htmlResources, () => {
         />
       </template>
     </div>
-    <div v-if="htmlResources.length" class="px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
+    <div v-if="htmlResources.length" class="oc-breakout px-2.5 pb-2 space-y-2" :class="{ 'pt-2': !open }">
       <ChatMcpHtmlFrame
         v-for="(res, i) in htmlResources"
         :key="i"
