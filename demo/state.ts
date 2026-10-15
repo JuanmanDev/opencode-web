@@ -373,13 +373,26 @@ export function loadState(): DemoState {
 
 let timer: ReturnType<typeof setTimeout> | undefined
 let frozen = false
+let pending: DemoState | undefined
+
+function flush() {
+  clearTimeout(timer)
+  if (frozen || !pending) return
+  try { localStorage.setItem(KEY, JSON.stringify(pending)) } catch { /* full or private mode */ }
+  pending = undefined
+}
+
+// a reload or a closed tab must not lose the last 250 ms of a reply
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush() })
+}
+
 export function persist(state: DemoState) {
   if (frozen) return
+  pending = state
   clearTimeout(timer)
-  timer = setTimeout(() => {
-    if (frozen) return
-    try { localStorage.setItem(KEY, JSON.stringify(state)) } catch { /* full or private mode */ }
-  }, 250)
+  timer = setTimeout(flush, 250)
 }
 
 export function resetState() {
