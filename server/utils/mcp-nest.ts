@@ -25,6 +25,8 @@ export interface NestSettings {
   summaries: Record<string, string>
   /** extra instructions for the orchestrator */
   instructions?: string
+  /** specialists may hand work on to other subagents (the task tool); default on */
+  delegate?: boolean
   lastSync?: { at: number; hash: string; agents: string[]; error?: string }
 }
 
@@ -54,7 +56,7 @@ export interface NestPlan {
 }
 
 const KEY = 'mcp-nest.json'
-const DEFAULTS: NestSettings = { enabled: false, orchestrator: 'orchestrator', exclude: [], summaries: {} }
+const DEFAULTS: NestSettings = { enabled: false, orchestrator: 'orchestrator', exclude: [], summaries: {}, delegate: true }
 
 /** Tool-id prefix opencode gives a server (same rule on 1.x and 2.x). */
 export function toolNamespace(server: string) {
@@ -113,11 +115,17 @@ function orchestratorPrompt(settings: NestSettings, servers: NestServerPlan[]) {
   ].join('\n')
 }
 
-function specialistPrompt(server: string, tools: Array<{ name: string }>) {
+function specialistPrompt(server: string, tools: Array<{ name: string }>, peers: NestServerPlan[], delegate: boolean) {
+  const others = peers.filter((p) => p.server !== server)
   return [
     `You are the specialist for the ${server} MCP server. You only have its tools${tools.length ? ` (${tools.map((t) => t.name).slice(0, 30).join(', ')})` : ''}.`,
     'Do exactly the task you receive with those tools, then report back concisely: what you did, the results the orchestrator asked for (ids, values, links), and anything that failed and why.',
-    'If the task needs something your tools cannot do, say so instead of guessing.'
+    ...(delegate && others.length
+      ? [
+          'When a part of the task needs another MCP server, hand that part to its specialist with the subagent (task) tool instead of giving up:',
+          ...others.map((p) => `- @${p.agent}: ${p.server}`)
+        ]
+      : ['If the task needs something your tools cannot do, say so instead of guessing.'])
   ].join('\n')
 }
 
@@ -158,12 +166,14 @@ export async function planNest(selfOrigin?: string, settingsOverride?: NestSetti
 
   const nested = servers.filter((s) => s.included)
   const agents: Record<string, Record<string, unknown>> = {}
+  const delegate = settings.delegate !== false
   for (const s of nested) {
     agents[s.agent] = {
       mode: 'subagent',
       description: s.summary,
-      prompt: specialistPrompt(s.server, s.tools),
-      tools: { '*': false, [`${toolNamespace(s.server)}_*`]: true },
+      prompt: specialistPrompt(s.server, s.tools, nested, delegate),
+      // `task` lets a specialist call the other specialists (sub-chats)
+      tools: { '*': false, [`${toolNamespace(s.server)}_*`]: true, ...(delegate && nested.length > 1 ? { task: true } : {}) },
       disable: false
     }
   }
@@ -241,4 +251,24 @@ export function autoSyncNest(selfOrigin?: string) {
     .catch((error) => console.warn(`[mcp-nest] ${error instanceof Error ? error.message : error}`))
     .finally(() => { checking = undefined })
   return checking
+}
+
+/** Ask a model for a specialist summary: what the server is for and what to send it. */
+export async function aiSummary(server: string, opts: { model?: string; directory?: string; selfOrigin?: string } = {}) {
+  const discovered = await getAllTools(opts.directory, 'global', opts.selfOrigin || '', false)
+    .catch(() => ({} as Awaited<ReturnType<typeof getAllTools>>))
+  const tools = (discovered[server]?.tools || []).slice(0, 80)
+  const list = tools.map((t) => `- ${t.name}${t.description ? `: ${t.description.replace(/\s+/g, ' ').slice(0, 240)}` : ''}`).join('\n')
+  const text = await aiText({
+    model: opts.model,
+    directory: opts.directory,
+    system: 'You write routing notes for an orchestrator agent that delegates work to one specialist subagent per MCP server. Reply with the note only: no preamble, no markdown headings, no quotes.',
+    prompt: [
+      `MCP server: ${server}`,
+      tools.length ? `Its tools:\n${list}` : 'Its tools are unknown.',
+      '',
+      'Write 2-3 short sentences (max 400 characters) that tell the orchestrator when to delegate to this specialist and what a good task for it looks like (which data to pass, e.g. ids, names, entity ids). Mention the key capabilities, not every tool.'
+    ].join('\n')
+  })
+  return text.replace(/^["'`]+|["'`]+$/g, '').trim().slice(0, 1200)
 }

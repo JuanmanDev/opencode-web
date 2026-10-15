@@ -22,12 +22,14 @@ interface Plan {
     exclude: string[]
     summaries: Record<string, string>
     instructions?: string
+    delegate?: boolean
     lastSync?: { at: number; agents: string[]; error?: string }
   }
   servers: ServerPlan[]
   orchestratorPrompt: string
 }
 
+const props = defineProps<{ directory?: string }>()
 const caps = useCapabilities()
 const toast = useToast()
 const plan = ref<Plan | null>(null)
@@ -40,7 +42,8 @@ const draft = reactive({
   enabled: false,
   exclude: [] as string[],
   summaries: {} as Record<string, string>,
-  instructions: ''
+  instructions: '',
+  delegate: true
 })
 const dirty = ref(false)
 
@@ -51,8 +54,52 @@ async function load() {
     draft.exclude = [...plan.value.settings.exclude]
     draft.summaries = { ...plan.value.settings.summaries }
     draft.instructions = plan.value.settings.instructions || ''
+    draft.delegate = plan.value.settings.delegate !== false
     dirty.value = false
   } catch { /* opencode down: the card stays collapsed */ }
+}
+
+// ---- summaries written by an AI model ----
+const catalog = useModelCatalog(() => props.directory)
+const AI_MODEL_KEY = 'opencode-web.ai-model'
+const aiModel = ref('')
+onMounted(() => {
+  try { aiModel.value = localStorage.getItem(AI_MODEL_KEY) || '' } catch { /* private mode */ }
+})
+watch(aiModel, (value) => {
+  try { localStorage.setItem(AI_MODEL_KEY, value) } catch { /* private mode */ }
+})
+watch(expanded, (open) => { if (open && !catalog.items.value.length) catalog.load() })
+
+const generating = ref<string[]>([])
+
+async function generate(s: ServerPlan) {
+  generating.value = [...generating.value, s.server]
+  try {
+    const { summary } = await $fetch<{ summary: string }>('/api/v1/mcp-nest-summary', {
+      method: 'POST',
+      body: { server: s.server, model: aiModel.value || undefined, directory: props.directory },
+      timeout: 5 * 60_000
+    })
+    setSummary(s, summary)
+    return true
+  } catch (e) {
+    const data = (e as { data?: { message?: string } })?.data
+    toast.add({ title: `Could not write a summary for ${s.server}`, description: data?.message || String(e), color: 'error' })
+    return false
+  } finally {
+    generating.value = generating.value.filter((n) => n !== s.server)
+  }
+}
+
+async function generateAll() {
+  // a few at a time: each one is a model call
+  const queue = [...specialists.value]
+  const worker = async () => {
+    for (let s = queue.shift(); s; s = queue.shift()) await generate(s)
+  }
+  await Promise.all([worker(), worker(), worker()])
+  toast.add({ title: 'Summaries written', description: 'Check them, then Save & apply.', color: 'success' })
 }
 onMounted(load)
 defineExpose({ load })
@@ -87,7 +134,7 @@ async function save(enabled = draft.enabled) {
     const summaries = Object.fromEntries(Object.entries(draft.summaries).filter(([, t]) => t.trim()))
     plan.value = await $fetch<Plan>('/api/v1/mcp-nest', {
       method: 'PUT',
-      body: { enabled, exclude: draft.exclude, summaries, instructions: draft.instructions },
+      body: { enabled, exclude: draft.exclude, summaries, instructions: draft.instructions, delegate: draft.delegate },
       timeout: 150_000
     })
     draft.enabled = plan.value.settings.enabled
@@ -164,6 +211,41 @@ function fmt(ts?: number) {
           </TransitionGroup>
         </div>
 
+        <!-- how the specialists work together -->
+        <div class="flex items-start gap-2.5 rounded-sm bg-elevated/40 px-2.5 py-2">
+          <USwitch
+            :model-value="draft.delegate"
+            size="sm"
+            aria-label="Specialists can call each other"
+            @update:model-value="(v) => { draft.delegate = Boolean(v); dirty = true }"
+          />
+          <div class="min-w-0">
+            <div class="text-xs font-medium">Specialists can call each other</div>
+            <p class="text-[10px] text-dimmed leading-snug">
+              Each specialist gets the subagent (task) tool and the list of the others, so a job that spans two servers is handed on as a sub-chat instead of failing.
+              The orchestrator and every other agent can also start any agent in a sub-chat through agent control's <span class="font-mono">run_subagent</span>.
+            </p>
+          </div>
+        </div>
+
+        <!-- AI-written summaries -->
+        <div class="flex flex-wrap items-end gap-1.5">
+          <UFormField label="AI model for summaries" size="xs" class="flex-1 min-w-48">
+            <ModelSelect v-model="aiModel" :items="catalog.items.value" :loading="catalog.loading.value" size="xs" empty-label="opencode default model" />
+          </UFormField>
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-sparkles"
+            label="Write all summaries"
+            class="oc-tap"
+            :loading="generating.length > 0"
+            :disabled="!specialists.length"
+            @click="generateAll"
+          />
+        </div>
+
         <!-- per server: include + what the orchestrator reads -->
         <div class="space-y-2">
           <div v-for="s in plan.servers" :key="s.server" class="rounded-sm bg-elevated/40 px-2.5 py-2">
@@ -189,9 +271,19 @@ function fmt(ts?: number) {
                   class="w-full text-xs"
                   @update:model-value="(v) => setSummary(s, String(v))"
                 />
-                <div class="flex items-center gap-2 text-[10px] text-dimmed">
-                  <span>{{ summaryOf(s).trim() ? 'Your summary' : 'Generated from its tools: write your own to steer the orchestrator' }}</span>
+                <div class="flex flex-wrap items-center gap-2 text-[10px] text-dimmed">
+                  <span class="flex-1 min-w-40">{{ summaryOf(s).trim() ? 'Your summary' : 'Generated from its tools: write your own to steer the orchestrator' }}</span>
                   <button v-if="summaryOf(s).trim()" type="button" class="underline hover:text-highlighted" @click="resetSummary(s)">use generated</button>
+                  <UButton
+                    size="xs"
+                    color="neutral"
+                    variant="ghost"
+                    icon="i-lucide-sparkles"
+                    label="Write with AI"
+                    class="oc-tap -my-1"
+                    :loading="generating.includes(s.server)"
+                    @click="generate(s)"
+                  />
                 </div>
               </div>
             </CollapseTransition>

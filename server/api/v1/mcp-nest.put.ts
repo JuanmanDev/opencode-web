@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
   if (Array.isArray(body?.exclude)) patch.exclude = body.exclude.map(String)
   if (body?.summaries && typeof body.summaries === 'object') patch.summaries = body.summaries
   if (typeof body?.instructions === 'string') patch.instructions = body.instructions.slice(0, 4000)
+  if (typeof body?.delegate === 'boolean') patch.delegate = body.delegate
   await saveNestSettings(patch)
   const selfOrigin = loopbackOrigin(event.node.req.socket) ?? getRequestURL(event).origin
   const result = await syncNest(selfOrigin, { force: true })
