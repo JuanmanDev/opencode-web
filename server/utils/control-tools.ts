@@ -207,6 +207,57 @@ export const CONTROL_TOOLS: ControlTool[] = [
     }
   },
   {
+    name: 'current_session',
+    description: 'Find the chat you are running in: the sessions of a project that are generating a reply right now (yours is one of them; with one result it is yours). Use its id as parent_session_id for run_subagent, or to read your own task list.',
+    inputSchema: obj({ directory: dirProp }, ['directory']),
+    annotations: read,
+    run: async (args) => {
+      const busy = await busySessions(args.directory)
+      return {
+        busy,
+        likelyYours: busy.length === 1 ? busy[0]!.sessionID : null,
+        note: busy.length > 1 ? 'several chats are busy: pick yours by its title' : undefined
+      }
+    }
+  },
+  {
+    name: 'run_subagent',
+    description: 'Run any agent (a subagent like @mcp-home-assistant or explore, or a primary one like build/plan) on a task in a sub-chat and get its answer. The sub-chat is listed under the parent chat in the UI. Use it to delegate work, including from agents that have no task tool. By default it waits for the reply; wait=false returns at once (follow it with read_session). Without parent_session_id the busy chat of the project is used as parent when there is exactly one.',
+    inputSchema: obj({
+      directory: dirProp,
+      agent: { type: 'string', description: 'agent name, e.g. "explore" or "mcp-home-assistant"' },
+      prompt: { type: 'string', description: 'a self-contained task: the sub-chat does not see your conversation' },
+      parent_session_id: { type: 'string' },
+      title: { type: 'string' },
+      model: { type: 'string', description: '"provider/model"; omit for the agent\'s own model' },
+      wait: { type: 'boolean', description: 'wait for the reply (default true)' }
+    }, ['directory', 'agent', 'prompt']),
+    run: async (args) => {
+      let parentID = args.parent_session_id as string | undefined
+      if (!parentID) {
+        const busy = await busySessions(args.directory).catch(() => [])
+        if (busy.length === 1) parentID = busy[0]!.sessionID
+      }
+      const agent = String(args.agent).replace(/^@/, '')
+      const session = await opencodeFetch<{ id: string }>('/session', {
+        method: 'POST',
+        body: { ...(parentID ? { parentID } : {}), title: args.title || `${String(args.prompt).slice(0, 60)} (@${agent} subagent)` },
+        query: q(args.directory)
+      })
+      const body = { agent, model: parseModel(args), parts: [{ type: 'text', text: String(args.prompt) }] }
+      const path = `/session/${encodeURIComponent(session.id)}`
+      if (args.wait === false) {
+        await opencodeFetch(`${path}/prompt_async`, { method: 'POST', query: q(args.directory), body, timeoutMs: 30000 })
+          .catch(() => { opencodeFetch(`${path}/message`, { method: 'POST', query: q(args.directory), body, timeoutMs: 1000 * 60 * 60 }).catch(() => {}) })
+        return `[sub-chat ${session.id} with @${agent}] started; follow it with read_session`
+      }
+      const reply = await opencodeFetch<{ parts?: Array<{ type: string; text?: string }> }>(`${path}/message`, {
+        method: 'POST', query: q(args.directory), timeoutMs: 1000 * 60 * 30, body
+      })
+      return `[sub-chat ${session.id} with @${agent}]\n${replyText(reply) || '(no text reply)'}`
+    }
+  },
+  {
     name: 'abort_session',
     description: 'Stop the reply a session is generating.',
     inputSchema: obj({ directory: dirProp, session_id: { type: 'string' } }, ['session_id']),
@@ -263,15 +314,104 @@ export const CONTROL_TOOLS: ControlTool[] = [
     run: async (args) => (await opencodeFetch<Array<{ name: string; description?: string }>>('/command', { query: q(args.directory) }))
       .map((c) => ({ name: c.name, description: c.description }))
   },
+  // ---- skills ----
   {
     name: 'list_skills',
-    description: 'List the skills opencode can load in a project.',
+    description: 'List the skills opencode can load in a project: name, description, where it comes from (built-in, global, project, remote, or this app\'s skill library), its permission (allow/ask/deny) and quality problems.',
     inputSchema: obj({ directory: dirProp }),
     annotations: read,
     run: async (args) => {
-      const skills = await opencodeFetch<Array<{ name: string; description?: string; location?: string }>>('/skill', { query: q(args.directory) })
-        .catch(() => { throw new Error('this opencode server has no skills API') })
-      return skills.map((s) => ({ name: s.name, description: s.description, location: s.location }))
+      const { skills, available } = await listSkillViews(args.directory)
+      if (!available && !skills.length) throw new Error('this opencode server has no skills API')
+      return skills.map((s) => ({
+        name: s.name,
+        description: s.description,
+        source: s.source,
+        location: s.location,
+        permission: s.permission,
+        ...(s.library ? { library: s.library } : {}),
+        problems: s.checks.filter((c) => c.level !== 'tip').map((c) => c.message)
+      }))
+    }
+  },
+  {
+    name: 'get_skill',
+    description: 'Read one skill: its full SKILL.md (frontmatter + instructions), source, permission and quality checks with tips to improve it.',
+    inputSchema: obj({ directory: dirProp, name: { type: 'string' } }, ['name']),
+    annotations: read,
+    run: async (args) => {
+      const { skills } = await listSkillViews(args.directory)
+      const skill = skills.find((s) => s.name === args.name)
+      if (!skill) throw new Error(`no skill named ${args.name}; list_skills shows the available ones`)
+      return skill
+    }
+  },
+  {
+    name: 'save_skill',
+    description: 'Create or update a skill in this app\'s skill library (served to opencode as a skill catalog; a library skill overrides a same-name skill from elsewhere). content is the whole SKILL.md: frontmatter with name + description, then the instructions. Applies after reload_opencode.',
+    inputSchema: obj({
+      name: { type: 'string', description: 'lowercase-hyphen, max 64 chars' },
+      content: { type: 'string', description: 'complete SKILL.md' },
+      files: { type: 'object', description: 'optional extra files the skill references: { "reference.md": "…" }' }
+    }, ['name', 'content']),
+    run: async (args) => {
+      const result = await saveLibrarySkill(undefined, { name: String(args.name), content: String(args.content), files: args.files })
+      const checks = lintSkill(result.skill.files['SKILL.md'] || '', result.skill.name)
+      return {
+        saved: result.skill.name,
+        version: result.skill.version,
+        catalog: result.catalog,
+        tips: checks.map((c) => c.message),
+        next: 'call reload_opencode so opencode loads it'
+      }
+    }
+  },
+  {
+    name: 'delete_skill',
+    description: 'Delete a skill from this app\'s skill library (other skills live in opencode\'s folders and are not touched; use set_skill_permission deny to hide them).',
+    inputSchema: obj({ name: { type: 'string' } }, ['name']),
+    annotations: { destructiveHint: true },
+    run: (args) => deleteLibrarySkill(undefined, String(args.name))
+  },
+  {
+    name: 'set_skill_permission',
+    description: 'Allow, ask before loading, or deny (hide) a skill or a pattern of skills ("internal-*", "*") in the project or global config.',
+    inputSchema: obj({
+      directory: dirProp,
+      skill: { type: 'string', description: 'skill name or wildcard pattern' },
+      mode: { type: 'string', enum: ['allow', 'ask', 'deny'] },
+      global: { type: 'boolean' }
+    }, ['skill', 'mode']),
+    run: async (args) => {
+      await requireConfigApi('Changing skill permissions')
+      const applied = await patchConfig(args.global ? 'global' : 'project', args.directory, { permission: { skill: { [String(args.skill)]: args.mode } } })
+      return `skill ${args.skill}: ${args.mode} in the ${applied.scope} config; applies after reload_opencode`
+    }
+  },
+  {
+    name: 'improve_skill',
+    description: 'Have a model rewrite a skill (or write a new one from a brief) following opencode\'s skill rules: a sharper when-to-use description and clearer instructions. Returns the proposed SKILL.md; save=true also stores it in the skill library.',
+    inputSchema: obj({
+      directory: dirProp,
+      name: { type: 'string' },
+      brief: { type: 'string', description: 'what to change, or what a new skill is for' },
+      model: { type: 'string', description: '"provider/model"; omit for the default model' },
+      save: { type: 'boolean' }
+    }, ['name']),
+    run: async (args) => {
+      const { skills } = await listSkillViews(args.directory)
+      const current = skills.find((s) => s.name === args.name)
+      const content = await aiSkill({
+        mode: current?.content ? 'improve' : 'create',
+        name: String(args.name),
+        content: current?.content,
+        brief: args.brief,
+        model: args.model,
+        directory: args.directory
+      })
+      if (!args.save) return { proposal: content, checks: lintSkill(content, String(args.name)) }
+      const saved = await saveLibrarySkill(undefined, { name: String(args.name), content, origin: current && current.source !== 'library' ? current.source : undefined })
+      return { saved: saved.skill.name, version: saved.skill.version, content, next: 'call reload_opencode so opencode loads it' }
     }
   },
   {
@@ -286,18 +426,30 @@ export const CONTROL_TOOLS: ControlTool[] = [
   },
   {
     name: 'reload_opencode',
-    description: 'Make opencode re-read its config (MCP servers, agents, providers, permissions). scope "project" reloads one project, "all" every project (like restarting opencode serve). Replies running in a reloaded project are cut off, so by default (when="idle") the reload waits until no session there is busy, including your own reply: it happens right after you finish. Check the result with server_info.',
+    description: 'Make opencode re-read its config (MCP servers, agents, providers, permissions): the "restart" of opencode. scope "project" reloads one project, "all" every project (like restarting opencode serve). Replies running in a reloaded project are cut off, so by default (when="idle") the reload waits until no session there is busy, including your own reply: it happens right after you finish. Afterwards the chats that were busy when you asked (yours included) get a "continue" message, so you carry on automatically with the new config: finish your reply after calling this. resume="none" skips that. Check the result with server_info.',
     inputSchema: obj({
       directory: dirProp,
       scope: { type: 'string', enum: ['project', 'all'], description: 'default: project when a directory is given, else all' },
-      when: { type: 'string', enum: ['idle', 'now'], description: 'default idle' }
+      when: { type: 'string', enum: ['idle', 'now'], description: 'default idle' },
+      resume: { type: 'string', enum: ['busy', 'none'], description: 'continue the chats busy right now (incl. yours) after the reload; default busy' },
+      session_ids: { type: 'array', items: { type: 'string' }, description: 'extra chats (of directory) to continue afterwards' }
     }),
     annotations: { destructiveHint: true },
     run: async (args) => {
       await assertReloadable()
       const scope = args.scope === 'all' || (!args.scope && !args.directory) ? 'all' : 'project'
-      const state = requestReload({ scope, directory: args.directory, when: args.when === 'now' ? 'now' : 'idle' })
-      return `Reload of ${scope === 'all' ? 'every opencode instance' : state.directory} scheduled (${state.when === 'now' ? 'in ~2 seconds' : 'as soon as no session is busy'}). New sessions use the reloaded config.`
+      const resume: Array<{ directory?: string; sessionID: string }> = []
+      if (args.resume !== 'none') {
+        for (const b of await busySessions(scope === 'project' ? args.directory : undefined).catch(() => [])) {
+          resume.push({ directory: b.directory, sessionID: b.sessionID })
+        }
+      }
+      for (const id of Array.isArray(args.session_ids) ? args.session_ids : []) {
+        if (!resume.some((r) => r.sessionID === id)) resume.push({ directory: args.directory, sessionID: String(id) })
+      }
+      const state = requestReload({ scope, directory: args.directory, when: args.when === 'now' ? 'now' : 'idle', resume })
+      return `Reload of ${scope === 'all' ? 'every opencode instance' : state.directory} scheduled (${state.when === 'now' ? 'in ~2 seconds' : 'as soon as no session is busy'}). `
+        + (resume.length ? `Afterwards ${resume.length} chat(s), yours included, get a "continue" message: end your reply now and pick up from there.` : 'New sessions use the reloaded config.')
     }
   },
 
@@ -431,9 +583,13 @@ export const CONTROL_TOOLS: ControlTool[] = [
         ? { mcp: { [args.server]: { enabled: false } } }
         : { mcp: { [args.server]: { enabled: true } }, permission: { [`${args.server}_*`]: args.mode === 'ask' ? 'ask' : 'allow' } }
       const applied = await patchConfig(args.global ? 'global' : 'project', args.directory, body)
-      await forgetMcpTools()
+      // connect / disconnect it in the running opencode: no reload needed
+      const status = await applyMcpLive(String(args.server), args.directory, args.mode !== 'off').catch(() => undefined)
       autoSyncNest(ctx.selfOrigin)
-      return `${args.server} set to ${args.mode} in the ${applied.scope} config${applied.fallback ? ' (this opencode ignores project config written through its API)' : ''}; applies to new sessions`
+      const hint = mcpErrorHint(status?.error, status?.status)
+      return `${args.server} set to ${args.mode} in the ${applied.scope} config${applied.fallback ? ' (this opencode ignores project config written through its API)' : ''}; `
+        + `now ${status?.status || 'unknown'}${status?.error ? ` (${status.error})` : ''}${hint ? `. Fix: ${hint.title}. ${hint.fix}` : ''}. `
+        + 'Tools of a server switched on mid-chat become available from your next message.'
     }
   },
   {
